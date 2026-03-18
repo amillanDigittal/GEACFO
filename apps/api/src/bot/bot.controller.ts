@@ -1,0 +1,25 @@
+import { Controller, Post, Get, Body, Query, Request, UseGuards } from '@nestjs/common'
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
+import { BotService } from './bot.service'
+import { JwtAuthGuard } from '../auth/jwt.guard'
+
+@ApiTags('Bot CFO')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('bot')
+export class BotController {
+  constructor(private svc: BotService) {}
+
+  @Post('chat')
+  chat(
+    @Request() req: any,
+    @Body() body: { message: string; sessionId: string; context?: string }
+  ) {
+    return this.svc.chat(req.user.tenantId, req.user.userId, body.sessionId, body.message, body.context)
+  }
+
+  @Get('history')
+  history(@Request() req: any, @Query('sessionId') sessionId: string) {
+    return this.svc.getHistory(req.user.tenantId, sessionId)
+  }
+}

@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 7%;
+    --foreground: 213 80% 93%;
+    --card: 220 40% 11%;
+    --card-foreground: 213 80% 93%;
+    --border: 217 40% 20%;
+    --input: 220 35% 14%;
+    --primary: 211 100% 64%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 35% 14%;
+    --secondary-foreground: 213 50% 78%;
+    --muted: 217 35% 16%;
+    --muted-foreground: 215 30% 55%;
+    --accent: 211 100% 64%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 160 78% 52%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 95% 55%;
+    --warning-foreground: 0 0% 100%;
+    --gold: 40 80% 58%;
+    --ring: 211 100% 64%;
+    --radius: 0.5rem;
+    --sidebar-w: 260px;
+  }
+
+  .light {
+    --background: 218 33% 95%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --border: 214 32% 85%;
+    --input: 214 32% 91%;
+    --primary: 211 100% 44%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 30%;
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 211 100% 44%;
+    --accent-foreground: 0 0% 100%;
+    --success: 160 64% 40%;
+    --warning: 32 95% 45%;
+  }
+
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { @apply bg-background; }
+  ::-webkit-scrollbar-thumb { @apply bg-border rounded; }
+
+  .scrollbar-table { scrollbar-width: thin; scrollbar-color: hsl(var(--primary) / 0.4) transparent; }
+  .scrollbar-table::-webkit-scrollbar { height: 6px; }
+  .scrollbar-table::-webkit-scrollbar-track { @apply bg-muted/50 rounded-full mx-2; }
+  .scrollbar-table::-webkit-scrollbar-thumb { @apply bg-primary/40 rounded-full; }
+  .scrollbar-table::-webkit-scrollbar-thumb:hover { @apply bg-primary/60; }
+
+  @media (max-width: 768px) {
+    .scrollbar-table::-webkit-scrollbar { height: 4px; }
+    .scrollbar-table { -webkit-overflow-scrolling: touch; }
+  }
+}
+
+@layer components {
+  .kpi-card { @apply relative bg-card border border-border rounded-xl p-5 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-lg overflow-hidden; }
+  .kpi-label { @apply text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2; }
+  .kpi-value { @apply font-mono text-2xl font-semibold text-foreground leading-none; }
+  .stat-row { @apply flex justify-between items-center py-2.5 border-b border-border last:border-b-0; }
+  .stat-label { @apply text-sm text-muted-foreground; }
+  .stat-value { @apply font-mono text-sm font-semibold text-foreground; }
+  .page-title { @apply font-display text-[22px] font-bold text-foreground; }
+  .page-subtitle { @apply text-sm text-muted-foreground mt-1; }
+  .section-label { @apply text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3; }
+  .mono { @apply font-mono text-xs; }
+}

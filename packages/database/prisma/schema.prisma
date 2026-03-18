@@ -1,0 +1,504 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── TENANT (Empresa) ──────────────────────────────────────────────────────
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  nif       String   @unique
+  sector    String?
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  bankAccounts BankAccount[]
+  customers    Customer[]
+  suppliers    Supplier[]
+  invoicesAR   InvoiceAR[]
+  invoicesAP   InvoiceAP[]
+  debtInstruments DebtInstrument[]
+  covenants    Covenant[]
+  inventoryItems InventoryItem[]
+  forecastWeeks  ForecastWeek[]
+  dataSource   DataSource[]
+  auditLogs    AuditLog[]
+  botMessages  BotMessage[]
+  alertResolutions AlertResolution[]
+
+  @@map("tenants")
+}
+
+// ─── USER ──────────────────────────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String
+  name      String
+  role      UserRole @default(CFO)
+  avatarUrl String?
+  password  String
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+enum UserRole {
+  ADMIN
+  CFO
+  CONTROLLER
+  ANALYST
+  VIEWER
+}
+
+// ─── BANK ACCOUNTS ─────────────────────────────────────────────────────────
+model BankAccount {
+  id         String   @id @default(cuid())
+  tenantId   String
+  bankName   String
+  iban       String
+  alias      String
+  balance    Decimal  @db.Decimal(18, 2)
+  currency   String   @default("EUR")
+  syncedAt   DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movements  BankMovement[]
+  reconciliations Reconciliation[]
+
+  @@map("bank_accounts")
+}
+
+model BankMovement {
+  id            String   @id @default(cuid())
+  bankAccountId String
+  date          DateTime
+  concept       String
+  amount        Decimal  @db.Decimal(18, 2)
+  balance       Decimal  @db.Decimal(18, 2)
+  category      String?
+  reference     String?
+  counterparty  String?
+  reconciled    Boolean  @default(false)
+  erpReference  String?
+  createdAt     DateTime @default(now())
+
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@map("bank_movements")
+}
+
+model Reconciliation {
+  id            String            @id @default(cuid())
+  bankAccountId String
+  periodDate    DateTime
+  bankBalance   Decimal           @db.Decimal(18, 2)
+  erpBalance    Decimal           @db.Decimal(18, 2)
+  difference    Decimal           @db.Decimal(18, 2)
+  status        ReconciliationStatus
+  matchedCount  Int               @default(0)
+  unmatchedCount Int              @default(0)
+  createdAt     DateTime          @default(now())
+
+  bankAccount   BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@map("reconciliations")
+}
+
+enum ReconciliationStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REQUIRES_REVIEW
+}
+
+// ─── CUSTOMERS & SCORING ───────────────────────────────────────────────────
+model Customer {
+  id           String   @id @default(cuid())
+  tenantId     String
+  code         String
+  name         String
+  nif          String?
+  email        String?
+  phone        String?
+  creditLimit  Decimal  @db.Decimal(18, 2)
+  creditScore  Int?
+  riskLevel    RiskLevel @default(MEDIUM)
+  dso          Int?
+  status       CustomerStatus @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices     InvoiceAR[]
+  scoreHistory ScoreHistory[]
+
+  @@unique([tenantId, code])
+  @@map("customers")
+}
+
+model ScoreHistory {
+  id          String   @id @default(cuid())
+  customerId  String
+  score       Int
+  riskLevel   RiskLevel
+  factors     Json
+  calculatedAt DateTime @default(now())
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("score_history")
+}
+
+enum RiskLevel {
+  VERY_LOW
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum CustomerStatus {
+  ACTIVE
+  ALERT
+  SUSPENDED
+  INACTIVE
+}
+
+// ─── SUPPLIERS ─────────────────────────────────────────────────────────────
+model Supplier {
+  id        String   @id @default(cuid())
+  tenantId  String
+  code      String
+  name      String
+  nif       String?
+  email     String?
+  paymentTerms Int   @default(30)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices  InvoiceAP[]
+
+  @@unique([tenantId, code])
+  @@map("suppliers")
+}
+
+// ─── INVOICES AR (Cuentas por Cobrar) ──────────────────────────────────────
+model InvoiceAR {
+  id          String        @id @default(cuid())
+  tenantId    String
+  customerId  String
+  number      String
+  issueDate   DateTime
+  dueDate     DateTime
+  amount      Decimal       @db.Decimal(18, 2)
+  taxAmount   Decimal       @db.Decimal(18, 2) @default(0)
+  totalAmount Decimal       @db.Decimal(18, 2)
+  paidAmount  Decimal       @db.Decimal(18, 2) @default(0)
+  status      InvoiceStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer    Customer      @relation(fields: [customerId], references: [id])
+
+  @@unique([tenantId, number])
+  @@map("invoices_ar")
+}
+
+// ─── INVOICES AP (Cuentas por Pagar) ───────────────────────────────────────
+model InvoiceAP {
+  id          String           @id @default(cuid())
+  tenantId    String
+  supplierId  String
+  number      String
+  issueDate   DateTime
+  dueDate     DateTime
+  amount      Decimal          @db.Decimal(18, 2)
+  taxAmount   Decimal          @db.Decimal(18, 2) @default(0)
+  totalAmount Decimal          @db.Decimal(18, 2)
+  paidAmount  Decimal          @db.Decimal(18, 2) @default(0)
+  status      ApInvoiceStatus  @default(PENDING_APPROVAL)
+  priority    Priority         @default(NORMAL)
+  approvedBy  String?
+  approvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier    Supplier         @relation(fields: [supplierId], references: [id])
+
+  @@unique([tenantId, number])
+  @@map("invoices_ap")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum ApInvoiceStatus {
+  PENDING_APPROVAL
+  APPROVED
+  IN_REVIEW
+  REJECTED
+  PAID
+}
+
+enum Priority {
+  HIGH
+  NORMAL
+  LOW
+}
+
+// ─── DEBT ──────────────────────────────────────────────────────────────────
+model DebtInstrument {
+  id           String         @id @default(cuid())
+  tenantId     String
+  type         DebtType
+  bank         String
+  totalAmount  Decimal        @db.Decimal(18, 2)
+  outstanding  Decimal        @db.Decimal(18, 2)
+  interestRate Decimal        @db.Decimal(6, 4)
+  maturityDate DateTime
+  amortization String?
+  status       DebtStatus     @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  covenants    Covenant[]
+
+  @@map("debt_instruments")
+}
+
+model Covenant {
+  id               String          @id @default(cuid())
+  tenantId         String
+  debtInstrumentId String?
+  name             String
+  formula          String
+  currentValue     Decimal         @db.Decimal(10, 4)
+  limitValue       Decimal         @db.Decimal(10, 4)
+  limitType        CovenantLimit
+  status           CovenantStatus  @default(COMPLIANT)
+  margin           Decimal         @db.Decimal(6, 2)
+  trend            String?
+  measuredAt       DateTime        @default(now())
+  createdAt        DateTime        @default(now())
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  debtInstrument   DebtInstrument? @relation(fields: [debtInstrumentId], references: [id])
+
+  @@map("covenants")
+}
+
+enum DebtType {
+  SYNDICATED_LOAN
+  CREDIT_LINE
+  LEASING
+  BOND
+  FACTORING
+  OTHER
+}
+
+enum DebtStatus {
+  ACTIVE
+  CANCELLED
+  MATURED
+}
+
+enum CovenantLimit {
+  MAX
+  MIN
+}
+
+enum CovenantStatus {
+  COMPLIANT
+  WARNING
+  BREACH
+}
+
+// ─── INVENTORY ─────────────────────────────────────────────────────────────
+model InventoryItem {
+  id           String        @id @default(cuid())
+  tenantId     String
+  sku          String
+  description  String
+  stock        Decimal       @db.Decimal(12, 3)
+  unitCost     Decimal       @db.Decimal(18, 4)
+  totalValue   Decimal       @db.Decimal(18, 2)
+  rotationDays Int?
+  status       StockStatus   @default(NORMAL)
+  warehouse    String?
+  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime      @default(now())
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sku])
+  @@map("inventory_items")
+}
+
+enum StockStatus {
+  NORMAL
+  LOW
+  CRITICAL
+  OBSOLETE
+}
+
+// ─── FORECAST ──────────────────────────────────────────────────────────────
+model ForecastWeek {
+  id          String       @id @default(cuid())
+  tenantId    String
+  scenario    String       @default("BASE")
+  weekNumber  Int
+  weekStart   DateTime
+  weekEnd     DateTime
+  inflows     Decimal      @db.Decimal(18, 2)
+  outflows    Decimal      @db.Decimal(18, 2)
+  netCash     Decimal      @db.Decimal(18, 2)
+  cumBalance  Decimal      @db.Decimal(18, 2)
+  confidence  Decimal      @db.Decimal(5, 2)
+  isGap       Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, scenario, weekNumber])
+  @@map("forecast_weeks")
+}
+
+// ─── DATA SOURCES ──────────────────────────────────────────────────────────
+model DataSource {
+  id           String           @id @default(cuid())
+  tenantId     String
+  name         String
+  type         DataSourceType
+  status       SyncStatus       @default(SYNCED)
+  lastSync     DateTime?
+  recordCount  Int              @default(0)
+  config       Json?
+  createdAt    DateTime         @default(now())
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("data_sources")
+}
+
+enum DataSourceType {
+  ERP
+  BANKING
+  CRM
+  WMS
+  OTHER
+}
+
+enum SyncStatus {
+  SYNCED
+  SYNCING
+  WARNING
+  ERROR
+  DISCONNECTED
+}
+
+// ─── AUDIT LOG ─────────────────────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String?
+  action     String
+  entity     String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ─── BOT MESSAGES ──────────────────────────────────────────────────────────
+model BotMessage {
+  id         String      @id @default(cuid())
+  tenantId   String
+  sessionId  String
+  role       MessageRole
+  content    String
+  context    String?
+  createdAt  DateTime    @default(now())
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("bot_messages")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+// ─── ALERT RESOLUTION ───────────────────────────────────────────────────────
+model AlertResolution {
+  id          String   @id @default(cuid())
+  tenantId    String
+  alertId     String
+  status      AlertStatus @default(OPEN)
+  resolution  String?
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, alertId])
+  @@map("alert_resolutions")
+}
+
+enum AlertStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  FALSE_POSITIVE
+}
