@@ -15,6 +15,10 @@ model Tenant {
   nif       String   @unique
   sector    String?
   slug      String   @unique
+  logo      String?
+  currency  String   @default("EUR")
+  locale    String   @default("es-ES")
+  settings  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -32,6 +36,7 @@ model Tenant {
   auditLogs    AuditLog[]
   botMessages  BotMessage[]
   alertResolutions AlertResolution[]
+  reportSchedules  ReportSchedule[]
 
   @@map("tenants")
 }
@@ -501,4 +506,24 @@ enum AlertStatus {
   INVESTIGATING
   RESOLVED
   FALSE_POSITIVE
+}
+
+// ─── REPORT SCHEDULES ─────────────────────────────────────────────────────
+model ReportSchedule {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  reportType  String   @default("board_pack")
+  frequency   String   @default("monthly")
+  recipients  String
+  enabled     Boolean  @default(true)
+  lastSentAt  DateTime?
+  nextRunAt   DateTime?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("report_schedules")
 }

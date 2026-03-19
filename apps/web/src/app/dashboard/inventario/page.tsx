@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Download, AlertTriangle, Siren } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 
@@ -33,13 +34,23 @@ export default function InventarioPage() {
   const [filter, setFilter] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<'totalValue' | 'rotationDays' | 'stock'>('totalValue')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [page, setPage] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   useEffect(() => {
     api.inventory.list()
       .then(setData)
       .catch(console.error)
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
   }, [])
+
+  async function refresh() {
+    try {
+      const result = await api.inventory.list()
+      setData(result)
+    } catch (err) { console.error(err) }
+    finally { setLastUpdated(new Date()) }
+  }
 
   if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
   if (!data) return <div className="text-center text-muted-foreground py-20">Error cargando inventario</div>
@@ -66,13 +77,15 @@ export default function InventarioPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="page-title">Gestión de Inventario</h1>
-          <p className="page-subtitle">Grupo Ibérico SA · Marzo 2026 · {totalItems} referencias</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => exportCSV('inventario', ['SKU', 'Descripción', 'Stock', 'Coste Unit.', 'Valor Total', 'Rotación (días)', 'Estado'], (data.items || []).map((i: any) => [i.sku, i.description, Number(i.stock), Number(i.unitCost), Number(i.totalValue), i.rotationDays, i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
-      </div>
+      <PageHeader
+        title="Gestión de Inventario"
+        subtitle={`Grupo Ibérico SA · Marzo 2026 · ${totalItems} referencias`}
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => exportCSV('inventario', ['SKU', 'Descripción', 'Stock', 'Coste Unit.', 'Valor Total', 'Rotación (días)', 'Estado'], (data.items || []).map((i: any) => [i.sku, i.description, Number(i.stock), Number(i.unitCost), Number(i.totalValue), i.rotationDays, i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
+        }
+      />
 
       {/* Alertas */}
       {data.obsoleteCount > 0 && (
@@ -181,7 +194,7 @@ export default function InventarioPage() {
               ].map(f => (
                 <button
                   key={f.key}
-                  onClick={() => setFilter(f.key)}
+                  onClick={() => { setFilter(f.key); setPage(0) }}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${filter === f.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
                   {f.label}
@@ -211,7 +224,7 @@ export default function InventarioPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item: any) => {
+              {items.slice(page * 10, (page + 1) * 10).map((item: any) => {
                 const cfg = statusConfig[item.status] || statusConfig.NORMAL
                 const pct = data.totalValue > 0 ? (Number(item.totalValue) / data.totalValue) * 100 : 0
                 return (
@@ -245,6 +258,16 @@ export default function InventarioPage() {
             </tbody>
           </table>
 </ScrollableTable>
+        {items.length > 10 && (
+          <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>←</Button>
+            {Array.from({ length: Math.ceil(items.length / 10) }, (_, i) => (
+              <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+            ))}
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(items.length / 10) - 1} onClick={() => setPage(p => p + 1)}>→</Button>
+            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}–{Math.min((page + 1) * 10, items.length)} de {items.length}</span>
+          </div>
+        )}
       </Card>
     </div>
   )

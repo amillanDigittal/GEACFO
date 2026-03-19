@@ -21,6 +21,13 @@ import {
   FolderOpen,
   Bot,
   FileText,
+  Banknote,
+  Bell,
+  Users,
+  Settings,
+  BarChart3 as BarChartAbc,
+  CalendarDays,
+  Send,
 } from 'lucide-react'
 
 type BadgeCounts = Record<string, number>
@@ -43,6 +50,9 @@ const nav = [
   { href: '/dashboard/conciliacion', label: 'Conciliación Bancaria', icon: <Link2 size={18} /> },
   { href: '/dashboard/cobros', label: 'Cuentas por Cobrar', icon: <ArrowDownToLine size={18} /> },
   { href: '/dashboard/pagos', label: 'Cuentas por Pagar', icon: <ArrowUpFromLine size={18} /> },
+  { href: '/dashboard/cashflow', label: 'Estado de Flujos', icon: <Banknote size={18} /> },
+  { href: '/dashboard/vencimientos', label: 'Mapa de Vencimientos', icon: <CalendarDays size={18} /> },
+  { href: '/dashboard/proyeccion-diaria', label: 'Proyección Diaria', icon: <TrendingUp size={18} /> },
   { section: 'Riesgo' },
   { href: '/dashboard/scoring', label: 'Scoring de Clientes', icon: <ShieldAlert size={18} /> },
   { href: '/dashboard/fraude', label: 'Fraude & Compliance', icon: <Search size={18} /> },
@@ -50,18 +60,24 @@ const nav = [
   { href: '/dashboard/deuda', label: 'Deuda & Covenants', icon: <CreditCard size={18} /> },
   { section: 'Inventario' },
   { href: '/dashboard/inventario', label: 'Gestión de Inventario', icon: <Package size={18} /> },
+  { href: '/dashboard/inventario-abc', label: 'Análisis ABC', icon: <BarChartAbc size={18} /> },
   { section: 'Planificación' },
   { href: '/dashboard/escenarios', label: 'Supuestos & Escenarios', icon: <SlidersHorizontal size={18} /> },
   { href: '/dashboard/variance', label: 'Variance Analysis', icon: <TrendingDown size={18} /> },
+  { href: '/dashboard/ratios', label: 'Ratios Financieros', icon: <BarChartAbc size={18} /> },
   { section: 'Plataforma' },
+  { href: '/dashboard/notificaciones', label: 'Centro de Alertas', icon: <Bell size={18} /> },
+  { href: '/dashboard/usuarios', label: 'Gestión de Usuarios', icon: <Users size={18} /> },
+  { href: '/dashboard/configuracion', label: 'Configuración', icon: <Settings size={18} /> },
   { href: '/dashboard/gobierno', label: 'Gobierno del Dato', icon: <FolderOpen size={18} /> },
   { href: '/dashboard/bot', label: 'Bot CFO', icon: <Bot size={18} /> },
   { href: '/dashboard/boardpack', label: 'Board Pack', icon: <FileText size={18} /> },
+  { href: '/dashboard/reporting', label: 'Reporting', icon: <Send size={18} /> },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { sidebarCollapsed } = useAppStore()
+  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore()
   const [badges, setBadges] = useState<BadgeCounts>({})
 
   useEffect(() => {
@@ -70,13 +86,27 @@ export function Sidebar() {
       .catch(() => {})
   }, [])
 
+  // Close sidebar on mobile when navigating
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarCollapsed(true)
+    }
+  }, [pathname, setSidebarCollapsed])
+
   return (
-    <nav className={cn(
+    <>
+    {/* Mobile overlay backdrop */}
+    {!sidebarCollapsed && (
+      <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarCollapsed(true)} />
+    )}
+    <nav aria-label="Navegación principal" className={cn(
       'flex flex-col bg-card border-r border-border transition-all duration-300 overflow-hidden flex-shrink-0 z-50',
-      sidebarCollapsed ? 'w-[60px]' : 'w-[260px]'
+      // Mobile: hidden by default, overlay when open
+      'fixed md:relative h-full',
+      sidebarCollapsed ? 'w-0 md:w-[60px]' : 'w-[260px]'
     )}>
       {/* Logo */}
-      <div className="flex items-center gap-3 p-4 border-b border-border flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 h-[60px] border-b border-border flex-shrink-0">
         <div className="w-8 h-8 bg-gradient-to-br from-primary to-[hsl(var(--gold))] rounded-lg flex items-center justify-center flex-shrink-0"><BarChart3 size={16} className="text-white" /></div>
         {!sidebarCollapsed && (
           <div className="overflow-hidden">
@@ -102,7 +132,7 @@ export function Sidebar() {
           const badgeKey = badgeKeyMap[item.href]
           const badgeCount = badgeKey ? badges[badgeKey] : undefined
           return (
-            <Link key={item.href} href={item.href} className={cn(
+            <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={cn(
               'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors relative',
               sidebarCollapsed && 'justify-center px-2',
               active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -129,5 +159,6 @@ export function Sidebar() {
         </div>
       )}
     </nav>
+    </>
   )
 }

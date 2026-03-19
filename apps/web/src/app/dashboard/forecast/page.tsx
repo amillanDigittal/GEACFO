@@ -11,6 +11,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 import { Landmark, AlertTriangle, TrendingDown, Target, Download, Siren } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonForecast } from '@/components/ui/skeleton-page'
 
@@ -20,17 +21,24 @@ export default function ForecastPage() {
   const [scenario, setScenario] = useState('BASE')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'single' | 'compare'>('compare')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  useEffect(() => {
+  function fetchData() {
     setLoading(true)
-    Promise.all([
+    return Promise.all([
       api.treasury.forecast(scenario),
       api.treasury.forecastCompare(),
     ])
       .then(([s, c]) => { setSingle(s); setCompare(c) })
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [scenario])
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
+  }
+
+  useEffect(() => { fetchData() }, [scenario])
+
+  async function refresh() {
+    await fetchData()
+  }
 
   const singleData = single?.weeks?.map((w: any) => ({
     week: `S${w.weekNumber}`,
@@ -78,19 +86,19 @@ export default function ForecastPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Forecast 13 Semanas</h1>
-          <p className="page-subtitle">Horizonte de gestión de liquidez · 05/03/2026 – 04/06/2026</p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="Forecast 13 Semanas"
+        subtitle="Horizonte de gestión de liquidez · 05/03/2026 – 04/06/2026"
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
           <Button variant="outline" size="sm" onClick={() => exportCSV(
             `forecast_comparativa`,
             ['Semana', 'Saldo Base', 'Saldo Conservador', 'Saldo Agresivo', 'Cobros Base', 'Pagos Base', 'Confianza Base'],
             compareData.map((w: any) => [w.week, w.saldoBase, w.saldoConservador, w.saldoAgresivo, w.cobrosBase, w.pagosBase, w.confBase])
           )}><Download size={14} className="mr-1" />Exportar</Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Alert for gaps */}
       {gapWeeks.length > 0 && (

@@ -6,16 +6,33 @@ import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app'
 import { useTheme } from 'next-themes'
 import { api } from '@/lib/api'
-import { FileText, Bot, Bell, Sun, Moon, Menu, X, CheckCircle2, LogOut } from 'lucide-react'
+import { FileText, Bot, Bell, Sun, Moon, Menu, X, CheckCircle2, LogOut, ChevronRight, Home } from 'lucide-react'
+import Link from 'next/link'
 
-const BREADCRUMBS: Record<string, string> = {
-  '/dashboard/cockpit': 'Cockpit CFO', '/dashboard/forecast': 'Forecast 13 Semanas',
-  '/dashboard/conciliacion': 'Conciliación Bancaria', '/dashboard/cobros': 'Cuentas por Cobrar',
-  '/dashboard/pagos': 'Cuentas por Pagar', '/dashboard/scoring': 'Scoring de Clientes',
-  '/dashboard/fraude': 'Fraude & Compliance', '/dashboard/deuda': 'Deuda & Covenants',
-  '/dashboard/inventario': 'Inventario', '/dashboard/escenarios': 'Supuestos & Escenarios',
-  '/dashboard/variance': 'Variance Analysis', '/dashboard/gobierno': 'Gobierno del Dato',
-  '/dashboard/bot': 'Bot CFO', '/dashboard/boardpack': 'Board Pack',
+const BREADCRUMBS: Record<string, { section: string; label: string }> = {
+  '/dashboard/cockpit': { section: '', label: 'Cockpit CFO' },
+  '/dashboard/forecast': { section: 'Tesorería', label: 'Forecast 13S' },
+  '/dashboard/conciliacion': { section: 'Tesorería', label: 'Conciliación' },
+  '/dashboard/cobros': { section: 'Tesorería', label: 'Cobros' },
+  '/dashboard/pagos': { section: 'Tesorería', label: 'Pagos' },
+  '/dashboard/cashflow': { section: 'Tesorería', label: 'Flujos' },
+  '/dashboard/vencimientos': { section: 'Tesorería', label: 'Vencimientos' },
+  '/dashboard/proyeccion-diaria': { section: 'Tesorería', label: 'Proyección Diaria' },
+  '/dashboard/scoring': { section: 'Riesgo', label: 'Scoring' },
+  '/dashboard/fraude': { section: 'Riesgo', label: 'Fraude' },
+  '/dashboard/deuda': { section: 'Deuda', label: 'Deuda & Covenants' },
+  '/dashboard/inventario': { section: 'Inventario', label: 'Inventario' },
+  '/dashboard/inventario-abc': { section: 'Inventario', label: 'Análisis ABC' },
+  '/dashboard/escenarios': { section: 'Planificación', label: 'Escenarios' },
+  '/dashboard/variance': { section: 'Planificación', label: 'Variance' },
+  '/dashboard/ratios': { section: 'Planificación', label: 'Ratios' },
+  '/dashboard/notificaciones': { section: 'Plataforma', label: 'Alertas' },
+  '/dashboard/usuarios': { section: 'Plataforma', label: 'Usuarios' },
+  '/dashboard/configuracion': { section: 'Plataforma', label: 'Configuración' },
+  '/dashboard/gobierno': { section: 'Plataforma', label: 'Gobierno' },
+  '/dashboard/bot': { section: 'Plataforma', label: 'Bot CFO' },
+  '/dashboard/boardpack': { section: 'Plataforma', label: 'Board Pack' },
+  '/dashboard/reporting': { section: 'Plataforma', label: 'Reporting' },
 }
 
 interface Notification {
@@ -89,12 +106,28 @@ export function Topbar({ session }: { session: any }) {
 
   return (
     <header className="h-[60px] bg-card border-b border-border flex items-center px-4 gap-3 flex-shrink-0">
-      <button onClick={toggleSidebar} className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><Menu size={18} /></button>
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <span>GEACFO</span>
-        <span>›</span>
-        <span className="text-foreground font-medium">{BREADCRUMBS[pathname] || 'Dashboard'}</span>
-      </div>
+      <button onClick={toggleSidebar} aria-label="Abrir menú lateral" className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><Menu size={18} /></button>
+      <nav aria-label="Migas de pan" className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden">
+        <Link href="/dashboard/cockpit" aria-label="Ir al Cockpit" className="hover:text-foreground transition-colors flex-shrink-0">
+          <Home size={14} />
+        </Link>
+        {(() => {
+          const crumb = BREADCRUMBS[pathname]
+          if (!crumb) return <><ChevronRight size={12} className="flex-shrink-0 opacity-40" /><span className="text-foreground font-medium truncate">Dashboard</span></>
+          return (
+            <>
+              {crumb.section && (
+                <>
+                  <ChevronRight size={12} className="flex-shrink-0 opacity-40" />
+                  <span className="hidden sm:inline truncate">{crumb.section}</span>
+                </>
+              )}
+              <ChevronRight size={12} className="flex-shrink-0 opacity-40" />
+              <span className="text-foreground font-medium truncate">{crumb.label}</span>
+            </>
+          )
+        })()}
+      </nav>
       <div className="ml-auto flex items-center gap-2">
         <span className="text-xs text-muted-foreground font-mono hidden sm:block">{date}</span>
         <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/boardpack')} className="text-xs hidden md:flex"><FileText size={14} className="mr-1" />Board Pack</Button>
@@ -105,11 +138,13 @@ export function Topbar({ session }: { session: any }) {
           <button
             onClick={() => setOpen(!open)}
             className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors relative"
-            title="Notificaciones"
+            aria-label={`Notificaciones${totalCount > 0 ? `, ${totalCount} pendientes` : ''}`}
+            aria-expanded={open}
+            aria-haspopup="true"
           >
             <Bell size={16} />
             {totalCount > 0 && (
-              <span className={`absolute -top-0.5 -right-0.5 text-[9px] font-bold px-1 py-0 rounded-full text-white min-w-[16px] text-center ${criticalCount > 0 ? 'bg-destructive' : 'bg-warning'}`}>
+              <span aria-hidden="true" className={`absolute -top-0.5 -right-0.5 text-[9px] font-bold px-1 py-0 rounded-full text-white min-w-[16px] text-center ${criticalCount > 0 ? 'bg-destructive' : 'bg-warning'}`}>
                 {totalCount}
               </span>
             )}
@@ -117,7 +152,7 @@ export function Topbar({ session }: { session: any }) {
 
           {/* Notification panel */}
           {open && (
-            <div className="absolute right-0 top-10 w-[380px] max-h-[480px] bg-card border border-border rounded-xl shadow-2xl z-[100] flex flex-col overflow-hidden">
+            <div className="absolute right-0 top-10 w-[calc(100vw-2rem)] sm:w-[380px] max-h-[480px] bg-card border border-border rounded-xl shadow-2xl z-[100] flex flex-col overflow-hidden">
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2">
@@ -162,7 +197,7 @@ export function Topbar({ session }: { session: any }) {
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDismiss(n.id) }}
                                 className="text-muted-foreground hover:text-foreground text-xs flex-shrink-0 mt-0.5"
-                                title="Descartar"
+                                aria-label={`Descartar notificación: ${n.title}`}
                               >
                                 <X size={12} />
                               </button>
@@ -184,7 +219,7 @@ export function Topbar({ session }: { session: any }) {
               {activeNotifications.length > 0 && (
                 <div className="border-t border-border px-4 py-2">
                   <button
-                    onClick={() => { setOpen(false); router.push('/dashboard/fraude') }}
+                    onClick={() => { setOpen(false); router.push('/dashboard/notificaciones') }}
                     className="text-[11px] text-primary hover:underline w-full text-center"
                   >
                     Ver todas las alertas →
@@ -195,10 +230,10 @@ export function Topbar({ session }: { session: any }) {
           )}
         </div>
 
-        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={`Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}`} className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </button>
-        <button onClick={() => signOut()} className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-destructive transition-colors" title="Cerrar sesión"><LogOut size={14} /></button>
+        <button onClick={() => signOut()} aria-label="Cerrar sesión" className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"><LogOut size={14} /></button>
       </div>
     </header>
   )

@@ -84,7 +84,8 @@ PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `ten
 - UI: Shadcn/ui components in `src/components/ui/`, Tailwind CSS with custom semantic tokens, dark mode default
 - Charts: Recharts
 - Dashboard layout (`src/app/dashboard/layout.tsx`) is a server component that checks session and redirects to `/auth/login` if unauthenticated
-- Dashboard pages live under `src/app/dashboard/` — only cockpit, forecast, deuda, scoring, and bot have full UI; the remaining 8+ pages are stubs rendering raw JSON
+- Dashboard routes use **Spanish names** (e.g., `deuda`, `cobros`, `pagos`, `conciliacion`, `gobierno`) while API modules use English (`debt`, `treasury`, `customers`, `governance`)
+- Dashboard pages live under `src/app/dashboard/` — cockpit, forecast, deuda, scoring, bot, conciliacion, and boardpack have full UI; the remaining pages (cobros, pagos, escenarios, fraude, gobierno, inventario, variance) are stubs rendering raw JSON
 
 ### Bot CFO
 `apps/api/src/bot/bot.service.ts` calls Anthropic API with `claude-sonnet-4-20250514`. The system prompt includes live financial data (cash positions, covenants, customer alerts) fetched from DB at request time.
@@ -95,7 +96,7 @@ PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `ten
 - **Web tsconfig**: `strict: true`, path alias `@/*` → `./src/*`
 - **next.config.js**: `output: 'standalone'`, `typescript.ignoreBuildErrors: true`, `eslint.ignoreDuringBuilds: true`
 - **Tailwind**: dark mode via `class`, custom colors (success/warning/gold), fonts: IBM Plex Sans, IBM Plex Mono, Syne
-- **Docker**: node:20-alpine base images, both Dockerfiles run `prisma generate` during build. Web Dockerfile manually copies Prisma query engine binary into standalone output. Note: README mentions Redis but there is no Redis service in docker-compose.yml
+- **Docker**: node:20-alpine base images, both Dockerfiles run `prisma generate` during build. Web Dockerfile manually copies Prisma query engine binary into standalone output. No Redis service despite some code references to it.
 - **NestJS logger**: Only `['error', 'warn', 'log']` levels enabled (no debug/verbose)
 - **NestJS build output**: `dist/apps/api/src/main` (non-standard nested path due to monorepo tsconfig)
 - **Turbo**: `.env` is a `globalDependency` in `turbo.json` — changes to `.env` invalidate all cached builds

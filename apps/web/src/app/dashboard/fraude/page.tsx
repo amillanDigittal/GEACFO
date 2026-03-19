@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, riskLabel, riskVariant, exportCSV } from '@/lib/utils'
+import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,10 +60,14 @@ export default function FraudePage() {
   const [actionAlert, setActionAlert] = useState<string | null>(null)
   const [actionNotes, setActionNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [anomPage, setAnomPage] = useState(0)
+  const [auditPage, setAuditPage] = useState(0)
+  const [alertPage, setAlertPage] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { toast } = useToast()
 
-  useEffect(() => {
-    Promise.all([
+  function fetchData() {
+    return Promise.all([
       api.customers.list(),
       api.treasury.ar(),
       api.treasury.ap(),
@@ -77,9 +82,18 @@ export default function FraudePage() {
         const resMap: Record<string, any> = {}
         res.forEach((r: any) => { resMap[r.alertId] = r })
         setResolutions(resMap)
+        setLastUpdated(new Date())
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+  }
+
+  async function handleRefresh() {
+    await fetchData()
+  }
+
+  useEffect(() => {
+    fetchData()
   }, [])
 
   async function handleResolve(alertId: string, status: string) {
@@ -287,13 +301,15 @@ export default function FraudePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Fraude & Compliance</h1>
-          <p className="page-subtitle">Grupo Ibérico SA · Marzo 2026</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => exportCSV('fraude_alertas', ['Severidad', 'Tipo', 'Título', 'Descripción', 'Entidad', 'Importe', 'Estado', 'Fecha'], alerts.map(a => [a.severity, alertTypeLabels[a.type] || a.type, a.title, a.description, a.entity, a.amount || '', a.status, a.detectedAt?.slice(0, 10)]))}><Download size={14} className="mr-1" />Exportar</Button>
-      </div>
+      <PageHeader
+        title="Fraude & Compliance"
+        subtitle="Grupo Ibérico SA · Marzo 2026"
+        lastUpdated={lastUpdated}
+        onRefresh={handleRefresh}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => exportCSV('fraude_alertas', ['Severidad', 'Tipo', 'Título', 'Descripción', 'Entidad', 'Importe', 'Estado', 'Fecha'], alerts.map(a => [a.severity, alertTypeLabels[a.type] || a.type, a.title, a.description, a.entity, a.amount || '', a.status, a.detectedAt?.slice(0, 10)]))}><Download size={14} className="mr-1" />Exportar</Button>
+        }
+      />
 
       {/* Critical banner */}
       {criticalAlerts > 0 && (
@@ -497,7 +513,7 @@ export default function FraudePage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {alerts.map(a => {
+                {alerts.slice(alertPage * 10, (alertPage + 1) * 10).map(a => {
                   const sev = severityConfig[a.severity] || severityConfig.LOW
                   const res = resolutions[a.id]
                   const isResolved = a.status === 'RESOLVED' || a.status === 'FALSE_POSITIVE'
@@ -580,6 +596,16 @@ export default function FraudePage() {
                     </div>
                   )
                 })}
+                {alerts.length > 10 && (
+                  <div className="flex items-center justify-center gap-2 pt-3">
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={alertPage === 0} onClick={() => setAlertPage(p => p - 1)}>←</Button>
+                    {Array.from({ length: Math.ceil(alerts.length / 10) }, (_, i) => (
+                      <button key={i} onClick={() => setAlertPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${alertPage === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+                    ))}
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={alertPage >= Math.ceil(alerts.length / 10) - 1} onClick={() => setAlertPage(p => p + 1)}>→</Button>
+                    <span className="text-xs text-muted-foreground ml-2">{alertPage * 10 + 1}–{Math.min((alertPage + 1) * 10, alerts.length)} de {alerts.length}</span>
+                  </div>
+                )}
               </div>
             )
           )}
@@ -593,6 +619,7 @@ export default function FraudePage() {
                 <div className="text-xs text-muted-foreground mt-1">Se analizan duplicados, pagos sin aprobación e impagos prolongados</div>
               </div>
             ) : (
+              <>
               <ScrollableTable>
                 <table className="w-full text-sm">
                   <thead>
@@ -603,7 +630,7 @@ export default function FraudePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {anomalies.map(a => {
+                    {anomalies.slice(anomPage * 10, (anomPage + 1) * 10).map(a => {
                       const sev = severityConfig[a.severity] || severityConfig.LOW
                       return (
                         <tr key={a.id} className={`border-b border-border hover:bg-muted/50 transition-colors ${a.severity === 'HIGH' ? 'bg-destructive/5' : ''}`}>
@@ -620,6 +647,17 @@ export default function FraudePage() {
                   </tbody>
                 </table>
 </ScrollableTable>
+              {anomalies.length > 10 && (
+                <div className="flex items-center justify-center gap-2 p-3">
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={anomPage === 0} onClick={() => setAnomPage(p => p - 1)}>←</Button>
+                  {Array.from({ length: Math.ceil(anomalies.length / 10) }, (_, i) => (
+                    <button key={i} onClick={() => setAnomPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${anomPage === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+                  ))}
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={anomPage >= Math.ceil(anomalies.length / 10) - 1} onClick={() => setAnomPage(p => p + 1)}>→</Button>
+                  <span className="text-xs text-muted-foreground ml-2">{anomPage * 10 + 1}–{Math.min((anomPage + 1) * 10, anomalies.length)} de {anomalies.length}</span>
+                </div>
+              )}
+              </>
             )
           )}
 
@@ -632,6 +670,7 @@ export default function FraudePage() {
                 <div className="text-xs text-muted-foreground mt-1">Las acciones del sistema se registrarán aquí automáticamente</div>
               </div>
             ) : (
+              <>
               <ScrollableTable>
                 <table className="w-full text-sm">
                   <thead>
@@ -642,7 +681,7 @@ export default function FraudePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {auditLog.map((log: any) => (
+                    {auditLog.slice(auditPage * 10, (auditPage + 1) * 10).map((log: any) => (
                       <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
                         <td className="p-3 text-xs text-muted-foreground">{fmtDateTime(log.createdAt)}</td>
                         <td className="p-3 text-xs">{log.user?.email || '—'}</td>
@@ -661,6 +700,17 @@ export default function FraudePage() {
                   </tbody>
                 </table>
 </ScrollableTable>
+              {auditLog.length > 10 && (
+                <div className="flex items-center justify-center gap-2 p-3">
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={auditPage === 0} onClick={() => setAuditPage(p => p - 1)}>←</Button>
+                  {Array.from({ length: Math.ceil(auditLog.length / 10) }, (_, i) => (
+                    <button key={i} onClick={() => setAuditPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${auditPage === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+                  ))}
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={auditPage >= Math.ceil(auditLog.length / 10) - 1} onClick={() => setAuditPage(p => p + 1)}>→</Button>
+                  <span className="text-xs text-muted-foreground ml-2">{auditPage * 10 + 1}–{Math.min((auditPage + 1) * 10, auditLog.length)} de {auditLog.length}</span>
+                </div>
+              )}
+              </>
             )
           )}
         </CardContent>

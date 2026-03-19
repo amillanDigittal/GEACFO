@@ -5,7 +5,10 @@ import { fmtEur, fmt, riskLabel, riskVariant, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Download, Siren } from 'lucide-react'
+import { Download, Siren, ChevronDown } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
+import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 
@@ -35,13 +38,24 @@ export default function CobrosPage() {
   const [filter, setFilter] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<'dueDate' | 'totalAmount'>('dueDate')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
 
   useEffect(() => {
     api.treasury.ar()
       .then(setInvoices)
       .catch(console.error)
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
   }, [])
+
+  async function refresh() {
+    try {
+      const result = await api.treasury.ar()
+      setInvoices(result)
+    } catch (err) { console.error(err) }
+    finally { setLastUpdated(new Date()) }
+  }
 
   if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
 
@@ -91,13 +105,15 @@ export default function CobrosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Cuentas por Cobrar</h1>
-          <p className="page-subtitle">Grupo Ibérico SA · {invoices.length} facturas · Marzo 2026</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => exportCSV('cuentas_por_cobrar', ['Factura', 'Cliente', 'Emisión', 'Vencimiento', 'Base', 'Total', 'Pagado', 'Estado'], invoices.map((i: any) => [i.number, i.customer?.name, i.issueDate?.slice(0, 10), i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), Number(i.paidAmount), i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
-      </div>
+      <PageHeader
+        title="Cuentas por Cobrar"
+        subtitle={`Grupo Ibérico SA · ${invoices.length} facturas · Marzo 2026`}
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => exportCSV('cuentas_por_cobrar', ['Factura', 'Cliente', 'Emisión', 'Vencimiento', 'Base', 'Total', 'Pagado', 'Estado'], invoices.map((i: any) => [i.number, i.customer?.name, i.issueDate?.slice(0, 10), i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), Number(i.paidAmount), i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
+        }
+      />
 
       {/* Alerta vencidas */}
       {overdueCount > 0 && (
@@ -114,77 +130,226 @@ export default function CobrosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Pendiente', value: fmtEur(totalPending), color: 'text-foreground' },
-          { label: 'Vencido', value: fmtEur(totalOverdue), color: totalOverdue > 0 ? 'text-destructive' : 'text-success' },
-          { label: 'Facturas Pendientes', value: `${pendingCount + overdueCount}`, color: 'text-foreground' },
-          { label: 'DSO Medio', value: `${Math.round(invoices.reduce((s, i) => s + (i.customer?.dso || 0), 0) / (invoices.length || 1))}d`, color: 'text-foreground' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
-        ))}
+        <KpiBox label="Total Pendiente" value={fmtEur(totalPending)} tooltip="Suma de importes pendientes de cobro de todas las facturas activas." source="Facturas AR (totalAmount − paidAmount)" />
+        <KpiBox label="Vencido" value={fmtEur(totalOverdue)} color={totalOverdue > 0 ? 'text-destructive' : 'text-success'} tooltip="Importe total de facturas que han superado su fecha de vencimiento sin cobrar." source="Facturas AR con status OVERDUE" />
+        <KpiBox label="Facturas Pendientes" value={`${pendingCount + overdueCount}`} tooltip="Número de facturas no cobradas, incluyendo pendientes y vencidas." source="Facturas AR (PENDING + OVERDUE)" />
+        <KpiBox label="DSO Medio" value={`${Math.round(invoices.reduce((s, i) => s + (i.customer?.dso || 0), 0) / (invoices.length || 1))}d`} tooltip="Days Sales Outstanding medio de la cartera. Promedio ponderado del plazo de cobro por cliente." source="DSO por cliente (modelo Customer)" />
       </div>
 
-      {/* Aging + By Customer */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Aging */}
-        <Card>
-          <CardHeader><CardTitle>Antigüedad de Saldos</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {['Al día', '1-30d', '31-60d', '61-90d', '>90d'].map(bucket => {
-              const b = buckets[bucket]
-              if (!b) return (
-                <div key={bucket} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <span className="text-xs text-muted-foreground">{bucket}</span>
-                  <span className="font-mono text-xs text-muted-foreground">—</span>
-                </div>
-              )
-              const isOld = bucket === '61-90d' || bucket === '>90d'
-              const pct = totalPending > 0 ? (b.amount / totalPending) * 100 : 0
-              return (
-                <div key={bucket}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium">{bucket} <span className="text-muted-foreground">({b.count} fact.)</span></span>
-                    <span className={`font-mono font-semibold ${isOld ? 'text-destructive' : 'text-foreground'}`}>{fmtEur(b.amount)}</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: isOld ? 'hsl(var(--destructive))' : bucket === '1-30d' || bucket === '31-60d' ? 'hsl(var(--warning))' : 'hsl(var(--success))' }} />
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
+      {/* Aging Report interactivo */}
+      {(() => {
+        const BUCKET_ORDER = ['Al día', '1-30d', '31-60d', '61-90d', '>90d']
+        const BUCKET_COLORS: Record<string, string> = {
+          'Al día': 'hsl(var(--success))',
+          '1-30d': 'hsl(var(--primary))',
+          '31-60d': 'hsl(var(--warning))',
+          '61-90d': 'hsl(210, 60%, 55%)',
+          '>90d': 'hsl(var(--destructive))',
+        }
 
-        {/* By Customer */}
-        <Card>
-          <CardHeader><CardTitle>Exposición por Cliente</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {Object.values(byCustomer)
-              .sort((a, b) => b.total - a.total)
-              .map(c => {
-                const pct = totalPending > 0 ? (c.total / totalPending) * 100 : 0
-                return (
-                  <div key={c.code} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium truncate">{c.name}</span>
-                        <Badge variant={riskVariant(c.risk)}>{riskLabel(c.risk)}</Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground">{c.count} factura{c.count > 1 ? 's' : ''} · Score: {c.score}</div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="font-mono text-xs font-semibold">{fmtEur(c.total)}</div>
-                      <div className="text-[10px] text-muted-foreground">{pct.toFixed(1)}%</div>
-                    </div>
+        // Aging by customer (for stacked chart)
+        const customerNames = [...new Set(invoices.filter(i => i.status !== 'PAID').map(i => i.customer.name))]
+        const agingByCustomer = BUCKET_ORDER.map(bucket => {
+          const entry: any = { bucket }
+          customerNames.forEach(name => { entry[name] = 0 })
+          invoices.forEach(i => {
+            if (i.status === 'PAID') return
+            if (agingBucket(i.dueDate) === bucket) {
+              entry[i.customer.name] = (entry[i.customer.name] || 0) + Number(i.totalAmount) - Number(i.paidAmount)
+            }
+          })
+          return entry
+        })
+
+        // Chart data for simple bar
+        const chartData = BUCKET_ORDER.map(bucket => ({
+          bucket,
+          amount: buckets[bucket]?.amount || 0,
+          count: buckets[bucket]?.count || 0,
+          color: BUCKET_COLORS[bucket],
+        }))
+
+        // Pie data
+        const pieData = BUCKET_ORDER.filter(b => buckets[b]?.amount > 0).map(bucket => ({
+          name: bucket,
+          value: Math.round(buckets[bucket]?.amount || 0),
+          fill: BUCKET_COLORS[bucket],
+        }))
+
+        // Invoices for selected bucket
+        const bucketInvoices = selectedBucket
+          ? invoices.filter(i => i.status !== 'PAID' && agingBucket(i.dueDate) === selectedBucket)
+              .sort((a, b) => Number(b.totalAmount) - Number(a.totalAmount))
+          : []
+
+        return (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Bar chart */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <div className="flex items-center justify-between w-full">
+                    <CardTitle>Aging Report — Antigüedad de Saldos</CardTitle>
+                    {selectedBucket && (
+                      <Button variant="outline" size="sm" className="text-xs" onClick={() => setSelectedBucket(null)}>
+                        Limpiar selección
+                      </Button>
+                    )}
                   </div>
-                )
-              })}
-          </CardContent>
-        </Card>
-      </div>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+                      <Tooltip
+                        contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                        formatter={(v: number) => [fmtEur(v), 'Importe']}
+                        labelFormatter={l => `Tramo: ${l}`}
+                      />
+                      <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(data: any) => setSelectedBucket(data.bucket === selectedBucket ? null : data.bucket)}>
+                        {chartData.map((entry, idx) => (
+                          <Cell
+                            key={idx}
+                            fill={entry.color}
+                            opacity={selectedBucket && selectedBucket !== entry.bucket ? 0.3 : 1}
+                            stroke={selectedBucket === entry.bucket ? 'hsl(var(--foreground))' : 'none'}
+                            strokeWidth={selectedBucket === entry.bucket ? 2 : 0}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  {/* Bucket summary row */}
+                  <div className="flex gap-2 mt-3">
+                    {BUCKET_ORDER.map(bucket => {
+                      const b = buckets[bucket]
+                      const isActive = selectedBucket === bucket
+                      return (
+                        <button
+                          key={bucket}
+                          onClick={() => setSelectedBucket(isActive ? null : bucket)}
+                          className={`flex-1 p-2 rounded-lg border text-center transition-all ${isActive ? 'border-foreground bg-muted' : 'border-border hover:border-foreground/30'}`}
+                        >
+                          <div className="w-2 h-2 rounded-full mx-auto mb-1" style={{ background: BUCKET_COLORS[bucket] }} />
+                          <div className="text-[10px] text-muted-foreground">{bucket}</div>
+                          <div className="font-mono text-xs font-bold">{b ? fmtEur(b.amount) : '—'}</div>
+                          <div className="text-[9px] text-muted-foreground">{b ? `${b.count} fact.` : '0'}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Pie + Customer exposure */}
+              <Card>
+                <CardHeader><CardTitle>Distribución</CardTitle></CardHeader>
+                <CardContent>
+                  {pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={160}>
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={70}
+                          paddingAngle={2}
+                          dataKey="value"
+                          onClick={(data: any) => setSelectedBucket(data.name === selectedBucket ? null : data.name)}
+                          cursor="pointer"
+                        >
+                          {pieData.map((entry, idx) => (
+                            <Cell key={idx} fill={entry.fill} opacity={selectedBucket && selectedBucket !== entry.name ? 0.3 : 1} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                          formatter={(v: number) => [fmtEur(v), 'Importe']}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[160px] flex items-center justify-center text-sm text-muted-foreground">Sin datos</div>
+                  )}
+                  {/* By customer */}
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-3 mb-2">Por Cliente</div>
+                  <div className="space-y-2">
+                    {Object.values(byCustomer)
+                      .sort((a, b) => b.total - a.total)
+                      .map(c => {
+                        const pct = totalPending > 0 ? (c.total / totalPending) * 100 : 0
+                        return (
+                          <div key={c.code} className="flex items-center gap-2 text-xs">
+                            <Badge variant={riskVariant(c.risk)} className="text-[9px]">{riskLabel(c.risk)}</Badge>
+                            <span className="flex-1 truncate">{c.name}</span>
+                            <span className="font-mono font-semibold">{fmtEur(c.total)}</span>
+                            <span className="text-muted-foreground w-10 text-right">{pct.toFixed(0)}%</span>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Drill-down: selected bucket invoices */}
+            {selectedBucket && bucketInvoices.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ background: BUCKET_COLORS[selectedBucket] }} />
+                      <CardTitle>Facturas — Tramo {selectedBucket}</CardTitle>
+                      <Badge variant="secondary">{bucketInvoices.length} factura{bucketInvoices.length !== 1 ? 's' : ''}</Badge>
+                    </div>
+                    <span className="font-mono text-sm font-bold">
+                      {fmtEur(bucketInvoices.reduce((s, i) => s + Number(i.totalAmount) - Number(i.paidAmount), 0))}
+                    </span>
+                  </div>
+                </CardHeader>
+                <ScrollableTable>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        {['Factura', 'Cliente', 'Vencimiento', 'Días', 'Pendiente', 'Estado'].map(h => (
+                          <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bucketInvoices.map(inv => {
+                        const days = daysDiff(inv.dueDate)
+                        const pending = Number(inv.totalAmount) - Number(inv.paidAmount)
+                        const cfg = statusConfig[inv.status] || statusConfig.PENDING
+                        return (
+                          <tr key={inv.id} className="border-b border-border hover:bg-muted/50">
+                            <td className="p-3 font-mono text-xs font-semibold">{inv.number}</td>
+                            <td className="p-3">
+                              <div className="text-sm font-medium">{inv.customer.name}</div>
+                              <div className="text-xs text-muted-foreground">{inv.customer.code} · Score: {inv.customer.creditScore}</div>
+                            </td>
+                            <td className="p-3 font-mono text-xs text-muted-foreground">{fmtDate(inv.dueDate)}</td>
+                            <td className="p-3">
+                              <span className={`font-mono text-xs font-bold ${days > 60 ? 'text-destructive' : days > 0 ? 'text-warning' : 'text-success'}`}>
+                                {days > 0 ? `${days}d vencida` : days === 0 ? 'Hoy' : `${Math.abs(days)}d restantes`}
+                              </span>
+                            </td>
+                            <td className="p-3 font-mono text-xs font-semibold">{fmtEur(pending)}</td>
+                            <td className="p-3"><Badge variant={cfg.variant}>{cfg.label}</Badge></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </ScrollableTable>
+              </Card>
+            )}
+          </>
+        )
+      })()}
 
       {/* Invoice table */}
       <Card>
@@ -200,7 +365,7 @@ export default function CobrosPage() {
               ].map(f => (
                 <button
                   key={f.key}
-                  onClick={() => setFilter(f.key)}
+                  onClick={() => { setFilter(f.key); setPage(0) }}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${filter === f.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
                   {f.label}
@@ -229,7 +394,7 @@ export default function CobrosPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inv: any) => {
+              {filtered.slice(page * 10, (page + 1) * 10).map((inv: any) => {
                 const cfg = statusConfig[inv.status] || statusConfig.PENDING
                 const pending = Number(inv.totalAmount) - Number(inv.paidAmount)
                 const overdueDays = inv.status === 'OVERDUE' ? daysDiff(inv.dueDate) : 0
@@ -273,6 +438,16 @@ export default function CobrosPage() {
             </tbody>
           </table>
 </ScrollableTable>
+        {filtered.length > 10 && (
+          <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>←</Button>
+            {Array.from({ length: Math.ceil(filtered.length / 10) }, (_, i) => (
+              <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+            ))}
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(filtered.length / 10) - 1} onClick={() => setPage(p => p + 1)}>→</Button>
+            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}–{Math.min((page + 1) * 10, filtered.length)} de {filtered.length}</span>
+          </div>
+        )}
       </Card>
     </div>
   )

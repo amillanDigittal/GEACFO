@@ -15,6 +15,21 @@ export class TreasuryController {
     return this.svc.getCockpitKPIs(req.user.tenantId)
   }
 
+  @Get('cashflow')
+  getCashFlow(@Request() req: any) {
+    return this.svc.getCashFlowStatement(req.user.tenantId)
+  }
+
+  @Get('ratios')
+  getRatios(@Request() req: any) {
+    return this.svc.getFinancialRatios(req.user.tenantId)
+  }
+
+  @Get('auto-match')
+  getAutoMatch(@Request() req: any) {
+    return this.svc.getAutoMatches(req.user.tenantId)
+  }
+
   @Get('forecast')
   getForecast(@Request() req: any, @Query('scenario') scenario?: string) {
     return this.svc.getForecast(req.user.tenantId, scenario)

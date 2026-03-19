@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { CheckCircle2, RefreshCw, AlertTriangle, XCircle, Ban, Building2, Landmark, Users, Package, Link2, Download, ClipboardList } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { PageHeader } from '@/components/page-header'
 
 const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary'; icon: React.ReactNode }> = {
   SYNCED: { label: 'Sincronizado', variant: 'success', icon: <CheckCircle2 size={14} /> },
@@ -39,16 +40,24 @@ export default function GobiernoPage() {
   const [auditLog, setAuditLog] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'fuentes' | 'auditoria'>('fuentes')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  useEffect(() => {
-    Promise.all([
+  function fetchData() {
+    setLoading(true)
+    return Promise.all([
       api.governance.sources(),
       api.governance.audit(),
     ])
       .then(([s, a]) => { setSources(s); setAuditLog(a) })
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
+  }
+
+  useEffect(() => { fetchData() }, [])
+
+  async function refresh() {
+    await fetchData()
+  }
 
   if (loading) return <SkeletonKPIsAndTable cols={6} rows={5} />
 
@@ -60,26 +69,28 @@ export default function GobiernoPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Gobierno del Dato</h1>
-          <p className="page-subtitle">Trazabilidad y calidad de datos · Grupo Ibérico SA</p>
-        </div>
-        <div className="flex gap-2">
-          <div className="flex bg-muted rounded-lg p-0.5">
-            {(['fuentes', 'auditoria'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {tab === 'fuentes' ? 'Fuentes de Datos' : 'Auditoría'}
-              </button>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" onClick={() => { if (activeTab === 'fuentes') { exportCSV('gobierno_fuentes', ['Fuente', 'Tipo', 'Estado', 'Registros', 'Última Sync'], sources.map(s => [s.name, s.type, s.status, s.recordCount, s.lastSync || ''])) } else { exportCSV('gobierno_auditoria', ['Fecha', 'Usuario', 'Acción', 'Entidad', 'ID Entidad', 'IP'], auditLog.map((l: any) => [l.createdAt, l.user?.name || l.userId || '', l.action, l.entity, l.entityId || '', l.ipAddress || ''])) } }}><Download size={14} className="mr-1" />Exportar</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Gobierno del Dato"
+        subtitle="Trazabilidad y calidad de datos · Grupo Ibérico SA"
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <>
+            <div className="flex bg-muted rounded-lg p-0.5">
+              {(['fuentes', 'auditoria'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {tab === 'fuentes' ? 'Fuentes de Datos' : 'Auditoría'}
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { if (activeTab === 'fuentes') { exportCSV('gobierno_fuentes', ['Fuente', 'Tipo', 'Estado', 'Registros', 'Última Sync'], sources.map(s => [s.name, s.type, s.status, s.recordCount, s.lastSync || ''])) } else { exportCSV('gobierno_auditoria', ['Fecha', 'Usuario', 'Acción', 'Entidad', 'ID Entidad', 'IP'], auditLog.map((l: any) => [l.createdAt, l.user?.name || l.userId || '', l.action, l.entity, l.entityId || '', l.ipAddress || ''])) } }}><Download size={14} className="mr-1" />Exportar</Button>
+          </>
+        }
+      />
 
       {/* Alertas */}
       {warningCount > 0 && (

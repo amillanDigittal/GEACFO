@@ -22,4 +22,9 @@ export class BotController {
   history(@Request() req: any, @Query('sessionId') sessionId: string) {
     return this.svc.getHistory(req.user.tenantId, sessionId)
   }
+
+  @Get('sessions')
+  sessions(@Request() req: any) {
+    return this.svc.getSessions(req.user.tenantId)
+  }
 }

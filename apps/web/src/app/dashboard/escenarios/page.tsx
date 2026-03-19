@@ -9,6 +9,7 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, L
 import { Download, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Siren } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonEscenarios } from '@/components/ui/skeleton-page'
+import { PageHeader } from '@/components/page-header'
 
 const scenarioMeta: Record<string, { label: string; color: string; desc: string }> = {
   BASE: { label: 'Base', color: 'hsl(var(--primary))', desc: 'Proyección con supuestos actuales' },
@@ -24,13 +25,21 @@ export default function EscenariosPage() {
   const [dso, setDso] = useState(42)
   const [revenueChange, setRevenueChange] = useState(0)
   const [activeTab, setActiveTab] = useState<'comparativa' | 'simulador'>('comparativa')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  useEffect(() => {
-    api.scenarios.compare()
+  function fetchData() {
+    setLoading(true)
+    return api.scenarios.compare()
       .then(setScenarios)
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
+  }
+
+  useEffect(() => { fetchData() }, [])
+
+  async function refresh() {
+    await fetchData()
+  }
 
   function runSimulation() {
     setSimLoading(true)
@@ -70,26 +79,28 @@ export default function EscenariosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Supuestos & Escenarios</h1>
-          <p className="page-subtitle">Análisis de sensibilidad · 13 semanas · Grupo Ibérico SA</p>
-        </div>
-        <div className="flex gap-2">
-          <div className="flex bg-muted rounded-lg p-0.5">
-            {(['comparativa', 'simulador'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {tab === 'comparativa' ? 'Comparativa' : 'Simulador'}
-              </button>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" onClick={() => exportCSV('escenarios_comparativa', ['Semana', ...scenarios.map((s: any) => `Cobros_${s.scenario}`), ...scenarios.map((s: any) => `Pagos_${s.scenario}`), ...scenarios.map((s: any) => `Saldo_${s.scenario}`)], chartData.map((row: any) => [row.week, ...scenarios.map((s: any) => row[`cobros_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`pagos_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`saldo_${s.scenario}`] ?? '')]))}><Download size={14} className="mr-1" />Exportar</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Supuestos & Escenarios"
+        subtitle="Análisis de sensibilidad · 13 semanas · Grupo Ibérico SA"
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <>
+            <div className="flex bg-muted rounded-lg p-0.5">
+              {(['comparativa', 'simulador'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {tab === 'comparativa' ? 'Comparativa' : 'Simulador'}
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('escenarios_comparativa', ['Semana', ...scenarios.map((s: any) => `Cobros_${s.scenario}`), ...scenarios.map((s: any) => `Pagos_${s.scenario}`), ...scenarios.map((s: any) => `Saldo_${s.scenario}`)], chartData.map((row: any) => [row.week, ...scenarios.map((s: any) => row[`cobros_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`pagos_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`saldo_${s.scenario}`] ?? '')]))}><Download size={14} className="mr-1" />Exportar</Button>
+          </>
+        }
+      />
 
       {/* Alerta de gaps */}
       {gapWeeks.length > 0 && (

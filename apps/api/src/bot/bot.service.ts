@@ -72,4 +72,33 @@ INSTRUCCIONES:
       orderBy: { createdAt: 'asc' },
     })
   }
+
+  async getSessions(tenantId: string) {
+    const messages = await prisma.botMessage.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      select: { sessionId: true, content: true, role: true, context: true, createdAt: true },
+    })
+    const sessionsMap = new Map<string, { sessionId: string; firstMessage: string; context: string | null; messageCount: number; lastActivity: Date }>()
+    for (const m of messages) {
+      const existing = sessionsMap.get(m.sessionId)
+      if (!existing) {
+        sessionsMap.set(m.sessionId, {
+          sessionId: m.sessionId,
+          firstMessage: m.role === 'USER' ? m.content.slice(0, 80) : '',
+          context: m.context,
+          messageCount: 1,
+          lastActivity: m.createdAt,
+        })
+      } else {
+        existing.messageCount++
+        if (!existing.firstMessage && m.role === 'USER') {
+          existing.firstMessage = m.content.slice(0, 80)
+        }
+      }
+    }
+    return [...sessionsMap.values()]
+      .filter(s => s.firstMessage)
+      .sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime())
+  }
 }

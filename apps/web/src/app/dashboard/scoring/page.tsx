@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Siren, ChevronDown, ChevronUp } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
@@ -17,8 +18,18 @@ export default function ScoringPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [historyData, setHistoryData] = useState<any>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [page, setPage] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  useEffect(() => { api.customers.list().then(setCustomers).catch(console.error).finally(() => setLoading(false)) }, [])
+  useEffect(() => { api.customers.list().then(setCustomers).catch(console.error).finally(() => { setLoading(false); setLastUpdated(new Date()) }) }, [])
+
+  async function refresh() {
+    try {
+      const result = await api.customers.list()
+      setCustomers(result)
+    } catch (err) { console.error(err) }
+    finally { setLastUpdated(new Date()) }
+  }
 
   async function recalculate(id: string) {
     setRecalculating(prev => new Set(prev).add(id))
@@ -45,10 +56,12 @@ export default function ScoringPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="page-title">Scoring de Clientes</h1>
-        <p className="page-subtitle">Modelo ML de riesgo crediticio · Actualizado 05/03/2026</p>
-      </div>
+      <PageHeader
+        title="Scoring de Clientes"
+        subtitle="Modelo ML de riesgo crediticio · Actualizado 05/03/2026"
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+      />
 
       <div className="flex gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
         <Siren size={18} className="mt-0.5 flex-shrink-0" />
@@ -76,7 +89,7 @@ export default function ScoringPage() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-border">{['Cliente','Score IA','Riesgo','Exposición','DSO','Límite','Estado','Acción'].map(h => <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>
-              {customers.map(c => {
+              {customers.slice(page * 10, (page + 1) * 10).map(c => {
                 const isExpanded = expandedId === c.id
                 const scoreColorVal = c.creditScore >= 80 ? 'hsl(var(--success))' : c.creditScore >= 60 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'
                 return (
@@ -181,6 +194,16 @@ export default function ScoringPage() {
             </tbody>
           </table>
 </ScrollableTable>
+        {customers.length > 10 && (
+          <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>←</Button>
+            {Array.from({ length: Math.ceil(customers.length / 10) }, (_, i) => (
+              <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+            ))}
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(customers.length / 10) - 1} onClick={() => setPage(p => p + 1)}>→</Button>
+            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}–{Math.min((page + 1) * 10, customers.length)} de {customers.length}</span>
+          </div>
+        )}
       </Card>
     </div>
   )

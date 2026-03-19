@@ -35,6 +35,9 @@ export const api = {
     approveAP: (id: string) => fetchAPI(`/treasury/ap/${id}/approve`, { method: 'PATCH' }),
     approveAPBatch: (ids: string[]) => fetchAPI('/treasury/ap/approve-batch', { method: 'POST', body: JSON.stringify({ ids }) }),
     accounts: () => fetchAPI('/treasury/accounts'),
+    cashflow: () => fetchAPI('/treasury/cashflow'),
+    ratios: () => fetchAPI('/treasury/ratios'),
+    autoMatch: () => fetchAPI('/treasury/auto-match'),
     reconciliation: () => fetchAPI('/treasury/reconciliation'),
     reconcileMovement: (id: string) => fetchAPI(`/treasury/movements/${id}/reconcile`, { method: 'PATCH' }),
     reconcileBatch: (ids: string[]) => fetchAPI('/treasury/movements/reconcile-batch', { method: 'POST', body: JSON.stringify({ ids }) }),
@@ -50,7 +53,7 @@ export const api = {
     covenants: () => fetchAPI('/debt/covenants'),
     amortization: () => fetchAPI('/debt/amortization'),
   },
-  inventory: { list: () => fetchAPI('/inventory') },
+  inventory: { list: () => fetchAPI('/inventory'), abc: () => fetchAPI('/inventory/abc') },
   scenarios: {
     compare: () => fetchAPI('/scenarios/compare'),
     simulate: (params: any) => fetchAPI('/scenarios/simulate', { method: 'POST', body: JSON.stringify(params) }),
@@ -59,6 +62,7 @@ export const api = {
   bot: {
     chat: (message: string, sessionId: string, context?: string) => fetchAPI('/bot/chat', { method: 'POST', body: JSON.stringify({ message, sessionId, context }) }),
     history: (sessionId: string) => fetchAPI(`/bot/history?sessionId=${sessionId}`),
+    sessions: () => fetchAPI('/bot/sessions'),
   },
   alerts: {
     counts: () => fetchAPI('/alerts/counts'),
@@ -66,6 +70,26 @@ export const api = {
     resolutions: () => fetchAPI('/alerts/resolutions'),
     updateResolution: (alertId: string, status: string, notes?: string) =>
       fetchAPI('/alerts/resolutions', { method: 'POST', body: JSON.stringify({ alertId, status, notes }) }),
+  },
+  users: {
+    list: () => fetchAPI('/users'),
+    get: (id: string) => fetchAPI(`/users/${id}`),
+    create: (data: { email: string; name: string; role: string; password: string }) => fetchAPI('/users', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { email?: string; name?: string; role?: string; password?: string }) => fetchAPI(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    remove: (id: string) => fetchAPI(`/users/${id}`, { method: 'DELETE' }),
+  },
+  settings: {
+    getTenant: () => fetchAPI('/settings/tenant'),
+    updateTenant: (data: any) => fetchAPI('/settings/tenant', { method: 'PATCH', body: JSON.stringify(data) }),
+    getConfig: () => fetchAPI('/settings/config'),
+    updateConfig: (data: any) => fetchAPI('/settings/config', { method: 'PATCH', body: JSON.stringify(data) }),
+  },
+  reporting: {
+    list: () => fetchAPI('/reporting/schedules'),
+    create: (data: { name: string; reportType: string; frequency: string; recipients: string }) => fetchAPI('/reporting/schedules', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) => fetchAPI(`/reporting/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    remove: (id: string) => fetchAPI(`/reporting/schedules/${id}`, { method: 'DELETE' }),
+    send: (id: string) => fetchAPI(`/reporting/schedules/${id}/send`, { method: 'POST' }),
   },
   board: { pack: () => fetchAPI('/board/pack') },
   governance: {

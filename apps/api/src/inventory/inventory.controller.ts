@@ -10,4 +10,5 @@ import { JwtAuthGuard } from '../auth/jwt.guard'
 export class InventoryController {
   constructor(private svc: InventoryService) {}
   @Get() getAll(@Request() req: any) { return this.svc.getAll(req.user.tenantId) }
+  @Get('abc') getAbc(@Request() req: any) { return this.svc.getAbcAnalysis(req.user.tenantId) }
 }

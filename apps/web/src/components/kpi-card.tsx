@@ -1,6 +1,7 @@
 'use client'
 
-import { ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowUp, ArrowDown, Info } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 
 function Sparkline({ data, color, width = 80, height = 24 }: { data: number[]; color: string; width?: number; height?: number }) {
   if (!data || data.length < 2) return null
@@ -42,11 +43,18 @@ interface KpiCardProps {
   up?: boolean
   sparkline?: number[]
   onClick?: () => void
+  tooltip?: string
+  source?: string
 }
-export function KpiCard({ label, value, icon, sub, trend, up, sparkline, onClick }: KpiCardProps) {
-  return (
+export function KpiCard({ label, value, icon, sub, trend, up, sparkline, onClick, tooltip, source }: KpiCardProps) {
+  const card = (
     <div className="kpi-card group" onClick={onClick}>
       <span className="absolute top-4 right-4 opacity-20">{icon}</span>
+      {tooltip && (
+        <span className="absolute top-2 left-2 opacity-0 group-hover:opacity-40 transition-opacity">
+          <Info size={12} />
+        </span>
+      )}
       <div className="kpi-label">{label}</div>
       <div className="kpi-value">{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
@@ -64,5 +72,22 @@ export function KpiCard({ label, value, icon, sub, trend, up, sparkline, onClick
       </div>
       <div className="absolute bottom-2.5 right-2.5 text-[10px] font-semibold uppercase tracking-wider bg-muted border border-border text-muted-foreground px-2 py-0.5 rounded group-hover:bg-primary group-hover:border-primary group-hover:text-white transition-colors">Drill-down</div>
     </div>
+  )
+
+  if (!tooltip) return card
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{card}</TooltipTrigger>
+        <TooltipContent side="bottom">
+          <div className="space-y-1">
+            <div className="font-semibold">{label}</div>
+            <div className="text-muted-foreground">{tooltip}</div>
+            {source && <div className="text-[10px] text-muted-foreground border-t border-border pt-1 mt-1">Fuente: {source}</div>}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }

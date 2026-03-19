@@ -1,11 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { fmtEur, fmt, exportCSV } from '@/lib/utils'
+import { fmtEur, fmt, fmtPct, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Download, Zap, CheckCircle2 } from 'lucide-react'
+import { Download, Zap, CheckCircle2, Calculator, TrendingUp, Clock } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
+import { Input } from '@/components/ui/input'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
@@ -35,14 +38,26 @@ export default function PagosPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [approving, setApproving] = useState(false)
+  const [discountRate, setDiscountRate] = useState(2)
+  const [page, setPage] = useState(0)
+  const [discountDays, setDiscountDays] = useState(10)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
     api.treasury.ap()
       .then(setInvoices)
       .catch(console.error)
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
   }, [])
+
+  async function refresh() {
+    try {
+      const result = await api.treasury.ap()
+      setInvoices(result)
+    } catch (err) { console.error(err) }
+    finally { setLastUpdated(new Date()) }
+  }
 
   if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
 
@@ -148,13 +163,15 @@ export default function PagosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Cuentas por Pagar</h1>
-          <p className="page-subtitle">Grupo Ibérico SA · {invoices.length} facturas · Marzo 2026</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => exportCSV('cuentas_por_pagar', ['Factura', 'Proveedor', 'Vencimiento', 'Base', 'Total', 'Prioridad', 'Estado'], invoices.map((i: any) => [i.number, i.supplier?.name, i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), i.priority, i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
-      </div>
+      <PageHeader
+        title="Cuentas por Pagar"
+        subtitle={`Grupo Ibérico SA · ${invoices.length} facturas · Marzo 2026`}
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => exportCSV('cuentas_por_pagar', ['Factura', 'Proveedor', 'Vencimiento', 'Base', 'Total', 'Prioridad', 'Estado'], invoices.map((i: any) => [i.number, i.supplier?.name, i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), i.priority, i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
+        }
+      />
 
       {/* Alertas */}
       {highPriority.length > 0 && (
@@ -171,17 +188,10 @@ export default function PagosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Pendiente', value: fmtEur(totalPending), color: 'text-foreground' },
-          { label: 'Vence Esta Semana', value: fmtEur(dueThisWeekAmount), color: dueThisWeekAmount > 0 ? 'text-warning' : 'text-success' },
-          { label: 'Aprobadas', value: `${approvedCount}`, color: 'text-success' },
-          { label: 'En Revisión', value: `${reviewCount}`, color: reviewCount > 0 ? 'text-warning' : 'text-foreground' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
-        ))}
+        <KpiBox label="Total Pendiente" value={fmtEur(totalPending)} tooltip="Suma de importes pendientes de pago a proveedores." source="Facturas AP (totalAmount − paidAmount)" />
+        <KpiBox label="Vence Esta Semana" value={fmtEur(dueThisWeekAmount)} color={dueThisWeekAmount > 0 ? 'text-warning' : 'text-success'} tooltip="Importe de pagos que vencen en los próximos 7 días. Impacto directo en tesorería a corto plazo." source="Facturas AP con dueDate ≤ 7 días" />
+        <KpiBox label="Aprobadas" value={`${approvedCount}`} color="text-success" tooltip="Facturas ya aprobadas y listas para ejecución de pago." source="Facturas AP con status APPROVED" />
+        <KpiBox label="En Revisión" value={`${reviewCount}`} color={reviewCount > 0 ? 'text-warning' : 'text-foreground'} tooltip="Facturas pendientes de aprobación por el CFO o controller." source="Facturas AP con status IN_REVIEW" />
       </div>
 
       {/* Calendar + By Supplier */}
@@ -243,6 +253,148 @@ export default function PagosPage() {
         </Card>
       </div>
 
+      {/* Descuento por pronto pago */}
+      {(() => {
+        const unpaid = invoices.filter(i => i.status !== 'PAID' && i.status !== 'REJECTED')
+        const eligible = unpaid
+          .map(inv => {
+            const days = daysUntil(inv.dueDate)
+            const remaining = Number(inv.totalAmount) - Number(inv.paidAmount)
+            const termsD = inv.supplier.paymentTerms || 30
+            const daysEarly = days - discountDays
+            if (remaining <= 0 || days < 0 || daysEarly < 0) return null
+            const saving = remaining * (discountRate / 100)
+            const netPayment = remaining - saving
+            // Coste anualizado de NO aprovechar el descuento: (descuento / neto) * (365 / días_que_adelantas)
+            const annualizedRate = daysEarly > 0 ? (saving / netPayment) * (365 / daysEarly) * 100 : 0
+            return { ...inv, remaining, saving, netPayment, daysEarly, annualizedRate, termsD }
+          })
+          .filter(Boolean) as any[]
+        const totalSaving = eligible.reduce((s, e) => s + e.saving, 0)
+        const totalRemaining = eligible.reduce((s, e) => s + e.remaining, 0)
+        const topOpportunities = [...eligible].sort((a, b) => b.saving - a.saving).slice(0, 5)
+
+        return (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between w-full flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <Calculator size={18} className="text-primary" />
+                  <CardTitle>Descuento por Pronto Pago</CardTitle>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-muted-foreground whitespace-nowrap">Descuento %</label>
+                    <Input
+                      type="number"
+                      min={0.1}
+                      max={20}
+                      step={0.1}
+                      value={discountRate}
+                      onChange={e => setDiscountRate(parseFloat(e.target.value) || 0)}
+                      className="w-20 h-8 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs text-muted-foreground whitespace-nowrap">Si pago en</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={90}
+                      step={1}
+                      value={discountDays}
+                      onChange={e => setDiscountDays(parseInt(e.target.value) || 0)}
+                      className="w-16 h-8 text-xs font-mono"
+                    />
+                    <span className="text-xs text-muted-foreground">días</span>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Resumen */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Facturas Elegibles</div>
+                  <div className="font-mono text-lg font-bold">{eligible.length}</div>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Importe Total</div>
+                  <div className="font-mono text-lg font-bold">{fmtEur(totalRemaining)}</div>
+                </div>
+                <div className="bg-success/10 rounded-lg p-3 text-center border border-success/20">
+                  <div className="text-[10px] text-success uppercase tracking-widest mb-1">Ahorro Potencial</div>
+                  <div className="font-mono text-lg font-bold text-success">{fmtEur(totalSaving)}</div>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Términos</div>
+                  <div className="font-mono text-lg font-bold">{fmt(discountRate, 1)}/<span className="text-sm">{discountDays}d</span></div>
+                </div>
+              </div>
+
+              {/* Top oportunidades */}
+              {topOpportunities.length > 0 ? (
+                <ScrollableTable>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Factura</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Proveedor</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Vencimiento</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Importe</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Ahorro</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Pago Neto</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Días Adelanto</th>
+                        <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Tasa Anualizada</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topOpportunities.map((inv: any) => (
+                        <tr key={inv.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                          <td className="p-3 font-mono text-xs font-semibold">{inv.number}</td>
+                          <td className="p-3 text-sm">{inv.supplier.name}</td>
+                          <td className="p-3 font-mono text-xs text-muted-foreground">{fmtDate(inv.dueDate)}</td>
+                          <td className="p-3 font-mono text-xs">{fmtEur(inv.remaining)}</td>
+                          <td className="p-3 font-mono text-xs font-semibold text-success">{fmtEur(inv.saving)}</td>
+                          <td className="p-3 font-mono text-xs">{fmtEur(inv.netPayment)}</td>
+                          <td className="p-3">
+                            <span className="inline-flex items-center gap-1 font-mono text-xs">
+                              <Clock size={12} className="text-muted-foreground" />
+                              {inv.daysEarly}d
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`inline-flex items-center gap-1 font-mono text-xs font-semibold ${inv.annualizedRate > 20 ? 'text-success' : inv.annualizedRate > 10 ? 'text-warning' : 'text-muted-foreground'}`}>
+                              <TrendingUp size={12} />
+                              {fmtPct(inv.annualizedRate)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollableTable>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  No hay facturas elegibles para descuento con los términos actuales
+                </div>
+              )}
+
+              {eligible.length > 0 && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs text-muted-foreground">
+                  <TrendingUp size={14} className="text-primary mt-0.5 flex-shrink-0" />
+                  <span>
+                    Pagando {eligible.length} factura{eligible.length > 1 ? 's' : ''} con términos <strong>{fmt(discountRate, 1)}/{discountDays}</strong> (neto {eligible[0]?.termsD || 30}),
+                    el ahorro de <strong className="text-success">{fmtEur(totalSaving)}</strong> equivale a una rentabilidad anualizada media
+                    del <strong>{fmtPct(eligible.length > 0 ? eligible.reduce((s, e) => s + e.annualizedRate, 0) / eligible.length : 0)}</strong>.
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* Invoice table */}
       <Card>
         <CardHeader>
@@ -265,7 +417,7 @@ export default function PagosPage() {
               ].map(f => (
                 <button
                   key={f.key}
-                  onClick={() => setFilter(f.key)}
+                  onClick={() => { setFilter(f.key); setPage(0) }}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${filter === f.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
                   {f.label}
@@ -282,6 +434,7 @@ export default function PagosPage() {
                   {reviewInvoices.length > 0 && (
                     <input
                       type="checkbox"
+                      aria-label="Seleccionar todas las facturas en revisión"
                       className="rounded border-border"
                       checked={reviewInvoices.length > 0 && reviewInvoices.every((i: any) => selected.has(i.id))}
                       onChange={toggleSelectAll}
@@ -304,7 +457,7 @@ export default function PagosPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inv: any) => {
+              {filtered.slice(page * 10, (page + 1) * 10).map((inv: any) => {
                 const stCfg = statusConfig[inv.status] || statusConfig.IN_REVIEW
                 const priCfg = priorityConfig[inv.priority] || priorityConfig.NORMAL
                 const days = daysUntil(inv.dueDate)
@@ -316,6 +469,7 @@ export default function PagosPage() {
                       {inv.status === 'IN_REVIEW' && (
                         <input
                           type="checkbox"
+                          aria-label={`Seleccionar factura ${inv.number}`}
                           className="rounded border-border"
                           checked={selected.has(inv.id)}
                           onChange={() => toggleSelect(inv.id)}
@@ -361,6 +515,16 @@ export default function PagosPage() {
             </tbody>
           </table>
 </ScrollableTable>
+        {filtered.length > 10 && (
+          <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>←</Button>
+            {Array.from({ length: Math.ceil(filtered.length / 10) }, (_, i) => (
+              <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
+            ))}
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(filtered.length / 10) - 1} onClick={() => setPage(p => p + 1)}>→</Button>
+            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}–{Math.min((page + 1) * 10, filtered.length)} de {filtered.length}</span>
+          </div>
+        )}
       </Card>
     </div>
   )

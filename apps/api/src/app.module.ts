@@ -11,6 +11,9 @@ import { BotModule } from './bot/bot.module'
 import { BoardModule } from './board/board.module'
 import { GovernanceModule } from './governance/governance.module'
 import { AlertsModule } from './alerts/alerts.module'
+import { UsersModule } from './users/users.module'
+import { SettingsModule } from './settings/settings.module'
+import { ReportingModule } from './reporting/reporting.module'
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { AlertsModule } from './alerts/alerts.module'
     BoardModule,
     GovernanceModule,
     AlertsModule,
+    UsersModule,
+    SettingsModule,
+    ReportingModule,
   ],
 })
 export class AppModule {}

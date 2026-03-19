@@ -6,7 +6,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Download, ClipboardList, Link2, CheckCircle2, Search, X } from 'lucide-react'
+import { Download, ClipboardList, Link2, CheckCircle2, Search, X, Zap, ArrowDownToLine, ArrowUpFromLine, Check, XCircle } from 'lucide-react'
+import { PageHeader } from '@/components/page-header'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonConciliacion } from '@/components/ui/skeleton-page'
@@ -30,6 +31,11 @@ export default function ConciliacionPage() {
   const [dateTo, setDateTo] = useState('')
   const [searchCounterparty, setSearchCounterparty] = useState('')
   const PAGE_SIZE = 10
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [autoMatches, setAutoMatches] = useState<any>(null)
+  const [matchLoading, setMatchLoading] = useState(false)
+  const [acceptedMatches, setAcceptedMatches] = useState<Set<string>>(new Set())
+  const [dismissedMatches, setDismissedMatches] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   const loadData = () => {
@@ -39,10 +45,30 @@ export default function ConciliacionPage() {
     ])
       .then(([acc, rec]) => { setAccounts(acc); setReconciliations(rec) })
       .catch(console.error)
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
   }
 
-  useEffect(() => { loadData() }, [])
+  const loadAutoMatches = () => {
+    setMatchLoading(true)
+    api.treasury.autoMatch()
+      .then(setAutoMatches)
+      .catch(console.error)
+      .finally(() => setMatchLoading(false))
+  }
+
+  useEffect(() => { loadData(); loadAutoMatches() }, [])
+
+  async function refresh() {
+    try {
+      const [acc, rec] = await Promise.all([
+        api.treasury.accounts(),
+        api.treasury.reconciliation(),
+      ])
+      setAccounts(acc)
+      setReconciliations(rec)
+    } catch (err) { console.error(err) }
+    finally { setLastUpdated(new Date()) }
+  }
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -111,13 +137,15 @@ export default function ConciliacionPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Conciliación Bancaria</h1>
-          <p className="page-subtitle">Grupo Ibérico SA · {accounts.length} cuentas · Marzo 2026</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => exportCSV('conciliacion_movimientos', ['Fecha', 'Cuenta', 'Concepto', 'Contraparte', 'Importe', 'Saldo', 'Conciliado'], allMovements.map((m: any) => [m.date?.slice(0, 10), m.accountAlias, m.concept, m.counterparty || '', Number(m.amount), Number(m.balance), m.reconciled ? 'Sí' : 'No']))}><Download size={14} className="mr-1" />Exportar</Button>
-      </div>
+      <PageHeader
+        title="Conciliación Bancaria"
+        subtitle={`Grupo Ibérico SA · ${accounts.length} cuentas · Marzo 2026`}
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => exportCSV('conciliacion_movimientos', ['Fecha', 'Cuenta', 'Concepto', 'Contraparte', 'Importe', 'Saldo', 'Conciliado'], allMovements.map((m: any) => [m.date?.slice(0, 10), m.accountAlias, m.concept, m.counterparty || '', Number(m.amount), Number(m.balance), m.reconciled ? 'Sí' : 'No']))}><Download size={14} className="mr-1" />Exportar</Button>
+        }
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -222,6 +250,118 @@ export default function ConciliacionPage() {
         </CardContent>
       </Card>
 
+      {/* Auto-matching suggestions */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <Zap size={16} className="text-primary" />
+              <CardTitle>Conciliación Automática</CardTitle>
+              {autoMatches && <Badge variant="secondary">{autoMatches.matches?.filter((m: any) => !dismissedMatches.has(m.movementId)).length || 0} sugerencias</Badge>}
+            </div>
+            <Button variant="outline" size="sm" onClick={loadAutoMatches} disabled={matchLoading}>
+              <Zap size={14} className={`mr-1 ${matchLoading ? 'animate-pulse' : ''}`} />
+              {matchLoading ? 'Analizando...' : 'Buscar coincidencias'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!autoMatches ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">Pulsa "Buscar coincidencias" para analizar movimientos pendientes</div>
+          ) : autoMatches.matches?.filter((m: any) => !dismissedMatches.has(m.movementId) && !acceptedMatches.has(m.movementId)).length === 0 ? (
+            <div className="text-center py-8">
+              <CheckCircle2 size={24} className="mx-auto text-success mb-2 opacity-50" />
+              <div className="text-sm text-muted-foreground">
+                {acceptedMatches.size > 0 ? `${acceptedMatches.size} coincidencia${acceptedMatches.size > 1 ? 's' : ''} aceptada${acceptedMatches.size > 1 ? 's' : ''}. ` : ''}
+                {autoMatches.unmatched > 0 ? `${autoMatches.unmatched} movimiento${autoMatches.unmatched > 1 ? 's' : ''} sin coincidencia.` : 'Todos los movimientos tienen match o están conciliados.'}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {autoMatches.matches
+                .filter((m: any) => !dismissedMatches.has(m.movementId) && !acceptedMatches.has(m.movementId))
+                .map((match: any) => (
+                <div key={match.movementId} className="p-4 rounded-lg border border-border bg-muted/30 hover:border-primary/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    {/* Confidence indicator */}
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${match.confidence >= 80 ? 'bg-success' : match.confidence >= 60 ? 'bg-warning' : 'bg-muted-foreground'}`}>
+                      {match.confidence}%
+                    </div>
+
+                    {/* Match details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <Badge variant={match.invoiceType === 'AR' ? 'success' : 'destructive'} className="gap-1">
+                          {match.invoiceType === 'AR' ? <ArrowDownToLine size={10} /> : <ArrowUpFromLine size={10} />}
+                          {match.invoiceType === 'AR' ? 'Cobro' : 'Pago'}
+                        </Badge>
+                        <span className="font-mono text-xs font-semibold">{match.invoiceNumber}</span>
+                        <span className="text-xs text-muted-foreground">→</span>
+                        <span className="text-xs">{match.counterparty}</span>
+                      </div>
+
+                      {/* Side by side: movement vs invoice */}
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="p-2 rounded bg-card border border-border">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Movimiento Bancario</div>
+                          <div className="font-mono font-semibold">{match.movement.amount >= 0 ? '+' : ''}{fmtEur(match.movement.amount)}</div>
+                          <div className="text-muted-foreground truncate">{match.movement.concept}</div>
+                          <div className="text-muted-foreground">{match.movement.account} · {fmtDate(match.movement.date)}</div>
+                        </div>
+                        <div className="p-2 rounded bg-card border border-border">
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Factura {match.invoiceType}</div>
+                          <div className="font-mono font-semibold">{fmtEur(match.invoiceAmount)}</div>
+                          <div className="text-muted-foreground">{match.invoiceNumber}</div>
+                          <div className="text-muted-foreground">{match.counterparty}</div>
+                        </div>
+                      </div>
+
+                      {/* Match reasons */}
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {match.matchReasons.map((r: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-[9px]">{r}</Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs gap-1"
+                        onClick={async () => {
+                          try {
+                            await api.treasury.reconcileMovement(match.movementId)
+                            setAcceptedMatches(prev => new Set(prev).add(match.movementId))
+                            toast({ title: 'Conciliado', description: `${match.invoiceNumber} ↔ ${match.movement.concept}` })
+                            loadData()
+                          } catch (err: any) { toast({ title: 'Error', description: err.message, variant: 'destructive' }) }
+                        }}
+                      >
+                        <Check size={12} />Aceptar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs gap-1 text-muted-foreground"
+                        onClick={() => setDismissedMatches(prev => new Set(prev).add(match.movementId))}
+                      >
+                        <XCircle size={12} />Descartar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {autoMatches.unmatched > 0 && (
+                <div className="text-xs text-muted-foreground text-center pt-2">
+                  {autoMatches.unmatched} movimiento{autoMatches.unmatched > 1 ? 's' : ''} pendiente{autoMatches.unmatched > 1 ? 's' : ''} sin coincidencia automática
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Movimientos recientes */}
       <Card>
         <CardHeader>
@@ -299,6 +439,7 @@ export default function ConciliacionPage() {
                     <th className="p-3 w-8">
                       <input
                         type="checkbox"
+                        aria-label="Seleccionar todos los movimientos no conciliados"
                         className="rounded border-border"
                         checked={filteredMovements.filter((m: any) => !m.reconciled).length > 0 && filteredMovements.filter((m: any) => !m.reconciled).every((m: any) => selected.has(m.id))}
                         onChange={() => toggleSelectAll(filteredMovements)}
@@ -316,6 +457,7 @@ export default function ConciliacionPage() {
                         {!m.reconciled && (
                           <input
                             type="checkbox"
+                            aria-label={`Seleccionar movimiento ${m.concept}`}
                             className="rounded border-border"
                             checked={selected.has(m.id)}
                             onChange={() => toggleSelect(m.id)}

@@ -9,6 +9,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Download, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonVariance } from '@/components/ui/skeleton-page'
+import { PageHeader } from '@/components/page-header'
 
 function varianceAbs(actual: number, ref: number) { return actual - ref }
 function variancePct(actual: number, ref: number) { return ref !== 0 ? ((actual - ref) / Math.abs(ref)) * 100 : 0 }
@@ -23,13 +24,21 @@ export default function VariancePage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [compareMode, setCompareMode] = useState<'budget' | 'yoy'>('budget')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  useEffect(() => {
-    api.scenarios.variance()
+  function fetchData() {
+    setLoading(true)
+    return api.scenarios.variance()
       .then(setData)
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
+  }
+
+  useEffect(() => { fetchData() }, [])
+
+  async function refresh() {
+    await fetchData()
+  }
 
   if (loading) return <SkeletonVariance />
   if (!data) return <div className="text-center text-muted-foreground py-20">Error cargando datos</div>
@@ -80,26 +89,28 @@ export default function VariancePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="page-title">Variance Analysis</h1>
-          <p className="page-subtitle">Real vs {compareMode === 'budget' ? 'Presupuesto' : 'Año Anterior'} · Grupo Ibérico SA · Q1 2026</p>
-        </div>
-        <div className="flex gap-2">
-          <div className="flex bg-muted rounded-lg p-0.5">
-            {(['budget', 'yoy'] as const).map(mode => (
-              <button
-                key={mode}
-                onClick={() => setCompareMode(mode)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${compareMode === mode ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {mode === 'budget' ? 'vs Budget' : 'vs YoY'}
-              </button>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" onClick={() => exportCSV('variance_analysis', ['Concepto', 'Real 2026', 'Budget 2026', 'Var. Budget', '% Budget', 'Real 2025', 'Var. YoY', '% YoY'], rows.map((r: any) => [r.category, r.actual, r.budget, r.diffBudget, `${r.pctBudget.toFixed(1)}%`, r.prevYear, r.diffYoy, `${r.pctYoy.toFixed(1)}%`]))}><Download size={14} className="mr-1" />Exportar</Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Variance Analysis"
+        subtitle={`Real vs ${compareMode === 'budget' ? 'Presupuesto' : 'Año Anterior'} · Grupo Ibérico SA · Q1 2026`}
+        lastUpdated={lastUpdated}
+        onRefresh={refresh}
+        actions={
+          <>
+            <div className="flex bg-muted rounded-lg p-0.5">
+              {(['budget', 'yoy'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setCompareMode(mode)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${compareMode === mode ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {mode === 'budget' ? 'vs Budget' : 'vs YoY'}
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('variance_analysis', ['Concepto', 'Real 2026', 'Budget 2026', 'Var. Budget', '% Budget', 'Real 2025', 'Var. YoY', '% YoY'], rows.map((r: any) => [r.category, r.actual, r.budget, r.diffBudget, `${r.pctBudget.toFixed(1)}%`, r.prevYear, r.diffYoy, `${r.pctYoy.toFixed(1)}%`]))}><Download size={14} className="mr-1" />Exportar</Button>
+          </>
+        }
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
