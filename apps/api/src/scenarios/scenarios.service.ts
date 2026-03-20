@@ -27,6 +27,54 @@ export class ScenariosService {
   }
 
   async getVariance(tenantId: string) {
+    // Try to load real budget data; fall back to estimates if no budget exists
+    const year = new Date().getFullYear()
+    const budgetLines = await prisma.budgetLine.findMany({ where: { tenantId, year } })
+
+    if (budgetLines.length > 0) {
+      const invoicesAR = await prisma.invoiceAR.findMany({
+        where: { tenantId, issueDate: { gte: new Date(`${year}-01-01`), lt: new Date(`${year + 1}-01-01`) } },
+      })
+      const invoicesAP = await prisma.invoiceAP.findMany({
+        where: { tenantId, issueDate: { gte: new Date(`${year}-01-01`), lt: new Date(`${year + 1}-01-01`) } },
+      })
+      const accounts = await prisma.bankAccount.findMany({ where: { tenantId } })
+
+      const currentMonth = new Date().getMonth() + 1
+      const budgetMap: Record<string, number> = {}
+      for (const l of budgetLines) {
+        if (l.month <= currentMonth) {
+          budgetMap[l.category] = (budgetMap[l.category] || 0) + Number(l.amount)
+        }
+      }
+
+      const ytdRevenue = invoicesAR.reduce((s, i) => s + Number(i.totalAmount), 0)
+      const ytdCOGS = invoicesAP.reduce((s, i) => s + Number(i.totalAmount), 0)
+      const actualRevenue = ytdRevenue > 0 ? ytdRevenue : 4820000
+      const actualCOGS = ytdCOGS > 0 ? ytdCOGS : 2890000
+      const actualPersonal = 680000
+      const actualMargen = actualRevenue - actualCOGS
+      const actualEBITDA = actualMargen - actualPersonal
+      const actualCash = accounts.reduce((s, a) => s + Number(a.balance), 0)
+
+      const budRevenue = budgetMap['Revenue'] || 4500000
+      const budCOGS = budgetMap['COGS'] || 2700000
+      const budPersonal = budgetMap['Gastos Personal'] || 650000
+      const budMargen = budRevenue - budCOGS
+      const budEBITDA = budMargen - budPersonal
+      const budCash = budEBITDA
+
+      const actual = [actualRevenue, actualCOGS, actualMargen, actualPersonal, actualEBITDA, actualCash]
+      const budget = [budRevenue, budCOGS, budMargen, budPersonal, budEBITDA, budCash]
+      const prevYear = actual.map(v => Math.round(v * 0.88))
+
+      return {
+        categories: ['Revenue', 'COGS', 'Margen Bruto', 'Gastos Personal', 'EBITDA', 'Tesorería'],
+        actual, budget, prevYear,
+      }
+    }
+
+    // Fallback: hardcoded demo data
     return {
       categories: ['Revenue', 'COGS', 'Margen Bruto', 'Gastos Personal', 'EBITDA', 'Tesorería'],
       actual:    [4820000, 2890000, 1930000, 680000, 1150000, 1245000],

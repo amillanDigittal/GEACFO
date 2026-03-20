@@ -76,11 +76,14 @@ export default function NotificacionesPage() {
   const { toast } = useToast()
   const router = useRouter()
 
+  const [predictive, setPredictive] = useState<any[]>([])
+
   const loadData = useCallback(() => {
-    Promise.all([api.alerts.notifications(), api.alerts.resolutions()])
-      .then(([notifs, res]) => {
+    Promise.all([api.alerts.notifications(), api.alerts.resolutions(), api.alerts.predictive().catch(() => ({ alerts: [] }))])
+      .then(([notifs, res, pred]) => {
         setNotifications(notifs)
         setResolutions(res)
+        setPredictive(pred.alerts || [])
         setLastUpdated(new Date())
       })
       .catch(console.error)
@@ -187,6 +190,76 @@ export default function NotificacionesPage() {
           </div>
         ))}
       </div>
+
+      {/* Predictive Alerts */}
+      {predictive.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔮</span>
+              <CardTitle>Alertas Predictivas</CardTitle>
+              <Badge variant="secondary" className="text-[10px]">{predictive.length} predicciones</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {predictive.map((p: any) => {
+              const svCfg = SEVERITY_CONFIG[p.severity] || SEVERITY_CONFIG.info
+              const pctBar = p.threshold > 0 ? Math.min((p.currentValue / p.threshold) * 100, 150) : 0
+              const projBar = p.threshold > 0 ? Math.min((p.projectedValue / p.threshold) * 100, 150) : 0
+              return (
+                <div key={p.id} className="p-4 rounded-xl border border-border bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-sm font-semibold">{p.title}</span>
+                        <Badge variant={svCfg.variant}>{svCfg.label}</Badge>
+                        {p.weeksAhead && (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Clock size={10} />
+                            {p.weeksAhead}sem
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] font-mono">{p.confidence}% confianza</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{p.description}</p>
+                      <p className="text-xs text-primary mt-1 font-medium">📊 {p.prediction}</p>
+                      {/* Mini metric bar */}
+                      {p.threshold > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className="text-muted-foreground w-14">Actual</span>
+                            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(pctBar, 100)}%` }} />
+                            </div>
+                            <span className="font-mono w-16 text-right">{typeof p.currentValue === 'number' && p.currentValue > 1000 ? `${(p.currentValue / 1000).toFixed(0)}k` : p.currentValue}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className="text-muted-foreground w-14">Proyectado</span>
+                            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all ${projBar > 100 ? 'bg-destructive' : 'bg-warning'}`} style={{ width: `${Math.min(projBar, 100)}%` }} />
+                            </div>
+                            <span className="font-mono w-16 text-right">{typeof p.projectedValue === 'number' && Math.abs(p.projectedValue) > 1000 ? `${(p.projectedValue / 1000).toFixed(0)}k` : p.projectedValue}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className="text-muted-foreground w-14">Umbral</span>
+                            <div className="flex-1 h-px bg-destructive/50 relative">
+                              <div className="absolute -top-1 right-0 w-1.5 h-1.5 rounded-full bg-destructive" />
+                            </div>
+                            <span className="font-mono w-16 text-right text-destructive">{typeof p.threshold === 'number' && p.threshold > 1000 ? `${(p.threshold / 1000).toFixed(0)}k` : p.threshold}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <Button variant="ghost" size="sm" className="flex-shrink-0 h-7 px-2" onClick={() => router.push(p.link)}>
+                      <ExternalLink size={12} />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>

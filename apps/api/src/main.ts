@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import * as compression from 'compression'
 import helmet from 'helmet'
 import { AppModule } from './app.module'
+import { AuditInterceptor } from './common/interceptors/audit.interceptor'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -18,6 +19,7 @@ async function bootstrap() {
   })
   app.setGlobalPrefix('api/v1')
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }))
+  app.useGlobalInterceptors(new AuditInterceptor())
 
   // Swagger
   const config = new DocumentBuilder()

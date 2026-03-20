@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
-import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw } from 'lucide-react'
+import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 
 interface Tenant {
@@ -28,6 +28,7 @@ const SECTIONS = [
   { key: 'covenants', label: 'Covenants', icon: <Shield size={14} /> },
   { key: 'forecast', label: 'Forecast', icon: <TrendingUp size={14} /> },
   { key: 'notificaciones', label: 'Notificaciones', icon: <Bell size={14} /> },
+  { key: 'tour', label: 'Tour Guiado', icon: <Sparkles size={14} /> },
 ]
 
 function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -348,6 +349,34 @@ export default function ConfiguracionPage() {
                 <span className="text-xs text-muted-foreground">días</span>
               </div>
             </Field>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeSection === 'tour' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Sparkles size={18} />
+              <CardTitle>Tour Guiado</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                El tour guiado te muestra las secciones principales de GEACFO cuando accedes por primera vez.
+                Puedes relanzarlo en cualquier momento.
+              </p>
+              <Button
+                onClick={() => {
+                  localStorage.removeItem('geacfo-onboarding-completed')
+                  window.location.href = '/dashboard/cockpit'
+                }}
+              >
+                <Sparkles size={14} className="mr-2" />
+                Relanzar Tour Guiado
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

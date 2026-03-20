@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app'
 import { useTheme } from 'next-themes'
 import { api } from '@/lib/api'
-import { FileText, Bot, Bell, Sun, Moon, Menu, X, CheckCircle2, LogOut, ChevronRight, Home } from 'lucide-react'
+import { FileText, Bot, Bell, Sun, Moon, Menu, X, CheckCircle2, LogOut, ChevronRight, Home, Search } from 'lucide-react'
 import Link from 'next/link'
 
 const BREADCRUMBS: Record<string, { section: string; label: string }> = {
@@ -129,6 +129,14 @@ export function Topbar({ session }: { session: any }) {
         })()}
       </nav>
       <div className="ml-auto flex items-center gap-2">
+        <button
+          onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+          className="hidden sm:flex items-center gap-2 h-8 px-3 rounded-md border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-xs"
+        >
+          <Search size={13} />
+          <span>Buscar...</span>
+          <kbd className="ml-1 inline-flex h-4 items-center gap-0.5 rounded border border-border bg-background px-1 text-[10px] font-mono">⌘K</kbd>
+        </button>
         <span className="text-xs text-muted-foreground font-mono hidden sm:block">{date}</span>
         <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/boardpack')} className="text-xs hidden md:flex"><FileText size={14} className="mr-1" />Board Pack</Button>
         <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/bot')} className="text-xs hidden md:flex"><Bot size={14} className="mr-1" />Bot CFO</Button>

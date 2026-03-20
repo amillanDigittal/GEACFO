@@ -294,46 +294,112 @@ export default function GobiernoPage() {
         </>
       )}
 
-      {activeTab === 'auditoria' && (
-        <Card>
-          <CardHeader><CardTitle>Registro de Auditoría</CardTitle></CardHeader>
-          <CardContent>
-            {auditLog.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
-                <div className="text-sm text-muted-foreground">No hay registros de auditoría</div>
-                <div className="text-xs text-muted-foreground mt-1">Las acciones del sistema se registrarán aquí automáticamente</div>
-              </div>
-            ) : (
-              <ScrollableTable>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {['Fecha', 'Usuario', 'Acción', 'Entidad', 'ID', 'IP'].map(h => (
-                        <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLog.map((log: any) => (
-                      <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(log.createdAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="p-3 text-xs">{log.user?.name || log.userId || '—'}</td>
-                        <td className="p-3"><Badge variant="secondary">{log.action}</Badge></td>
-                        <td className="p-3 text-xs">{log.entity}</td>
-                        <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.entityId ? log.entityId.slice(0, 8) + '…' : '—'}</td>
-                        <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.ipAddress || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-</ScrollableTable>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {activeTab === 'auditoria' && (() => {
+        const ACTION_LABELS: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary' }> = {
+          CREATE: { label: 'Crear', variant: 'success' },
+          UPDATE: { label: 'Modificar', variant: 'warning' },
+          DELETE: { label: 'Eliminar', variant: 'destructive' },
+          APPROVE: { label: 'Aprobar', variant: 'success' },
+          APPROVE_BATCH: { label: 'Aprobar Lote', variant: 'success' },
+          RECONCILE: { label: 'Conciliar', variant: 'success' },
+          RECONCILE_BATCH: { label: 'Conciliar Lote', variant: 'success' },
+          LOGIN: { label: 'Login', variant: 'secondary' },
+          RECALCULATE_SCORE: { label: 'Recalcular', variant: 'warning' },
+          RECALCULATE_ALL: { label: 'Recalcular Todos', variant: 'warning' },
+          INIT: { label: 'Inicializar', variant: 'success' },
+          CREATE_SNAPSHOT: { label: 'Snapshot', variant: 'success' },
+          SEND: { label: 'Enviar', variant: 'success' },
+          RESOLVE: { label: 'Resolver', variant: 'success' },
+        }
+        const ENTITY_LABELS: Record<string, string> = {
+          User: 'Usuario', Tenant: 'Empresa', TenantConfig: 'Configuración', InvoiceAP: 'Factura AP',
+          BankMovement: 'Movimiento', Supplier: 'Proveedor', Customer: 'Cliente', BudgetLine: 'Presupuesto',
+          ProvisionSnapshot: 'Provisión', ReportSchedule: 'Reporte', AlertResolution: 'Alerta', Session: 'Sesión',
+        }
+        const pageSize = 20
+        const actionFilter = '' // could be state-driven in future
+        const filtered = auditLog
+        const totalPages = Math.ceil(filtered.length / pageSize)
+        // Count by action for summary
+        const actionCounts: Record<string, number> = {}
+        filtered.forEach((l: any) => { actionCounts[l.action] = (actionCounts[l.action] || 0) + 1 })
+        const todayCount = filtered.filter((l: any) => new Date(l.createdAt).toDateString() === new Date().toDateString()).length
+        return (
+          <>
+            {/* Activity summary */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Total Registros', value: String(filtered.length) },
+                { label: 'Hoy', value: String(todayCount), color: todayCount > 0 ? 'text-primary' : '' },
+                { label: 'Acción más frecuente', value: Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—' },
+                { label: 'Usuarios Activos', value: String(new Set(filtered.map((l: any) => l.userId).filter(Boolean)).size) },
+              ].map(m => (
+                <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
+                  <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <Card>
+              <CardHeader><CardTitle>Registro de Auditoría</CardTitle></CardHeader>
+              {filtered.length === 0 ? (
+                <CardContent>
+                  <div className="text-center py-12">
+                    <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
+                    <div className="text-sm text-muted-foreground">No hay registros de auditoría</div>
+                    <div className="text-xs text-muted-foreground mt-1">Las acciones del sistema se registrarán aquí automáticamente</div>
+                  </div>
+                </CardContent>
+              ) : (
+                <>
+                  <ScrollableTable>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          {['Fecha', 'Usuario', 'Acción', 'Entidad', 'ID', 'Detalle', 'IP'].map(h => (
+                            <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.slice(0, pageSize).map((log: any) => {
+                          const actionCfg = ACTION_LABELS[log.action] || (log.action?.includes('FAILED') ? { label: log.action, variant: 'destructive' as const } : { label: log.action, variant: 'secondary' as const })
+                          const entityLabel = ENTITY_LABELS[log.entity] || log.entity
+                          // Extract meaningful detail from oldValue/newValue
+                          let detail = ''
+                          if (log.oldValue?.email) detail = log.oldValue.email
+                          else if (log.newValue?.name) detail = log.newValue.name
+                          else if (log.newValue?.email) detail = log.newValue.email
+                          else if (log.oldValue?.ids) detail = `${log.oldValue.ids.length} items`
+                          return (
+                            <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                              <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                                {new Date(log.createdAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </td>
+                              <td className="p-3 text-xs font-medium">{log.user?.name || '—'}</td>
+                              <td className="p-3"><Badge variant={actionCfg.variant}>{actionCfg.label}</Badge></td>
+                              <td className="p-3 text-xs">{entityLabel}</td>
+                              <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.entityId ? log.entityId.slice(0, 10) + '…' : '—'}</td>
+                              <td className="p-3 text-xs text-muted-foreground truncate max-w-[200px]">{detail || '—'}</td>
+                              <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.ipAddress || '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </ScrollableTable>
+                  {filtered.length > pageSize && (
+                    <div className="p-3 border-t border-border text-center text-xs text-muted-foreground">
+                      Mostrando {Math.min(pageSize, filtered.length)} de {filtered.length} registros
+                    </div>
+                  )}
+                </>
+              )}
+            </Card>
+          </>
+        )
+      })()}
     </div>
   )
 }

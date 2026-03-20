@@ -23,6 +23,11 @@ export class BotController {
     return this.svc.getHistory(req.user.tenantId, sessionId)
   }
 
+  @Get('recommendations')
+  recommendations(@Request() req: any) {
+    return this.svc.getRecommendations(req.user.tenantId)
+  }
+
   @Get('sessions')
   sessions(@Request() req: any) {
     return this.svc.getSessions(req.user.tenantId)

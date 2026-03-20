@@ -12,7 +12,9 @@ import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Download, TrendingUp, TrendingDown, ArrowRight, Banknote, Factory, Building2, Landmark } from 'lucide-react'
+import { Download, TrendingUp, TrendingDown, ArrowRight, Banknote, Factory, Building2, Landmark, Wand2, FileDown } from 'lucide-react'
+import { exportCashFlowPDF } from '@/lib/export-pdf-modules'
+import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
 
 const CATEGORY_LABELS: Record<string, string> = {
   COBRO: 'Cobros de clientes',
@@ -43,16 +45,50 @@ export default function CashFlowPage() {
   const [detailSection, setDetailSection] = useState<'operating' | 'investing' | 'financing'>('operating')
   const [movPage, setMovPage] = useState(0)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [catStats, setCatStats] = useState<any>(null)
+  const [recategorizing, setRecategorizing] = useState(false)
+  const [prevData, setPrevData] = useState<any>(null)
+  const [periodLabel, setPeriodLabel] = useState<{ current: string; previous: string } | null>(null)
+  const [dateFrom, setDateFrom] = useState<string | undefined>()
+  const [dateTo, setDateTo] = useState<string | undefined>()
 
   function fetchData() {
-    return api.treasury.cashflow()
-      .then(d => { setData(d); setLastUpdated(new Date()) })
+    return Promise.all([
+      api.treasury.cashflow(dateFrom, dateTo),
+      api.treasury.categories().catch(() => null),
+    ])
+      .then(([d, cats]) => { setData(d); setCatStats(cats); setLastUpdated(new Date()) })
       .catch(console.error)
       .finally(() => setLoading(false))
   }
 
+  async function handleDateRange(current: DateRange, previous: DateRange | null) {
+    setLoading(true)
+    try {
+      const from = current.from || undefined, to = current.to || undefined
+      setDateFrom(from); setDateTo(to)
+      const [d, cats] = await Promise.all([api.treasury.cashflow(from, to), api.treasury.categories().catch(() => null)])
+      setData(d); setCatStats(cats)
+      if (previous?.from) {
+        const prev = await api.treasury.cashflow(previous.from, previous.to)
+        setPrevData(prev)
+        setPeriodLabel({ current: current.label, previous: previous.label })
+      } else { setPrevData(null); setPeriodLabel(null) }
+    } catch (err) { console.error(err) }
+    finally { setLoading(false); setLastUpdated(new Date()) }
+  }
+
   async function handleRefresh() {
     await fetchData()
+  }
+
+  async function handleRecategorize() {
+    setRecategorizing(true)
+    try {
+      await api.treasury.recategorize()
+      await fetchData()
+    } catch (e) { console.error(e) }
+    finally { setRecategorizing(false) }
   }
 
   useEffect(() => {
@@ -95,12 +131,54 @@ export default function CashFlowPage() {
         lastUpdated={lastUpdated}
         onRefresh={handleRefresh}
         actions={
-          <Button variant="outline" size="sm" onClick={() => exportCSV('cash_flow_statement',
-            ['Categoría', 'Tipo', 'Importe', 'Movimientos'],
-            categories.map(([cat, v]) => [CATEGORY_LABELS[cat] || cat, v.type, v.amount, v.count])
-          )}><Download size={14} className="mr-1" />Exportar</Button>
+          <div className="flex gap-2">
+            <DateRangeSelector onChange={handleDateRange} />
+            {catStats && catStats.uncategorized > 0 && (
+              <Button variant="outline" size="sm" onClick={handleRecategorize} disabled={recategorizing}>
+                <Wand2 size={14} className="mr-1" />
+                {recategorizing ? 'Categorizando…' : `Auto-clasificar (${catStats.uncategorized} sin categoría)`}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => exportCashFlowPDF(data)}><FileDown size={14} className="mr-1" />PDF</Button>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('cash_flow_statement',
+              ['Categoría', 'Tipo', 'Importe', 'Movimientos'],
+              categories.map(([cat, v]) => [CATEGORY_LABELS[cat] || cat, v.type, v.amount, v.count])
+            )}><Download size={14} className="mr-1" />Exportar</Button>
+          </div>
         }
       />
+
+      {/* Period comparison */}
+      {prevData && periodLabel && (() => {
+        const items = [
+          { label: 'F. Operativo', cur: totals.operating, prev: prevData.totals.operating },
+          { label: 'F. Inversión', cur: totals.investing, prev: prevData.totals.investing },
+          { label: 'F. Financiación', cur: totals.financing, prev: prevData.totals.financing },
+          { label: 'Flujo Neto', cur: totals.net, prev: prevData.totals.net },
+        ]
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {items.map(c => {
+              const cmp = compareValues(c.cur, c.prev)
+              return (
+                <div key={c.label} className="bg-card border border-border rounded-xl p-3">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{c.label}</div>
+                  <div className="flex items-end justify-between mt-1">
+                    <div>
+                      <div className="font-mono text-lg font-bold">{fmtEur(Math.round(c.cur))}</div>
+                      <div className="text-[10px] text-muted-foreground">vs {fmtEur(Math.round(c.prev))} ({periodLabel.previous})</div>
+                    </div>
+                    <div className={`flex items-center gap-0.5 text-xs font-mono font-semibold ${cmp.positive ? 'text-success' : 'text-destructive'}`}>
+                      {cmp.positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                      {cmp.pct > 0 ? '+' : ''}{cmp.pct.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* KPIs: Operating / Investing / Financing / Net */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

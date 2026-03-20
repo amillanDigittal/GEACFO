@@ -493,9 +493,12 @@ export class TreasuryService {
     return { ratios, history }
   }
 
-  async getCashFlowStatement(tenantId: string) {
+  async getCashFlowStatement(tenantId: string, from?: string, to?: string) {
+    const dateFilter: any = {}
+    if (from) dateFilter.gte = new Date(from)
+    if (to) dateFilter.lte = new Date(to + 'T23:59:59')
     const movements = await prisma.bankMovement.findMany({
-      where: { bankAccount: { tenantId } },
+      where: { bankAccount: { tenantId }, ...(from || to ? { date: dateFilter } : {}) },
       orderBy: { date: 'asc' },
       include: { bankAccount: { select: { alias: true } } },
     })
@@ -616,20 +619,24 @@ export class TreasuryService {
     })
   }
 
-  async getInvoicesAR(tenantId: string) {
-    return prisma.invoiceAR.findMany({
-      where: { tenantId },
-      include: { customer: true },
-      orderBy: { dueDate: 'asc' },
-    })
+  async getInvoicesAR(tenantId: string, from?: string, to?: string) {
+    const where: any = { tenantId }
+    if (from || to) {
+      where.issueDate = {}
+      if (from) where.issueDate.gte = new Date(from)
+      if (to) where.issueDate.lte = new Date(to + 'T23:59:59')
+    }
+    return prisma.invoiceAR.findMany({ where, include: { customer: true }, orderBy: { dueDate: 'asc' } })
   }
 
-  async getInvoicesAP(tenantId: string) {
-    return prisma.invoiceAP.findMany({
-      where: { tenantId },
-      include: { supplier: true },
-      orderBy: { dueDate: 'asc' },
-    })
+  async getInvoicesAP(tenantId: string, from?: string, to?: string) {
+    const where: any = { tenantId }
+    if (from || to) {
+      where.issueDate = {}
+      if (from) where.issueDate.gte = new Date(from)
+      if (to) where.issueDate.lte = new Date(to + 'T23:59:59')
+    }
+    return prisma.invoiceAP.findMany({ where, include: { supplier: true }, orderBy: { dueDate: 'asc' } })
   }
 
   async approveInvoiceAP(id: string, userId: string) {
@@ -643,6 +650,15 @@ export class TreasuryService {
     return prisma.invoiceAP.updateMany({
       where: { id: { in: ids }, status: 'IN_REVIEW' },
       data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
+    })
+  }
+
+  async rejectInvoiceAP(id: string, userId: string, reason?: string) {
+    const invoice = await prisma.invoiceAP.findFirst({ where: { id } })
+    if (!invoice) throw new Error('Invoice not found')
+    return prisma.invoiceAP.update({
+      where: { id },
+      data: { status: 'REJECTED', notes: reason ? `[RECHAZADA] ${reason}` : '[RECHAZADA] Marcada como duplicado o fraudulenta' },
     })
   }
 

@@ -5,7 +5,8 @@ import { fmtEur, scoreColor, riskLabel, riskVariant } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Siren, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, Siren, ChevronDown, ChevronUp, FileDown } from 'lucide-react'
+import { exportScoringPDF } from '@/lib/export-pdf-modules'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
@@ -61,6 +62,9 @@ export default function ScoringPage() {
         subtitle="Modelo ML de riesgo crediticio · Actualizado 05/03/2026"
         lastUpdated={lastUpdated}
         onRefresh={refresh}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => exportScoringPDF(customers)}><FileDown size={14} className="mr-1" />PDF</Button>
+        }
       />
 
       <div className="flex gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
@@ -171,9 +175,31 @@ export default function ScoringPage() {
                                         </div>
                                       )
                                     })}
+                                    {/* Detail metrics from real calculation */}
+                                    {factors._detail && (
+                                      <div className="pt-2 mt-2 border-t border-border space-y-1.5">
+                                        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Métricas Base</div>
+                                        {[
+                                          { label: 'Facturas totales', value: factors._detail.totalInvoices },
+                                          { label: 'Pagadas', value: factors._detail.paidCount, color: 'text-success' },
+                                          { label: 'Vencidas', value: factors._detail.overdueCount, color: factors._detail.overdueCount > 0 ? 'text-destructive' : 'text-success' },
+                                          { label: 'DSO real', value: `${factors._detail.realDSO}d`, color: factors._detail.realDSO > factors._detail.dsoTarget ? 'text-destructive' : 'text-success' },
+                                          { label: 'DSO objetivo', value: `${factors._detail.dsoTarget}d` },
+                                          { label: 'Antigüedad', value: `${factors._detail.customerAgeMonths} meses` },
+                                          ...(factors._detail.creditUtilization != null ? [{ label: 'Uso crédito', value: `${factors._detail.creditUtilization}%`, color: factors._detail.creditUtilization > 80 ? 'text-destructive' : factors._detail.creditUtilization > 50 ? 'text-warning' : 'text-success' }] : []),
+                                          { label: 'Exposición', value: `${factors._detail.totalOutstanding?.toLocaleString('es-ES')} €` },
+                                        ].map(m => (
+                                          <div key={m.label} className="flex justify-between text-[10px]">
+                                            <span className="text-muted-foreground">{m.label}</span>
+                                            <span className={`font-mono font-semibold ${(m as any).color || ''}`}>{m.value}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                     <div className="pt-2 mt-2 border-t border-border">
                                       <div className="text-[10px] text-muted-foreground">
                                         {historyData.scoreHistory.length} registros · Desde {new Date(historyData.scoreHistory[0].calculatedAt).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                                        {factors._detail && <span> · Pesos: Pago 40%, DSO 25%, Capacidad 20%, Antigüedad 15%</span>}
                                       </div>
                                     </div>
                                   </div>

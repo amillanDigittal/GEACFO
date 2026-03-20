@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Post, Param, Query, Body, Request, UseGuards } from '@nestjs/common'
+import { recategorizeUncategorized, getCategoryStats } from './categorizer'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { TreasuryService } from './treasury.service'
 import { JwtAuthGuard } from '../auth/jwt.guard'
@@ -16,8 +17,8 @@ export class TreasuryController {
   }
 
   @Get('cashflow')
-  getCashFlow(@Request() req: any) {
-    return this.svc.getCashFlowStatement(req.user.tenantId)
+  getCashFlow(@Request() req: any, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.getCashFlowStatement(req.user.tenantId, from, to)
   }
 
   @Get('ratios')
@@ -51,13 +52,13 @@ export class TreasuryController {
   }
 
   @Get('ar')
-  getAR(@Request() req: any) {
-    return this.svc.getInvoicesAR(req.user.tenantId)
+  getAR(@Request() req: any, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.getInvoicesAR(req.user.tenantId, from, to)
   }
 
   @Get('ap')
-  getAP(@Request() req: any) {
-    return this.svc.getInvoicesAP(req.user.tenantId)
+  getAP(@Request() req: any, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.svc.getInvoicesAP(req.user.tenantId, from, to)
   }
 
   @Patch('ap/:id/approve')
@@ -69,6 +70,17 @@ export class TreasuryController {
   approveAPBatch(@Body() body: { ids: string[] }, @Request() req: any) {
     return this.svc.approveInvoicesAPBatch(body.ids, req.user.userId)
   }
+
+  @Patch('ap/:id/reject')
+  rejectAP(@Param('id') id: string, @Request() req: any, @Body() body: { reason?: string }) {
+    return this.svc.rejectInvoiceAP(id, req.user.userId, body?.reason)
+  }
+
+  @Post('movements/recategorize')
+  recategorize(@Request() req: any) { return recategorizeUncategorized(req.user.tenantId) }
+
+  @Get('movements/categories')
+  getCategories(@Request() req: any) { return getCategoryStats(req.user.tenantId) }
 
   @Patch('movements/:id/reconcile')
   reconcileMovement(@Param('id') id: string, @Request() req: any) {

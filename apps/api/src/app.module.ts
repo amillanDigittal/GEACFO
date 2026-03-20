@@ -14,6 +14,10 @@ import { AlertsModule } from './alerts/alerts.module'
 import { UsersModule } from './users/users.module'
 import { SettingsModule } from './settings/settings.module'
 import { ReportingModule } from './reporting/reporting.module'
+import { ProvisionsModule } from './provisions/provisions.module'
+import { BudgetModule } from './budget/budget.module'
+import { SuppliersModule } from './suppliers/suppliers.module'
+import { ImportModule } from './import/import.module'
 
 @Module({
   imports: [
@@ -32,6 +36,10 @@ import { ReportingModule } from './reporting/reporting.module'
     UsersModule,
     SettingsModule,
     ReportingModule,
+    ProvisionsModule,
+    BudgetModule,
+    SuppliersModule,
+    ImportModule,
   ],
 })
 export class AppModule {}

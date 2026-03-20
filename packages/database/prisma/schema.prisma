@@ -37,6 +37,8 @@ model Tenant {
   botMessages  BotMessage[]
   alertResolutions AlertResolution[]
   reportSchedules  ReportSchedule[]
+  provisionSnapshots ProvisionSnapshot[]
+  budgetLines        BudgetLine[]
 
   @@map("tenants")
 }
@@ -200,21 +202,37 @@ enum CustomerStatus {
 
 // ─── SUPPLIERS ─────────────────────────────────────────────────────────────
 model Supplier {
-  id        String   @id @default(cuid())
-  tenantId  String
-  code      String
-  name      String
-  nif       String?
-  email     String?
-  paymentTerms Int   @default(30)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String         @id @default(cuid())
+  tenantId       String
+  code           String
+  name           String
+  nif            String?
+  email          String?
+  phone          String?
+  category       String?
+  paymentTerms   Int            @default(30)
+  reliabilityScore Int?
+  qualityScore     Int?
+  deliveryScore    Int?
+  overallScore     Int?
+  riskLevel      RiskLevel      @default(MEDIUM)
+  status         SupplierStatus @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoices  InvoiceAP[]
 
   @@unique([tenantId, code])
   @@map("suppliers")
+}
+
+enum SupplierStatus {
+  ACTIVE
+  ON_WATCH
+  SUSPENDED
+  INACTIVE
 }
 
 // ─── INVOICES AR (Cuentas por Cobrar) ──────────────────────────────────────
@@ -526,4 +544,39 @@ model ReportSchedule {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("report_schedules")
+}
+
+// ─── PROVISION SNAPSHOTS (NIIF 9) ────────────────────────────────────────
+model ProvisionSnapshot {
+  id             String   @id @default(cuid())
+  tenantId       String
+  snapshotDate   DateTime
+  totalExposure  Decimal  @db.Decimal(18, 2)
+  totalProvision Decimal  @db.Decimal(18, 2)
+  coverageRate   Decimal  @db.Decimal(6, 4)
+  matrix         Json
+  details        Json
+  createdBy      String?
+  createdAt      DateTime @default(now())
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("provision_snapshots")
+}
+
+// ─── BUDGET (Presupuesto Anual) ──────────────────────────────────────────
+model BudgetLine {
+  id         String   @id @default(cuid())
+  tenantId   String
+  year       Int
+  month      Int
+  category   String
+  amount     Decimal  @db.Decimal(18, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year, month, category])
+  @@map("budget_lines")
 }

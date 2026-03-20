@@ -28,6 +28,13 @@ import {
   BarChart3 as BarChartAbc,
   CalendarDays,
   Send,
+  Calculator,
+  Wallet,
+  Truck,
+  Smartphone,
+  Upload,
+  Star,
+  Pin,
 } from 'lucide-react'
 
 type BadgeCounts = Record<string, number>
@@ -45,16 +52,19 @@ const badgeKeyMap: Record<string, string> = {
 
 const nav = [
   { href: '/dashboard/cockpit', label: 'Cockpit CFO', icon: <LayoutDashboard size={18} />, section: null },
+  { href: '/dashboard/resumen', label: 'Resumen Ejecutivo', icon: <Smartphone size={18} /> },
   { section: 'Tesorería' },
   { href: '/dashboard/forecast', label: 'Forecast 13 Semanas', icon: <TrendingUp size={18} /> },
   { href: '/dashboard/conciliacion', label: 'Conciliación Bancaria', icon: <Link2 size={18} /> },
   { href: '/dashboard/cobros', label: 'Cuentas por Cobrar', icon: <ArrowDownToLine size={18} /> },
   { href: '/dashboard/pagos', label: 'Cuentas por Pagar', icon: <ArrowUpFromLine size={18} /> },
+  { href: '/dashboard/proveedores', label: 'Gestión de Proveedores', icon: <Truck size={18} /> },
   { href: '/dashboard/cashflow', label: 'Estado de Flujos', icon: <Banknote size={18} /> },
   { href: '/dashboard/vencimientos', label: 'Mapa de Vencimientos', icon: <CalendarDays size={18} /> },
   { href: '/dashboard/proyeccion-diaria', label: 'Proyección Diaria', icon: <TrendingUp size={18} /> },
   { section: 'Riesgo' },
   { href: '/dashboard/scoring', label: 'Scoring de Clientes', icon: <ShieldAlert size={18} /> },
+  { href: '/dashboard/provisiones', label: 'Provisión Insolvencia', icon: <Calculator size={18} /> },
   { href: '/dashboard/fraude', label: 'Fraude & Compliance', icon: <Search size={18} /> },
   { section: 'Deuda' },
   { href: '/dashboard/deuda', label: 'Deuda & Covenants', icon: <CreditCard size={18} /> },
@@ -62,6 +72,7 @@ const nav = [
   { href: '/dashboard/inventario', label: 'Gestión de Inventario', icon: <Package size={18} /> },
   { href: '/dashboard/inventario-abc', label: 'Análisis ABC', icon: <BarChartAbc size={18} /> },
   { section: 'Planificación' },
+  { href: '/dashboard/presupuesto', label: 'Presupuesto Anual', icon: <Wallet size={18} /> },
   { href: '/dashboard/escenarios', label: 'Supuestos & Escenarios', icon: <SlidersHorizontal size={18} /> },
   { href: '/dashboard/variance', label: 'Variance Analysis', icon: <TrendingDown size={18} /> },
   { href: '/dashboard/ratios', label: 'Ratios Financieros', icon: <BarChartAbc size={18} /> },
@@ -69,6 +80,7 @@ const nav = [
   { href: '/dashboard/notificaciones', label: 'Centro de Alertas', icon: <Bell size={18} /> },
   { href: '/dashboard/usuarios', label: 'Gestión de Usuarios', icon: <Users size={18} /> },
   { href: '/dashboard/configuracion', label: 'Configuración', icon: <Settings size={18} /> },
+  { href: '/dashboard/importar', label: 'Importar Datos', icon: <Upload size={18} /> },
   { href: '/dashboard/gobierno', label: 'Gobierno del Dato', icon: <FolderOpen size={18} /> },
   { href: '/dashboard/bot', label: 'Bot CFO', icon: <Bot size={18} /> },
   { href: '/dashboard/boardpack', label: 'Board Pack', icon: <FileText size={18} /> },
@@ -77,7 +89,7 @@ const nav = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore()
+  const { sidebarCollapsed, setSidebarCollapsed, favorites, toggleFavorite } = useAppStore()
   const [badges, setBadges] = useState<BadgeCounts>({})
 
   useEffect(() => {
@@ -118,6 +130,56 @@ export function Sidebar() {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-2">
+        {/* Favorites section */}
+        {favorites.length > 0 && (
+          <>
+            {!sidebarCollapsed ? (
+              <div className="px-4 pt-1 pb-1">
+                <span className="text-[10px] font-semibold text-[hsl(var(--gold))] uppercase tracking-widest flex items-center gap-1"><Star size={9} className="fill-current" />Favoritos</span>
+              </div>
+            ) : (
+              <div className="h-px bg-[hsl(var(--gold))]/30 mx-2 my-1.5" />
+            )}
+            {favorites.map(href => {
+              const item = nav.find(n => 'href' in n && n.href === href)
+              if (!item || !('href' in item) || !item.href) return null
+              const active = pathname === item.href
+              const badgeKey = badgeKeyMap[item.href]
+              const badgeCount = badgeKey ? badges[badgeKey] : undefined
+              return (
+                <div key={`fav-${item.href}`} className="group relative">
+                  <Link href={item.href} aria-current={active ? 'page' : undefined} className={cn(
+                    'flex items-center gap-2.5 px-4 py-2 text-sm transition-colors relative',
+                    sidebarCollapsed && 'justify-center px-2',
+                    active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}>
+                    {active && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary rounded-r-full" />}
+                    <span className="text-base flex-shrink-0">{item.icon}</span>
+                    {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                    {!sidebarCollapsed && badgeCount !== undefined && badgeCount > 0 && (
+                      <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badgeCount}</span>
+                    )}
+                  </Link>
+                  {!sidebarCollapsed && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(item.href!) }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity"
+                      title="Quitar de favoritos"
+                    >
+                      <Star size={12} className="text-[hsl(var(--gold))] fill-[hsl(var(--gold))]" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+            {sidebarCollapsed ? (
+              <div className="h-px bg-border mx-2 my-1.5" />
+            ) : (
+              <div className="h-px bg-border mx-4 my-1.5" />
+            )}
+          </>
+        )}
+
         {nav.map((item, i) => {
           if ('section' in item && item.section) {
             if (sidebarCollapsed) return <div key={i} className="h-px bg-border mx-2 my-1.5" />
@@ -131,19 +193,36 @@ export function Sidebar() {
           const active = pathname === item.href
           const badgeKey = badgeKeyMap[item.href]
           const badgeCount = badgeKey ? badges[badgeKey] : undefined
+          const isFav = favorites.includes(item.href)
           return (
-            <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={cn(
-              'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors relative',
-              sidebarCollapsed && 'justify-center px-2',
-              active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            )}>
-              {active && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary rounded-r-full" />}
-              <span className="text-base flex-shrink-0">{item.icon}</span>
-              {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
-              {!sidebarCollapsed && badgeCount !== undefined && badgeCount > 0 && (
-                <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badgeCount}</span>
+            <div key={item.href} className="group relative">
+              <Link href={item.href} aria-current={active ? 'page' : undefined} className={cn(
+                'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors relative',
+                sidebarCollapsed && 'justify-center px-2',
+                active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}>
+                {active && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary rounded-r-full" />}
+                <span className="text-base flex-shrink-0">{item.icon}</span>
+                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                {!sidebarCollapsed && badgeCount !== undefined && badgeCount > 0 && (
+                  <span className={cn('ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full group-hover:mr-5', isFav && 'mr-5')}>
+                    {badgeCount}
+                  </span>
+                )}
+              </Link>
+              {!sidebarCollapsed && (
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(item.href!) }}
+                  className={cn(
+                    'absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded transition-all',
+                    isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 hover:bg-muted',
+                  )}
+                  title={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                >
+                  <Star size={12} className={isFav ? 'text-[hsl(var(--gold))] fill-[hsl(var(--gold))]' : 'text-muted-foreground hover:text-[hsl(var(--gold))]'} />
+                </button>
               )}
-            </Link>
+            </div>
           )
         })}
       </div>

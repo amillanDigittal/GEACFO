@@ -10,7 +10,7 @@ import { KpiCard } from '@/components/kpi-card'
 import { PageHeader } from '@/components/page-header'
 import { useRouter } from 'next/navigation'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, FileText, AlertTriangle, AlertCircle, CircleDot, ExternalLink, ArrowRight } from 'lucide-react'
+import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, FileText, AlertTriangle, AlertCircle, CircleDot, ExternalLink, ArrowRight, Bot, Sparkles } from 'lucide-react'
 import { SkeletonCockpit } from '@/components/ui/skeleton-page'
 
 function DrilldownRow({ label, value, highlight, pct }: { label: string; value: string; highlight?: boolean; pct?: number }) {
@@ -58,6 +58,8 @@ export default function CockpitPage() {
   const [error, setError] = useState<string | null>(null)
   const [drilldown, setDrilldown] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [recommendations, setRecommendations] = useState<any[]>([])
+  const [recsLoading, setRecsLoading] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -68,6 +70,12 @@ export default function CockpitPage() {
         setError(err?.message || String(err))
       })
       .finally(() => { setLoading(false); setLastUpdated(new Date()) })
+    // Load recommendations in parallel (non-blocking)
+    setRecsLoading(true)
+    api.bot.recommendations()
+      .then(r => setRecommendations(r.recommendations || []))
+      .catch(() => {})
+      .finally(() => setRecsLoading(false))
   }, [])
 
   async function refresh() {
@@ -436,6 +444,63 @@ export default function CockpitPage() {
               <span className={`stat-value ${r.highlight ? 'text-primary' : ''}`}>{r.value}</span>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Bot CFO Recommendations */}
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardHeader>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Sparkles size={16} className="text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-sm">El Bot CFO recomienda</CardTitle>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Sugerencias basadas en tus datos actuales</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => router.push('/dashboard/bot')}>
+              <Bot size={14} /> Abrir Bot
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {recsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : recommendations.length > 0 ? (
+            <div className="space-y-2">
+              {recommendations.map((rec: any, i: number) => {
+                const priorityStyles = {
+                  critical: { border: 'border-destructive/30', bg: 'bg-destructive/5', dot: 'bg-destructive', badge: 'destructive' as const },
+                  warning: { border: 'border-warning/30', bg: 'bg-warning/5', dot: 'bg-warning', badge: 'warning' as const },
+                  info: { border: 'border-primary/30', bg: 'bg-primary/5', dot: 'bg-primary', badge: 'secondary' as const },
+                }
+                const style = priorityStyles[rec.priority as keyof typeof priorityStyles] || priorityStyles.info
+                return (
+                  <div key={i} className={`flex items-start gap-3 p-3.5 rounded-lg border ${style.border} ${style.bg}`}>
+                    <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${style.dot}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-foreground">{rec.title}</span>
+                        {rec.metric && <Badge variant="outline" className="text-[9px] px-1.5 py-0">{rec.metric}</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{rec.action}</p>
+                      {rec.impact && (
+                        <span className="inline-block mt-1 text-[10px] font-mono font-semibold text-primary">{rec.impact}</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-xs text-muted-foreground">Sin recomendaciones en este momento</div>
+          )}
         </CardContent>
       </Card>
 

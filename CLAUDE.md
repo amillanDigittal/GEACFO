@@ -68,15 +68,17 @@ There are no tests in this codebase. `@nestjs/testing` is a devDependency but no
 ### Web → API Communication
 Browser-side calls go through a **Next.js API proxy route** at `apps/web/src/app/api/v1/[...path]/route.ts`. The client in `apps/web/src/lib/api.ts` calls `/api/v1/...` on the same origin (relative path), which the proxy forwards to NestJS, injecting the Bearer token from the NextAuth JWT. The proxy uses `API_INTERNAL_URL` (Docker: `http://api:3001`) or falls back to `NEXT_PUBLIC_API_URL`. The `fetchAPI` helper auto-redirects to `/auth/login` on 401 responses. The proxy route uses `force-dynamic` (no caching).
 
-API client namespaces: `api.auth` (login, me), `api.treasury` (cockpit, forecast, ar, ap, approveAP, accounts, reconciliation), `api.customers` (list, get, recalculate), `api.debt` (summary, instruments, covenants), `api.inventory` (list), `api.scenarios` (compare, simulate, variance), `api.bot` (chat, history), `api.alerts` (counts, notifications), `api.board` (pack), `api.governance` (sources, audit).
+API client namespaces: `api.auth` (login, me), `api.treasury` (cockpit, forecast, forecastCompare, cashflow, ratios, ar, ap, approveAP, accounts, reconciliation, autoMatch), `api.customers` (list, get, recalculate), `api.debt` (summary, instruments, covenants), `api.inventory` (list), `api.scenarios` (compare, simulate, variance), `api.bot` (chat, history, sessions), `api.alerts` (counts, notifications, resolutions, updateResolution), `api.board` (pack), `api.governance` (sources, audit), `api.users`, `api.settings`, `api.reporting`.
 
 ### API Structure
 All API routes are prefixed with `/api/v1`. Global `ValidationPipe` with `transform: true, whitelist: true`. Swagger docs at `/api/docs`. Rate limit: 100 req/60s.
 
-Modules: `auth`, `treasury`, `customers`, `debt`, `inventory`, `scenarios`, `bot`, `board`, `governance`, `alerts`. Each module has its own controller, service, and module file. Each service instantiates `new PrismaClient()` directly (not using DI or the shared singleton from `@geacfo/database`).
+Modules: `auth`, `treasury`, `customers`, `debt`, `inventory`, `scenarios`, `bot`, `board`, `governance`, `alerts`, `users`, `settings`, `reporting`. Each module has its own controller, service, and module file. Each service instantiates `new PrismaClient()` directly (not using DI or the shared singleton from `@geacfo/database`).
+
+Middleware stack: Helmet (security headers) and compression are enabled globally in `main.ts`. Auth uses two Passport guards: `LocalAuthGuard` (credentials login) and `JwtAuthGuard` (token validation on protected routes).
 
 ### Database
-PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `tenantId` FK to `Tenant`. All IDs use `cuid()`. Key enums: `Role` (ADMIN/CFO/CONTROLLER/ANALYST/VIEWER), `RiskLevel`, `InvoiceStatus`, `DebtType`, `SyncStatus`. Key models: `Tenant`, `User`, `BankAccount`, `BankMovement`, `Reconciliation`, `Customer`, `ScoreHistory`, `InvoiceAR`, `Supplier`, `InvoiceAP`, `DebtInstrument`, `Covenant`, `InventoryItem`, `ForecastWeek`, `DataSource`, `AuditLog`, `BotMessage`. `ForecastWeek` has a composite unique on `(tenantId, scenario, weekNumber)`.
+PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `tenantId` FK to `Tenant`. All IDs use `cuid()`. Key enums: `Role` (ADMIN/CFO/CONTROLLER/ANALYST/VIEWER), `RiskLevel`, `InvoiceStatus`, `DebtType`, `SyncStatus`. Key models: `Tenant`, `User`, `Session`, `BankAccount`, `BankMovement`, `Reconciliation`, `Customer`, `ScoreHistory`, `InvoiceAR`, `Supplier`, `InvoiceAP`, `DebtInstrument`, `Covenant`, `InventoryItem`, `ForecastWeek`, `DataSource`, `AuditLog`, `BotMessage`, `AlertResolution`, `ReportSchedule`. `ForecastWeek` has a composite unique on `(tenantId, scenario, weekNumber)`.
 
 ### Frontend Structure
 - Auth: NextAuth v4 with CredentialsProvider, configured in `src/lib/auth.ts`. Session maxAge: 7 days.

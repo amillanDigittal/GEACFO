@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { CommandPalette } from '@/components/command-palette'
+import { OnboardingTour } from '@/components/onboarding-tour'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
@@ -17,6 +19,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {children}
         </main>
       </div>
+      <CommandPalette />
+      <OnboardingTour />
     </div>
   )
 }

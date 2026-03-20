@@ -5,7 +5,9 @@ import { fmtEur, fmt, fmtPct, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Download, Zap, CheckCircle2, Calculator, TrendingUp, Clock } from 'lucide-react'
+import { Download, Zap, CheckCircle2, Calculator, TrendingUp, TrendingDown, Clock, FileDown } from 'lucide-react'
+import { exportPagosPDF } from '@/lib/export-pdf-modules'
+import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { Input } from '@/components/ui/input'
@@ -42,6 +44,10 @@ export default function PagosPage() {
   const [page, setPage] = useState(0)
   const [discountDays, setDiscountDays] = useState(10)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [prevInvoices, setPrevInvoices] = useState<any[] | null>(null)
+  const [periodLabel, setPeriodLabel] = useState<{ current: string; previous: string } | null>(null)
+  const [dateFrom, setDateFrom] = useState<string | undefined>()
+  const [dateTo, setDateTo] = useState<string | undefined>()
   const { toast } = useToast()
 
   useEffect(() => {
@@ -53,10 +59,26 @@ export default function PagosPage() {
 
   async function refresh() {
     try {
-      const result = await api.treasury.ap()
+      const result = await api.treasury.ap(dateFrom, dateTo)
       setInvoices(result)
     } catch (err) { console.error(err) }
     finally { setLastUpdated(new Date()) }
+  }
+
+  async function handleDateRange(current: DateRange, previous: DateRange | null) {
+    setLoading(true)
+    try {
+      const from = current.from || undefined, to = current.to || undefined
+      setDateFrom(from); setDateTo(to)
+      const result = await api.treasury.ap(from, to)
+      setInvoices(result)
+      if (previous?.from) {
+        const prev = await api.treasury.ap(previous.from, previous.to)
+        setPrevInvoices(prev)
+        setPeriodLabel({ current: current.label, previous: previous.label })
+      } else { setPrevInvoices(null); setPeriodLabel(null) }
+    } catch (err) { console.error(err) }
+    finally { setLoading(false); setLastUpdated(new Date()) }
   }
 
   if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
@@ -169,7 +191,11 @@ export default function PagosPage() {
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
-          <Button variant="outline" size="sm" onClick={() => exportCSV('cuentas_por_pagar', ['Factura', 'Proveedor', 'Vencimiento', 'Base', 'Total', 'Prioridad', 'Estado'], invoices.map((i: any) => [i.number, i.supplier?.name, i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), i.priority, i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
+          <div className="flex gap-2">
+            <DateRangeSelector onChange={handleDateRange} />
+            <Button variant="outline" size="sm" onClick={() => exportPagosPDF(invoices)}><FileDown size={14} className="mr-1" />PDF</Button>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('cuentas_por_pagar', ['Factura', 'Proveedor', 'Vencimiento', 'Base', 'Total', 'Prioridad', 'Estado'], invoices.map((i: any) => [i.number, i.supplier?.name, i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), i.priority, i.status]))}><Download size={14} className="mr-1" />CSV</Button>
+          </div>
         }
       />
 
@@ -185,6 +211,39 @@ export default function PagosPage() {
           </div>
         </div>
       )}
+
+      {/* Period comparison */}
+      {prevInvoices && periodLabel && (() => {
+        const prevPending = prevInvoices.reduce((s: number, i: any) => s + Number(i.totalAmount) - Number(i.paidAmount), 0)
+        const prevTotal = prevInvoices.reduce((s: number, i: any) => s + Number(i.totalAmount), 0)
+        const curTotal = invoices.reduce((s: number, i: any) => s + Number(i.totalAmount), 0)
+        const cmpTotal = compareValues(curTotal, prevTotal)
+        const cmpPending = compareValues(totalPending, prevPending)
+        const cmpCount = compareValues(invoices.length, prevInvoices.length)
+        return (
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Total Facturas', cur: fmtEur(curTotal), prev: fmtEur(prevTotal), ...cmpTotal },
+              { label: 'Pendiente Pago', cur: fmtEur(totalPending), prev: fmtEur(prevPending), ...cmpPending },
+              { label: 'Nº Facturas', cur: String(invoices.length), prev: String(prevInvoices.length), ...cmpCount },
+            ].map(c => (
+              <div key={c.label} className="bg-card border border-border rounded-xl p-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{c.label}</div>
+                <div className="flex items-end justify-between mt-1">
+                  <div>
+                    <div className="font-mono text-lg font-bold">{c.cur}</div>
+                    <div className="text-[10px] text-muted-foreground">vs {c.prev} ({periodLabel.previous})</div>
+                  </div>
+                  <div className={`flex items-center gap-0.5 text-xs font-mono font-semibold ${c.positive ? 'text-success' : 'text-destructive'}`}>
+                    {c.positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                    {c.pct > 0 ? '+' : ''}{c.pct.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
