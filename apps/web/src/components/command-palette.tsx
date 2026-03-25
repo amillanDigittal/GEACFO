@@ -1,13 +1,14 @@
 'use client'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import { useFocusTrap } from '@/hooks/use-focus-trap'
+import { useCustomers, useAR, useAP, useSuppliers } from '@/hooks/use-api'
 import { fmtEur } from '@/lib/utils'
 import {
   LayoutDashboard, TrendingUp, Link2, ArrowDownToLine, ArrowUpFromLine, ShieldAlert,
   Search, CreditCard, Package, SlidersHorizontal, TrendingDown, FolderOpen, Bot,
   FileText, Banknote, Bell, Users, Settings, Calculator, Wallet, Truck, Smartphone,
-  Upload, Send, CalendarDays, BarChart3,
+  Upload, Send, CalendarDays, BarChart3, ClipboardList,
 } from 'lucide-react'
 
 interface SearchResult {
@@ -43,7 +44,8 @@ const PAGES: { href: string; label: string; keywords: string; icon: React.ReactN
   { href: '/dashboard/usuarios', label: 'Gestión de Usuarios', keywords: 'usuario user admin permisos', icon: <Users size={16} /> },
   { href: '/dashboard/configuracion', label: 'Configuración', keywords: 'config ajustes settings parametros', icon: <Settings size={16} /> },
   { href: '/dashboard/importar', label: 'Importar Datos', keywords: 'importar csv excel cargar subir', icon: <Upload size={16} /> },
-  { href: '/dashboard/gobierno', label: 'Gobierno del Dato', keywords: 'gobierno dato auditoria fuente calidad', icon: <FolderOpen size={16} /> },
+  { href: '/dashboard/gobierno', label: 'Gobierno del Dato', keywords: 'gobierno dato fuente calidad', icon: <FolderOpen size={16} /> },
+  { href: '/dashboard/auditoria', label: 'Auditoría', keywords: 'auditoria audit log registro actividad traza', icon: <ClipboardList size={16} /> },
   { href: '/dashboard/bot', label: 'Bot CFO', keywords: 'bot ia chat asistente pregunta', icon: <Bot size={16} /> },
   { href: '/dashboard/boardpack', label: 'Board Pack', keywords: 'board pack informe consejo', icon: <FileText size={16} /> },
   { href: '/dashboard/reporting', label: 'Reporting', keywords: 'reporte enviar email programar', icon: <Send size={16} /> },
@@ -54,10 +56,26 @@ export function CommandPalette() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [selected, setSelected] = useState(0)
-  const [entityCache, setEntityCache] = useState<{ customers: any[]; invoicesAR: any[]; invoicesAP: any[]; suppliers: any[] } | null>(null)
-  const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const trapRef = useFocusTrap<HTMLDivElement>(open, false) // false: we manage focus ourselves (inputRef)
   const router = useRouter()
+
+  const { data: customersData, isLoading: customersLoading } = useCustomers()
+  const { data: arData, isLoading: arLoading } = useAR()
+  const { data: apData, isLoading: apLoading } = useAP()
+  const { data: suppliersData, isLoading: suppliersLoading } = useSuppliers()
+
+  const loading = customersLoading || arLoading || apLoading || suppliersLoading
+
+  const entityCache = useMemo(() => {
+    if (!customersData && !arData && !apData && !suppliersData) return null
+    return {
+      customers: customersData || [],
+      invoicesAR: arData || [],
+      invoicesAP: apData || [],
+      suppliers: suppliersData || [],
+    }
+  }, [customersData, arData, apData, suppliersData])
 
   // Open on Cmd+K / Ctrl+K
   useEffect(() => {
@@ -80,18 +98,6 @@ export function CommandPalette() {
       setQuery('')
       setSelected(0)
       setTimeout(() => inputRef.current?.focus(), 50)
-      // Load entities on first open
-      if (!entityCache) {
-        setLoading(true)
-        Promise.all([
-          api.customers.list().catch(() => []),
-          api.treasury.ar().catch(() => []),
-          api.treasury.ap().catch(() => []),
-          api.suppliers.list().catch(() => []),
-        ]).then(([customers, ar, ap, suppliers]) => {
-          setEntityCache({ customers, invoicesAR: ar, invoicesAP: ap, suppliers })
-        }).finally(() => setLoading(false))
-      }
     }
   }, [open])
 
@@ -198,7 +204,7 @@ export function CommandPalette() {
       <div className="fixed inset-0 bg-black/50 z-[200] backdrop-blur-sm" onClick={() => setOpen(false)} />
 
       {/* Dialog */}
-      <div className="fixed top-[15%] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[560px] z-[201]">
+      <div ref={trapRef} role="dialog" aria-modal="true" aria-label="Buscador global" className="fixed top-[15%] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[560px] z-[201]">
         <div className="bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 border-b border-border">

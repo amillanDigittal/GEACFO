@@ -1,7 +1,13 @@
 'use client'
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback, memo, type ReactNode } from 'react'
 
-export function ScrollableTable({ children }: { children: React.ReactNode }) {
+interface ScrollableTableProps {
+  children: React.ReactNode
+  /** Accessible label describing the table contents (e.g. "Detalle de Facturas") */
+  label?: string
+}
+
+export function ScrollableTable({ children, label }: ScrollableTableProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -49,9 +55,50 @@ export function ScrollableTable({ children }: { children: React.ReactNode }) {
           </span>
         </div>
       )}
-      <div ref={ref} className="overflow-x-auto scrollbar-table">
+      <div ref={ref} className="overflow-x-auto scrollbar-table" role="region" aria-label={label} tabIndex={label ? 0 : undefined}>
         {children}
       </div>
     </div>
   )
 }
+
+// ── Accessible <th> ─────────────────────────────────────────────────
+interface ThProps {
+  children: ReactNode
+  /** Sortable column — provide current sort state and handler */
+  sorted?: 'asc' | 'desc' | false
+  onSort?: () => void
+  className?: string
+}
+
+const TH_BASE = 'text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider'
+
+/**
+ * Accessible table header cell.
+ * - Always renders `scope="col"`
+ * - When `sorted` is provided, adds `aria-sort` and renders a keyboard-accessible button
+ */
+export const Th = memo(function Th({ children, sorted, onSort, className }: ThProps) {
+  if (onSort) {
+    const ariaSort = sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none'
+    return (
+      <th scope="col" aria-sort={ariaSort} className={`${TH_BASE} ${className || ''}`}>
+        <button
+          type="button"
+          onClick={onSort}
+          className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+        >
+          {children}
+          {sorted === 'asc' && <span aria-hidden="true"> ↑</span>}
+          {sorted === 'desc' && <span aria-hidden="true"> ↓</span>}
+        </button>
+      </th>
+    )
+  }
+
+  return (
+    <th scope="col" className={`${TH_BASE} ${className || ''}`}>
+      {children}
+    </th>
+  )
+})

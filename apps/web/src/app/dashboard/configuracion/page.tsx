@@ -1,12 +1,15 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/use-toast'
-import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { SkeletonConfiguracion } from '@/components/ui/skeleton-page'
 import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 
@@ -21,15 +24,6 @@ interface Config {
   scoring: { alertScoreThreshold: number; riskAutoSuspend: boolean }
   notifications: { emailEnabled: boolean; overdueAlertDays: number; apDueSoonDays: number }
 }
-
-const SECTIONS = [
-  { key: 'empresa', label: 'Empresa', icon: <Building2 size={14} /> },
-  { key: 'kpis', label: 'Umbrales KPIs', icon: <Target size={14} /> },
-  { key: 'covenants', label: 'Covenants', icon: <Shield size={14} /> },
-  { key: 'forecast', label: 'Forecast', icon: <TrendingUp size={14} /> },
-  { key: 'notificaciones', label: 'Notificaciones', icon: <Bell size={14} /> },
-  { key: 'tour', label: 'Tour Guiado', icon: <Sparkles size={14} /> },
-]
 
 function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
@@ -55,6 +49,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function ConfiguracionPage() {
+  const t = useTranslations('configuracion')
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
   const [loading, setLoading] = useState(true)
@@ -70,6 +65,29 @@ export default function ConfiguracionPage() {
 
   const { toast } = useToast()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const savedConfigRef = useRef<string>('')
+  const savedTenantRef = useRef<string>('')
+
+  useUnsavedChanges(dirty)
+
+  const SECTIONS = [
+    { key: 'empresa', label: t('sectionCompany'), icon: <Building2 size={14} /> },
+    { key: 'kpis', label: t('sectionKpiThresholds'), icon: <Target size={14} /> },
+    { key: 'covenants', label: t('sectionCovenants'), icon: <Shield size={14} /> },
+    { key: 'forecast', label: t('sectionForecast'), icon: <TrendingUp size={14} /> },
+    { key: 'notificaciones', label: t('sectionNotifications'), icon: <Bell size={14} /> },
+    { key: 'tour', label: t('sectionGuidedTour'), icon: <Sparkles size={14} /> },
+  ]
+
+  // Track changes by comparing current state to saved snapshot
+  useEffect(() => {
+    const currentTenant = JSON.stringify({ tName, tNif, tSector, tCurrency, tLocale })
+    const currentConfig = JSON.stringify(config)
+    const tenantChanged = savedTenantRef.current !== '' && currentTenant !== savedTenantRef.current
+    const configChanged = savedConfigRef.current !== '' && currentConfig !== savedConfigRef.current
+    setDirty(tenantChanged || configChanged)
+  }, [tName, tNif, tSector, tCurrency, tLocale, config])
 
   const loadData = useCallback(() => {
     return Promise.all([api.settings.getTenant(), api.settings.getConfig()])
@@ -81,6 +99,10 @@ export default function ConfiguracionPage() {
         setTSector(t.sector || '')
         setTCurrency(t.currency || 'EUR')
         setTLocale(t.locale || 'es-ES')
+        // Save snapshots for dirty tracking
+        savedTenantRef.current = JSON.stringify({ tName: t.name, tNif: t.nif, tSector: t.sector || '', tCurrency: t.currency || 'EUR', tLocale: t.locale || 'es-ES' })
+        savedConfigRef.current = JSON.stringify(c)
+        setDirty(false)
       })
       .catch(console.error)
       .finally(() => { setLoading(false); setLastUpdated(new Date()) })
@@ -88,7 +110,9 @@ export default function ConfiguracionPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  if (loading || !config) return <SkeletonKPIsAndTable cols={2} rows={6} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading || !config) return <SkeletonConfiguracion />
 
   function updateConfig(path: string, value: any) {
     setConfig(prev => {
@@ -106,10 +130,12 @@ export default function ConfiguracionPage() {
     setSaving(true)
     try {
       await api.settings.updateTenant({ name: tName, nif: tNif, sector: tSector || null, currency: tCurrency, locale: tLocale })
-      toast({ title: 'Datos guardados', description: 'Información de la empresa actualizada' })
+      toast({ title: t('toastDataSavedTitle'), description: t('toastDataSavedDesc') })
+      savedTenantRef.current = JSON.stringify({ tName, tNif, tSector, tCurrency, tLocale })
+      setDirty(false)
       loadData()
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -119,9 +145,11 @@ export default function ConfiguracionPage() {
     setSaving(true)
     try {
       await api.settings.updateConfig(config)
-      toast({ title: 'Configuración guardada', description: 'Umbrales y preferencias actualizados' })
+      toast({ title: t('toastConfigSavedTitle'), description: t('toastConfigSavedDesc') })
+      savedConfigRef.current = JSON.stringify(config)
+      setDirty(false)
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -131,8 +159,8 @@ export default function ConfiguracionPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Configuración"
-        subtitle="Datos de empresa, umbrales de KPIs y preferencias del sistema"
+        title={t('title')}
+        subtitle={dirty ? t('unsavedChanges') : t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={loadData}
       />
@@ -157,38 +185,38 @@ export default function ConfiguracionPage() {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <Building2 size={18} />
-                <CardTitle>Datos de la Empresa</CardTitle>
+                <CardTitle>{t('companyDataTitle')}</CardTitle>
               </div>
               <Button size="sm" onClick={saveTenant} disabled={saving}>
-                <Save size={14} className="mr-1" />{saving ? 'Guardando...' : 'Guardar'}
+                <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <Field label="Nombre de la empresa" desc="Razón social completa">
+            <Field label={t('companyNameLabel')} desc={t('companyNameDesc')}>
               <Input value={tName} onChange={e => setTName(e.target.value)} className="h-8 text-sm" />
             </Field>
-            <Field label="NIF / CIF" desc="Identificación fiscal">
+            <Field label={t('nifLabel')} desc={t('nifDesc')}>
               <Input value={tNif} onChange={e => setTNif(e.target.value)} className="h-8 text-sm" />
             </Field>
-            <Field label="Sector" desc="Industria o actividad principal">
-              <Input value={tSector} onChange={e => setTSector(e.target.value)} className="h-8 text-sm" placeholder="Ej: Industria & Distribución" />
+            <Field label={t('sectorLabel')} desc={t('sectorDesc')}>
+              <Input value={tSector} onChange={e => setTSector(e.target.value)} className="h-8 text-sm" placeholder={t('sectorPlaceholder')} />
             </Field>
-            <Field label="Moneda" desc="Moneda principal de operación">
+            <Field label={t('currencyLabel')} desc={t('currencyDesc')}>
               <select value={tCurrency} onChange={e => setTCurrency(e.target.value)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-sm">
-                <option value="EUR">EUR — Euro</option>
-                <option value="USD">USD — Dólar</option>
-                <option value="GBP">GBP — Libra</option>
+                <option value="EUR">{t('currencyEur')}</option>
+                <option value="USD">{t('currencyUsd')}</option>
+                <option value="GBP">{t('currencyGbp')}</option>
               </select>
             </Field>
-            <Field label="Idioma" desc="Idioma de la interfaz y formatos">
+            <Field label={t('languageLabel')} desc={t('languageDesc')}>
               <select value={tLocale} onChange={e => setTLocale(e.target.value)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-sm">
-                <option value="es-ES">Español (España)</option>
-                <option value="en-US">English (US)</option>
-                <option value="pt-BR">Português (Brasil)</option>
+                <option value="es-ES">{t('langSpanish')}</option>
+                <option value="en-US">{t('langEnglish')}</option>
+                <option value="pt-BR">{t('langPortuguese')}</option>
               </select>
             </Field>
-            <Field label="Slug" desc="Identificador único (no editable)">
+            <Field label={t('slugLabel')} desc={t('slugDesc')}>
               <div className="h-8 flex items-center px-2 rounded-md bg-muted text-sm text-muted-foreground font-mono">{tenant?.slug}</div>
             </Field>
           </CardContent>
@@ -202,39 +230,39 @@ export default function ConfiguracionPage() {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <Target size={18} />
-                <CardTitle>Umbrales de KPIs</CardTitle>
+                <CardTitle>{t('kpiThresholdsTitle')}</CardTitle>
               </div>
               <Button size="sm" onClick={saveConfig} disabled={saving}>
-                <Save size={14} className="mr-1" />{saving ? 'Guardando...' : 'Guardar'}
+                <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <Field label="DSO Objetivo" desc="Days Sales Outstanding — plazo objetivo de cobro en días">
+            <Field label={t('dsoTargetLabel')} desc={t('dsoTargetDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={1} max={120} value={config.kpiTargets.dsoTarget} onChange={e => updateConfig('kpiTargets.dsoTarget', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">días</span>
+                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
               </div>
             </Field>
-            <Field label="DPO Objetivo" desc="Days Payable Outstanding — plazo objetivo de pago en días">
+            <Field label={t('dpoTargetLabel')} desc={t('dpoTargetDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={1} max={180} value={config.kpiTargets.dpoTarget} onChange={e => updateConfig('kpiTargets.dpoTarget', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">días</span>
+                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
               </div>
             </Field>
-            <Field label="CCC Objetivo" desc="Cash Conversion Cycle — ciclo de conversión de efectivo máximo">
+            <Field label={t('cccTargetLabel')} desc={t('cccTargetDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={-30} max={120} value={config.kpiTargets.cccTarget} onChange={e => updateConfig('kpiTargets.cccTarget', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">días</span>
+                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
               </div>
             </Field>
-            <Field label="Margen EBITDA Mínimo" desc="Objetivo de margen operativo mínimo">
+            <Field label={t('ebitdaMarginLabel')} desc={t('ebitdaMarginDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0} max={100} step={0.1} value={config.kpiTargets.ebitdaMarginTarget} onChange={e => updateConfig('kpiTargets.ebitdaMarginTarget', parseFloat(e.target.value) || 0)} className="h-8 text-sm font-mono" />
                 <span className="text-xs text-muted-foreground">%</span>
               </div>
             </Field>
-            <Field label="Ratio de Liquidez Mínimo" desc="Ratio mínimo de activo corriente / pasivo corriente">
+            <Field label={t('liquidityRatioLabel')} desc={t('liquidityRatioDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={0.1} max={5} step={0.05} value={config.kpiTargets.liquidezMinima} onChange={e => updateConfig('kpiTargets.liquidezMinima', parseFloat(e.target.value) || 0)} className="h-8 text-sm font-mono" />
                 <span className="text-xs text-muted-foreground">x</span>
@@ -251,28 +279,28 @@ export default function ConfiguracionPage() {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <Shield size={18} />
-                <CardTitle>Alertas de Covenants</CardTitle>
+                <CardTitle>{t('covenantAlertsTitle')}</CardTitle>
               </div>
               <Button size="sm" onClick={saveConfig} disabled={saving}>
-                <Save size={14} className="mr-1" />{saving ? 'Guardando...' : 'Guardar'}
+                <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <Field label="Umbral de Advertencia" desc="Se muestra alerta amarilla cuando el margen es inferior a este %">
+            <Field label={t('warningThresholdLabel')} desc={t('warningThresholdDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={1} max={50} value={config.covenantAlerts.warningThreshold} onChange={e => updateConfig('covenantAlerts.warningThreshold', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
                 <span className="text-xs text-muted-foreground">%</span>
               </div>
             </Field>
-            <Field label="Umbral Crítico" desc="Se muestra alerta roja cuando el margen es inferior a este %">
+            <Field label={t('criticalThresholdLabel')} desc={t('criticalThresholdDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={1} max={50} value={config.covenantAlerts.criticalThreshold} onChange={e => updateConfig('covenantAlerts.criticalThreshold', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
                 <span className="text-xs text-muted-foreground">%</span>
               </div>
             </Field>
             <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground">
-              Con estos umbrales: margen &lt; {config.covenantAlerts.warningThreshold}% = advertencia, margen &lt; {config.covenantAlerts.criticalThreshold}% = crítico.
+              {t('covenantExplanation', { warning: config.covenantAlerts.warningThreshold, critical: config.covenantAlerts.criticalThreshold })}
             </div>
           </CardContent>
         </Card>
@@ -285,34 +313,34 @@ export default function ConfiguracionPage() {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <TrendingUp size={18} />
-                <CardTitle>Configuración de Forecast</CardTitle>
+                <CardTitle>{t('forecastConfigTitle')}</CardTitle>
               </div>
               <Button size="sm" onClick={saveConfig} disabled={saving}>
-                <Save size={14} className="mr-1" />{saving ? 'Guardando...' : 'Guardar'}
+                <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <Field label="Horizonte de Forecast" desc="Número de semanas del forecast rolling">
+            <Field label={t('forecastHorizonLabel')} desc={t('forecastHorizonDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={4} max={52} value={config.forecast.horizonWeeks} onChange={e => updateConfig('forecast.horizonWeeks', parseInt(e.target.value) || 13)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">semanas</span>
+                <span className="text-xs text-muted-foreground">{t('unitWeeks')}</span>
               </div>
             </Field>
-            <Field label="Escenario por Defecto" desc="Escenario que se muestra al entrar en forecast">
+            <Field label={t('defaultScenarioLabel')} desc={t('defaultScenarioDesc')}>
               <select value={config.forecast.scenarioDefault} onChange={e => updateConfig('forecast.scenarioDefault', e.target.value)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-sm">
-                <option value="BASE">Base</option>
-                <option value="CONSERVADOR">Conservador</option>
-                <option value="AGRESIVO">Agresivo</option>
+                <option value="BASE">{t('scenarioBase')}</option>
+                <option value="CONSERVADOR">{t('scenarioConservative')}</option>
+                <option value="AGRESIVO">{t('scenarioAggressive')}</option>
               </select>
             </Field>
-            <Field label="Alertas de Gap" desc="Generar alertas automáticas cuando se detectan gaps de caja">
+            <Field label={t('gapAlertsLabel')} desc={t('gapAlertsDesc')}>
               <Toggle checked={config.forecast.gapAlertEnabled} onChange={v => updateConfig('forecast.gapAlertEnabled', v)} />
             </Field>
-            <Field label="Score Alerta Clientes" desc="Score por debajo del cual se marca el cliente en alerta">
+            <Field label={t('customerAlertScoreLabel')} desc={t('customerAlertScoreDesc')}>
               <Input type="number" min={0} max={100} value={config.scoring.alertScoreThreshold} onChange={e => updateConfig('scoring.alertScoreThreshold', parseInt(e.target.value) || 50)} className="h-8 text-sm font-mono" />
             </Field>
-            <Field label="Auto-suspender clientes de riesgo" desc="Suspender automáticamente clientes con score muy bajo">
+            <Field label={t('autoSuspendLabel')} desc={t('autoSuspendDesc')}>
               <Toggle checked={config.scoring.riskAutoSuspend} onChange={v => updateConfig('scoring.riskAutoSuspend', v)} />
             </Field>
           </CardContent>
@@ -326,27 +354,27 @@ export default function ConfiguracionPage() {
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
                 <Bell size={18} />
-                <CardTitle>Preferencias de Notificaciones</CardTitle>
+                <CardTitle>{t('notificationPrefsTitle')}</CardTitle>
               </div>
               <Button size="sm" onClick={saveConfig} disabled={saving}>
-                <Save size={14} className="mr-1" />{saving ? 'Guardando...' : 'Guardar'}
+                <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <Field label="Notificaciones por Email" desc="Enviar alertas críticas por email (requiere configuración SMTP)">
+            <Field label={t('emailNotificationsLabel')} desc={t('emailNotificationsDesc')}>
               <Toggle checked={config.notifications.emailEnabled} onChange={v => updateConfig('notifications.emailEnabled', v)} />
             </Field>
-            <Field label="Días Alerta Vencimiento AR" desc="Alertar cuando una factura de cobro está vencida más de X días">
+            <Field label={t('overdueAlertDaysLabel')} desc={t('overdueAlertDaysDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={1} max={90} value={config.notifications.overdueAlertDays} onChange={e => updateConfig('notifications.overdueAlertDays', parseInt(e.target.value) || 3)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">días</span>
+                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
               </div>
             </Field>
-            <Field label="Días Aviso Pago AP" desc="Alertar cuando un pago vence en los próximos X días">
+            <Field label={t('apDueSoonDaysLabel')} desc={t('apDueSoonDaysDesc')}>
               <div className="flex items-center gap-2">
                 <Input type="number" min={1} max={30} value={config.notifications.apDueSoonDays} onChange={e => updateConfig('notifications.apDueSoonDays', parseInt(e.target.value) || 3)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">días</span>
+                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
               </div>
             </Field>
           </CardContent>
@@ -358,14 +386,13 @@ export default function ConfiguracionPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Sparkles size={18} />
-              <CardTitle>Tour Guiado</CardTitle>
+              <CardTitle>{t('guidedTourTitle')}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                El tour guiado te muestra las secciones principales de GEACFO cuando accedes por primera vez.
-                Puedes relanzarlo en cualquier momento.
+                {t('guidedTourDesc')}
               </p>
               <Button
                 onClick={() => {
@@ -374,7 +401,7 @@ export default function ConfiguracionPage() {
                 }}
               >
                 <Sparkles size={14} className="mr-2" />
-                Relanzar Tour Guiado
+                {t('relaunchTour')}
               </Button>
             </div>
           </CardContent>

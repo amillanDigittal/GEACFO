@@ -1,9 +1,30 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaClient } from '@prisma/client'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NOTIFICATION_EVENTS, NotificationEvent } from '../notifications/notification-events'
 const prisma = new PrismaClient()
 
 @Injectable()
 export class DebtService {
+  constructor(private eventEmitter: EventEmitter2) {}
+
+  async checkCovenantRisks(tenantId: string) {
+    const covenants = await prisma.covenant.findMany({ where: { tenantId } })
+    for (const cov of covenants) {
+      const margin = Number(cov.margin)
+      if (margin < 10) {
+        this.eventEmitter.emit(NOTIFICATION_EVENTS.COVENANT_RISK, {
+          tenantId,
+          type: 'covenant_risk',
+          severity: 'critical',
+          title: `Covenant "${cov.name}" en riesgo — margen ${margin}%`,
+          description: `Actual: ${cov.currentValue} · Límite: ${cov.limitValue} (${cov.limitType})`,
+          link: '/dashboard/deuda',
+          timestamp: new Date().toISOString(),
+        } as NotificationEvent)
+      }
+    }
+  }
   async getInstruments(tenantId: string) {
     return prisma.debtInstrument.findMany({ where: { tenantId }, include: { covenants: true } })
   }

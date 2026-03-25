@@ -1,22 +1,137 @@
-async function fetchAPI(path: string, options: RequestInit = {}) {
-  const res = await fetch(`/api/v1${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  })
-  if (res.status === 401) {
-    window.location.href = '/auth/login'
-    throw new Error('Sesión expirada')
+import { toast } from '@/components/ui/use-toast'
+
+// ── Last successful fetch tracker (read by ConnectionBanner) ────────
+let _lastFetchAt: number = Date.now()
+export function getLastFetchAt() { return _lastFetchAt }
+
+// ── Custom error with HTTP context ──────────────────────────────────
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
   }
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Error de red' }))
-    throw new Error(error.message || `HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
+// ── User-friendly messages per status ───────────────────────────────
+const STATUS_MESSAGES: Record<number, { message: string; code: string }> = {
+  400: { message: 'Datos inválidos. Revisa los campos e inténtalo de nuevo.', code: 'BAD_REQUEST' },
+  401: { message: 'Sesión expirada', code: 'UNAUTHORIZED' },
+  403: { message: 'No tienes permisos para realizar esta acción.', code: 'FORBIDDEN' },
+  404: { message: 'El recurso solicitado no existe.', code: 'NOT_FOUND' },
+  409: { message: 'Conflicto: el recurso ya existe o fue modificado por otro usuario.', code: 'CONFLICT' },
+  422: { message: 'Los datos enviados no son válidos.', code: 'VALIDATION' },
+  429: { message: 'Demasiadas peticiones. Espera un momento antes de reintentar.', code: 'RATE_LIMIT' },
+  500: { message: 'Error interno del servidor. Inténtalo de nuevo más tarde.', code: 'SERVER_ERROR' },
+  502: { message: 'El servidor no está disponible. Inténtalo en unos minutos.', code: 'BAD_GATEWAY' },
+  503: { message: 'Servicio en mantenimiento. Inténtalo en unos minutos.', code: 'SERVICE_UNAVAILABLE' },
+  504: { message: 'El servidor tardó demasiado en responder.', code: 'GATEWAY_TIMEOUT' },
+}
+
+// ── Timeout wrapper ─────────────────────────────────────────────────
+const DEFAULT_TIMEOUT = 30_000 // 30 seconds
+
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
+// ── Core fetch function ─────────────────────────────────────────────
+async function fetchAPI(path: string, options: RequestInit = {}) {
+  let res: Response
+
+  try {
+    res = await fetchWithTimeout(`/api/v1${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    }, DEFAULT_TIMEOUT)
+  } catch (err: any) {
+    // Network error or timeout
+    if (err.name === 'AbortError') {
+      throw new ApiError(
+        'La petición ha tardado demasiado. Comprueba tu conexión e inténtalo de nuevo.',
+        0,
+        'TIMEOUT',
+      )
+    }
+    throw new ApiError(
+      'No se pudo conectar con el servidor. Comprueba tu conexión a internet.',
+      0,
+      'NETWORK_ERROR',
+    )
+  }
+
+  if (res.ok) {
+    // Track last successful live fetch (ignore service-worker cached responses)
+    const cachedAt = res.headers.get('x-sw-cached-at')
+    if (!cachedAt) {
+      _lastFetchAt = Date.now()
+    }
+    return res.json()
+  }
+
+  // ── Handle specific status codes ──────────────────────────────
+  if (res.status === 401) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('geacfo:session-expired'))
+    }
+    throw new ApiError('Sesión expirada', 401, 'UNAUTHORIZED')
+  }
+
+  // Try to extract API error message from response body
+  let serverMessage: string | undefined
+  try {
+    const body = await res.json()
+    serverMessage = body.message
+  } catch {}
+
+  const fallback = STATUS_MESSAGES[res.status] || { message: `Error HTTP ${res.status}`, code: 'UNKNOWN' }
+  // Use server message for 400/422 (validation) since it has field-level detail
+  const message = (res.status === 400 || res.status === 422) && serverMessage
+    ? serverMessage
+    : fallback.message
+
+  throw new ApiError(message, res.status, fallback.code)
+}
+
+// ── Global SWR error handler ────────────────────────────────────────
+export function onApiError(error: Error) {
+  // Don't toast for 401 — SessionGuard handles it
+  if (error instanceof ApiError && error.status === 401) return
+
+  toast({
+    title: error instanceof ApiError ? errorTitle(error.code) : 'Error',
+    description: error.message,
+    variant: 'destructive',
+  })
+}
+
+function errorTitle(code: string): string {
+  switch (code) {
+    case 'NETWORK_ERROR': return 'Sin conexión'
+    case 'TIMEOUT': return 'Timeout'
+    case 'RATE_LIMIT': return 'Límite de peticiones'
+    case 'FORBIDDEN': return 'Sin permisos'
+    case 'NOT_FOUND': return 'No encontrado'
+    case 'SERVICE_UNAVAILABLE':
+    case 'BAD_GATEWAY':
+    case 'GATEWAY_TIMEOUT': return 'Servicio no disponible'
+    case 'VALIDATION':
+    case 'BAD_REQUEST': return 'Datos inválidos'
+    case 'CONFLICT': return 'Conflicto'
+    default: return 'Error del servidor'
+  }
+}
+
+// ── API client (unchanged interface) ────────────────────────────────
 export const api = {
   get: (path: string) => fetchAPI(path),
   post: (path: string, body: any) => fetchAPI(path, { method: 'POST', body: JSON.stringify(body) }),

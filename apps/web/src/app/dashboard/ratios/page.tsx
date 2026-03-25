@@ -1,6 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
+import { useState } from 'react'
+import { useRatios } from '@/hooks/use-api'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { fmtEur, fmt, fmtPct } from '@/lib/utils'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -9,12 +10,20 @@ import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { Info, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
-const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
-  liquidity: { label: 'Liquidez', color: 'hsl(var(--primary))' },
-  solvency: { label: 'Solvencia', color: 'hsl(var(--warning))' },
-  profitability: { label: 'Rentabilidad', color: 'hsl(var(--success))' },
-  efficiency: { label: 'Eficiencia', color: 'hsl(210, 60%, 55%)' },
+const CATEGORY_KEYS: Record<string, string> = {
+  liquidity: 'categoryLiquidity',
+  solvency: 'categorySolvency',
+  profitability: 'categoryProfitability',
+  efficiency: 'categoryEfficiency',
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  liquidity: 'hsl(var(--primary))',
+  solvency: 'hsl(var(--warning))',
+  profitability: 'hsl(var(--success))',
+  efficiency: 'hsl(var(--chart-blue))',
 }
 
 interface Ratio {
@@ -23,19 +32,31 @@ interface Ratio {
   description: string; components: Record<string, number>
 }
 
-function getSignal(ratio: Ratio): { icon: React.ReactNode; color: string; label: string } {
+function getSignalKey(ratio: Ratio): string {
   const { value, unit, benchmark } = ratio
   const v = unit === '%' ? value : value
   const sector = benchmark.sector
   if (benchmark.good === 'above') {
-    if (v >= sector * 1.1) return { icon: <CheckCircle2 size={14} />, color: 'text-success', label: 'Saludable' }
-    if (v >= sector * 0.8) return { icon: <AlertTriangle size={14} />, color: 'text-warning', label: 'Atención' }
-    return { icon: <XCircle size={14} />, color: 'text-destructive', label: 'Crítico' }
+    if (v >= sector * 1.1) return 'healthy'
+    if (v >= sector * 0.8) return 'warning'
+    return 'critical'
   } else {
-    if (v <= sector * 0.9) return { icon: <CheckCircle2 size={14} />, color: 'text-success', label: 'Saludable' }
-    if (v <= sector * 1.2) return { icon: <AlertTriangle size={14} />, color: 'text-warning', label: 'Atención' }
-    return { icon: <XCircle size={14} />, color: 'text-destructive', label: 'Crítico' }
+    if (v <= sector * 0.9) return 'healthy'
+    if (v <= sector * 1.2) return 'warning'
+    return 'critical'
   }
+}
+
+function getSignalIcon(key: string): React.ReactNode {
+  if (key === 'healthy') return <CheckCircle2 size={14} />
+  if (key === 'warning') return <AlertTriangle size={14} />
+  return <XCircle size={14} />
+}
+
+function getSignalColor(key: string): string {
+  if (key === 'healthy') return 'text-success'
+  if (key === 'warning') return 'text-warning'
+  return 'text-destructive'
 }
 
 function fmtRatio(value: number, unit: string) {
@@ -68,46 +89,39 @@ function GaugeBar({ value, benchmark }: { value: number; benchmark: Ratio['bench
 }
 
 export default function RatiosPage() {
-  const [data, setData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const t = useTranslations('ratios')
+  const { data, error, isLoading, mutate } = useRatios()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [activeCategory, setActiveCategory] = useState<string>('ALL')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  function fetchData() {
-    return api.treasury.ratios()
-      .then(d => { setData(d); setLastUpdated(new Date()) })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }
+  const hydrated = useHydrated()
 
-  useEffect(() => { fetchData() }, [])
-
-  if (loading || !data) return <SkeletonKPIsAndTable cols={4} rows={6} />
+  if (!hydrated || isLoading || !data) return <SkeletonKPIsAndTable cols={4} rows={6} />
 
   const { ratios, history } = data as { ratios: Ratio[]; history: any[] }
   const filtered = activeCategory === 'ALL' ? ratios : ratios.filter(r => r.category === activeCategory)
 
   // Summary counts
-  const healthy = ratios.filter(r => getSignal(r).label === 'Saludable').length
-  const warning = ratios.filter(r => getSignal(r).label === 'Atención').length
-  const critical = ratios.filter(r => getSignal(r).label === 'Crítico').length
+  const healthy = ratios.filter(r => getSignalKey(r) === 'healthy').length
+  const warning = ratios.filter(r => getSignalKey(r) === 'warning').length
+  const critical = ratios.filter(r => getSignalKey(r) === 'critical').length
 
   // History chart keys
   const historyKeys = [
-    { key: 'current_ratio', label: 'Ratio Corriente', color: 'hsl(var(--primary))' },
-    { key: 'roe', label: 'ROE %', color: 'hsl(var(--success))' },
-    { key: 'debt_equity', label: 'Deuda/Equity', color: 'hsl(var(--warning))' },
-    { key: 'ebitda_margin', label: 'Margen EBITDA %', color: 'hsl(var(--destructive))' },
+    { key: 'current_ratio', label: t('historyCurrentRatio'), color: 'hsl(var(--primary))' },
+    { key: 'roe', label: t('historyRoe'), color: 'hsl(var(--success))' },
+    { key: 'debt_equity', label: t('historyDebtEquity'), color: 'hsl(var(--warning))' },
+    { key: 'ebitda_margin', label: t('historyEbitdaMargin'), color: 'hsl(var(--destructive))' },
   ]
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ratios Financieros"
-        subtitle="Indicadores clave de liquidez, solvencia, rentabilidad y eficiencia"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
-        onRefresh={fetchData}
+        onRefresh={() => mutate()}
       />
 
       {/* Summary KPIs */}
@@ -115,21 +129,21 @@ export default function RatiosPage() {
         <div className="bg-success/10 border border-success/20 rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-1">
             <CheckCircle2 size={14} className="text-success" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Saludables</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('healthy')}</span>
           </div>
           <div className="font-mono text-2xl font-bold text-success">{healthy}</div>
         </div>
         <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-1">
             <AlertTriangle size={14} className="text-warning" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Atención</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('attention')}</span>
           </div>
           <div className="font-mono text-2xl font-bold text-warning">{warning}</div>
         </div>
         <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-1">
             <XCircle size={14} className="text-destructive" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Críticos</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('criticals')}</span>
           </div>
           <div className="font-mono text-2xl font-bold text-destructive">{critical}</div>
         </div>
@@ -138,13 +152,13 @@ export default function RatiosPage() {
       {/* Category filter */}
       <div className="flex gap-1.5 overflow-x-auto">
         <button onClick={() => setActiveCategory('ALL')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeCategory === 'ALL' ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
-          Todos ({ratios.length})
+          {t('all', { count: ratios.length })}
         </button>
-        {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => {
+        {Object.entries(CATEGORY_KEYS).map(([key, tKey]) => {
           const count = ratios.filter(r => r.category === key).length
           return (
             <button key={key} onClick={() => setActiveCategory(key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeCategory === key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>
-              {cfg.label} ({count})
+              {t(tKey)} ({count})
             </button>
           )
         })}
@@ -153,7 +167,10 @@ export default function RatiosPage() {
       {/* Ratio cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map(ratio => {
-          const signal = getSignal(ratio)
+          const signalKey = getSignalKey(ratio)
+          const signalColor = getSignalColor(signalKey)
+          const signalIcon = getSignalIcon(signalKey)
+          const signalLabel = signalKey === 'healthy' ? t('healthy') : signalKey === 'warning' ? t('attention') : t('criticals')
           const isExpanded = expandedId === ratio.id
           return (
             <Card key={ratio.id} className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => setExpandedId(isExpanded ? null : ratio.id)}>
@@ -163,19 +180,19 @@ export default function RatiosPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold">{ratio.name}</span>
-                      <Badge variant="outline" className="text-[9px]">{CATEGORY_CONFIG[ratio.category]?.label}</Badge>
+                      <Badge variant="outline" className="text-[9px]">{CATEGORY_KEYS[ratio.category] ? t(CATEGORY_KEYS[ratio.category]) : ratio.category}</Badge>
                     </div>
                     <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{ratio.formula}</div>
                   </div>
-                  <div className={`flex items-center gap-1 ${signal.color}`}>
-                    {signal.icon}
+                  <div className={`flex items-center gap-1 ${signalColor}`}>
+                    {signalIcon}
                   </div>
                 </div>
 
                 {/* Value */}
                 <div className="flex items-end gap-2 mb-1">
-                  <span className={`font-mono text-2xl font-bold ${signal.color}`}>{fmtRatio(ratio.value, ratio.unit)}</span>
-                  <span className="text-xs text-muted-foreground mb-1">Sector: {fmtRatio(ratio.benchmark.sector, ratio.unit)}</span>
+                  <span className={`font-mono text-2xl font-bold ${signalColor}`}>{fmtRatio(ratio.value, ratio.unit)}</span>
+                  <span className="text-xs text-muted-foreground mb-1">{t('sector')}: {fmtRatio(ratio.benchmark.sector, ratio.unit)}</span>
                 </div>
 
                 {/* Gauge */}
@@ -189,7 +206,7 @@ export default function RatiosPage() {
                 {isExpanded && (
                   <div className="mt-3 pt-3 border-t border-border space-y-2">
                     <div className="text-xs text-muted-foreground">{ratio.description}</div>
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mt-2">Componentes</div>
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mt-2">{t('components')}</div>
                     {Object.entries(ratio.components).map(([key, val]) => (
                       <div key={key} className="flex justify-between text-xs py-1 border-b border-border last:border-0">
                         <span className="text-muted-foreground">{key}</span>
@@ -197,9 +214,9 @@ export default function RatiosPage() {
                       </div>
                     ))}
                     <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-muted/50 text-[10px]">
-                      <span className={`flex items-center gap-1 font-semibold ${signal.color}`}>{signal.icon} {signal.label}</span>
+                      <span className={`flex items-center gap-1 font-semibold ${signalColor}`}>{signalIcon} {signalLabel}</span>
                       <span className="text-muted-foreground">
-                        {ratio.benchmark.good === 'above' ? `Objetivo: ≥ ${fmtRatio(ratio.benchmark.sector, ratio.unit)}` : `Objetivo: ≤ ${fmtRatio(ratio.benchmark.sector, ratio.unit)}`}
+                        {ratio.benchmark.good === 'above' ? t('targetAbove', { value: fmtRatio(ratio.benchmark.sector, ratio.unit) }) : t('targetBelow', { value: fmtRatio(ratio.benchmark.sector, ratio.unit) })}
                       </span>
                     </div>
                   </div>
@@ -212,7 +229,7 @@ export default function RatiosPage() {
 
       {/* Historical evolution */}
       <Card>
-        <CardHeader><CardTitle>Evolución Trimestral</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('quarterlyEvolution')}</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {historyKeys.map(hk => (
@@ -224,7 +241,9 @@ export default function RatiosPage() {
                     <XAxis dataKey="period" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} domain={['auto', 'auto']} />
                     <RTooltip
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                       formatter={(v: number) => [fmt(v, 2), hk.label]}
                     />
                     <Line type="monotone" dataKey={hk.key} stroke={hk.color} strokeWidth={2} dot={{ r: 4, fill: hk.color }} />

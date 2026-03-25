@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur } from '@/lib/utils'
@@ -7,12 +8,13 @@ import { KpiBox } from '@/components/kpi-box'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
-import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { SkeletonProyeccionDiaria } from '@/components/ui/skeleton-page'
 import {
   AreaChart, Area, BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Legend,
 } from 'recharts'
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, TrendingDown } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface DayProjection {
   date: string
@@ -27,6 +29,7 @@ interface DayProjection {
 }
 
 export default function ProyeccionDiariaPage() {
+  const t = useTranslations('proyeccionDiaria')
   const [arData, setArData] = useState<any[]>([])
   const [apData, setApData] = useState<any[]>([])
   const [cashData, setCashData] = useState<any>(null)
@@ -53,7 +56,9 @@ export default function ProyeccionDiariaPage() {
 
   useEffect(() => { fetchData() }, [])
 
-  if (loading || !cashData) return <SkeletonKPIsAndTable cols={5} rows={8} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading || !cashData) return <SkeletonProyeccionDiaria />
 
   const currentCash = cashData.caja?.value || 0
   const today = new Date()
@@ -111,17 +116,17 @@ export default function ProyeccionDiariaPage() {
   const chartData = days.map(d => ({
     date: d.label,
     weekday: d.weekday,
-    Cobros: Math.round(d.cobros),
-    Pagos: -Math.round(d.pagos),
-    Saldo: Math.round(d.balance),
+    [t('chartCollections')]: Math.round(d.cobros),
+    [t('chartPayments')]: -Math.round(d.pagos),
+    [t('chartBalance')]: Math.round(d.balance),
     hasActivity: d.cobros > 0 || d.pagos > 0,
   }))
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Proyección de Cash Flow Diario"
-        subtitle={`Próximos ${horizon} días · Saldo inicial: ${fmtEur(currentCash)}`}
+        title={t('title')}
+        subtitle={t('subtitle', { horizon, balance: fmtEur(currentCash) })}
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
         actions={
@@ -144,9 +149,9 @@ export default function ProyeccionDiariaPage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
           <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <div className="font-semibold text-sm">Saldo negativo proyectado en {negativeDays.length} día{negativeDays.length > 1 ? 's' : ''}</div>
+            <div className="font-semibold text-sm">{t('negativeBalanceAlert', { count: negativeDays.length })}</div>
             <div className="text-xs opacity-80 mt-0.5">
-              Mínimo: {fmtEur(Math.round(minBalance))} el {new Date(minDay.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}. Requiere acción preventiva.
+              {t('negativeBalanceDetail', { amount: fmtEur(Math.round(minBalance)), date: new Date(minDay.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) })}
             </div>
           </div>
         </div>
@@ -154,22 +159,22 @@ export default function ProyeccionDiariaPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KpiBox label="Saldo Actual" value={fmtEur(currentCash)} tooltip="Saldo consolidado de todas las cuentas bancarias a día de hoy." source="Cuentas bancarias" />
-        <KpiBox label="Cobros Esperados" value={`+${fmtEur(Math.round(totalCobros30))}`} color="text-success" tooltip={`Facturas AR que vencen en los próximos ${horizon} días. Importes pendientes de cobro.`} source="Facturas AR (dueDate)" />
-        <KpiBox label="Pagos Previstos" value={`−${fmtEur(Math.round(totalPagos30))}`} color="text-destructive" tooltip={`Facturas AP que vencen en los próximos ${horizon} días. Pagos comprometidos.`} source="Facturas AP (dueDate)" />
-        <KpiBox label="Saldo Mínimo" value={fmtEur(Math.round(minBalance))} color={minBalance < 0 ? 'text-destructive' : minBalance < currentCash * 0.3 ? 'text-warning' : 'text-success'} tooltip={`Punto más bajo de caja proyectado: ${minDay ? new Date(minDay.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '—'}. Si es negativo, requiere financiación.`} source="Proyección: saldo + cobros − pagos acumulados" />
-        <KpiBox label={`Saldo D+${horizon}`} value={fmtEur(Math.round(endBalance))} color={endBalance >= currentCash ? 'text-success' : 'text-warning'} tooltip={`Saldo proyectado al final del horizonte de ${horizon} días.`} source="Proyección acumulada" />
+        <KpiBox label={t('kpiCurrentBalance')} value={fmtEur(currentCash)} tooltip={t('kpiCurrentBalanceTooltip')} source={t('kpiCurrentBalanceSource')} />
+        <KpiBox label={t('kpiExpectedCollections')} value={`+${fmtEur(Math.round(totalCobros30))}`} color="text-success" tooltip={t('kpiExpectedCollectionsTooltip', { horizon })} source={t('kpiExpectedCollectionsSource')} />
+        <KpiBox label={t('kpiPlannedPayments')} value={`\u2212${fmtEur(Math.round(totalPagos30))}`} color="text-destructive" tooltip={t('kpiPlannedPaymentsTooltip', { horizon })} source={t('kpiPlannedPaymentsSource')} />
+        <KpiBox label={t('kpiMinBalance')} value={fmtEur(Math.round(minBalance))} color={minBalance < 0 ? 'text-destructive' : minBalance < currentCash * 0.3 ? 'text-warning' : 'text-success'} tooltip={t('kpiMinBalanceTooltip', { date: minDay ? new Date(minDay.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '—' })} source={t('kpiMinBalanceSource')} />
+        <KpiBox label={t('kpiEndBalance', { horizon })} value={fmtEur(Math.round(endBalance))} color={endBalance >= currentCash ? 'text-success' : 'text-warning'} tooltip={t('kpiEndBalanceTooltip', { horizon })} source={t('kpiEndBalanceSource')} />
       </div>
 
       {/* Main chart: Area (balance) + Bars (cobros/pagos) */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between w-full">
-            <CardTitle>Proyección de Saldo y Flujos Diarios</CardTitle>
+            <CardTitle>{t('chartTitle')}</CardTitle>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" /> Cobros</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" /> Pagos</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-primary rounded" /> Saldo</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" /> {t('chartCollections')}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" /> {t('chartPayments')}</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-primary rounded" /> {t('chartBalance')}</span>
             </div>
           </div>
         </CardHeader>
@@ -187,17 +192,19 @@ export default function ProyeccionDiariaPage() {
               <YAxis yAxisId="balance" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
               <YAxis yAxisId="flows" orientation="right" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => Math.abs(v) >= 1000 ? `${Math.round(Math.abs(v) / 1000)}k` : String(Math.abs(v))} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                 formatter={(v: number, name: string) => {
-                  if (name === 'Pagos') return [fmtEur(Math.abs(v)), name]
+                  if (name === t('chartPayments')) return [fmtEur(Math.abs(v)), name]
                   return [fmtEur(v), name]
                 }}
               />
               <ReferenceLine yAxisId="balance" y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" strokeOpacity={0.5} />
-              <ReferenceLine yAxisId="balance" y={currentCash} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.3} label={{ value: 'Saldo actual', position: 'right', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-              <Bar yAxisId="flows" dataKey="Cobros" fill="hsl(var(--success))" opacity={0.7} radius={[2, 2, 0, 0]} />
-              <Bar yAxisId="flows" dataKey="Pagos" fill="hsl(var(--destructive))" opacity={0.7} radius={[0, 0, 2, 2]} />
-              <Area yAxisId="balance" type="monotone" dataKey="Saldo" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#balanceGradient)" />
+              <ReferenceLine yAxisId="balance" y={currentCash} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.3} label={{ value: t('currentBalanceLabel'), position: 'right', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+              <Bar yAxisId="flows" dataKey={t('chartCollections')} fill="hsl(var(--success))" opacity={0.7} radius={[2, 2, 0, 0]} />
+              <Bar yAxisId="flows" dataKey={t('chartPayments')} fill="hsl(var(--destructive))" opacity={0.7} radius={[0, 0, 2, 2]} />
+              <Area yAxisId="balance" type="monotone" dataKey={t('chartBalance')} stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#balanceGradient)" />
             </ComposedChart>
           </ResponsiveContainer>
         </CardContent>
@@ -209,15 +216,15 @@ export default function ProyeccionDiariaPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between w-full">
-              <CardTitle>Detalle Diario</CardTitle>
-              <span className="text-xs text-muted-foreground">{days.filter(d => d.cobros > 0 || d.pagos > 0).length} días con movimientos</span>
+              <CardTitle>{t('dailyDetail')}</CardTitle>
+              <span className="text-xs text-muted-foreground">{t('daysWithMovements', { count: days.filter(d => d.cobros > 0 || d.pagos > 0).length })}</span>
             </div>
           </CardHeader>
           <ScrollableTable>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  {['Fecha', 'Cobros', 'Pagos', 'Neto', 'Saldo Proyectado'].map(h => (
+                  {[t('colDate'), t('colCollections'), t('colPayments'), t('colNet'), t('colProjectedBalance')].map(h => (
                     <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -239,11 +246,11 @@ export default function ProyeccionDiariaPage() {
                       </td>
                       <td className="p-3 font-mono text-xs">
                         {d.cobros > 0 ? <span className="text-success font-semibold">+{fmtEur(Math.round(d.cobros))}</span> : <span className="text-muted-foreground">—</span>}
-                        {d.cobroInvoices.length > 0 && <div className="text-[9px] text-muted-foreground">{d.cobroInvoices.length} fact.</div>}
+                        {d.cobroInvoices.length > 0 && <div className="text-[9px] text-muted-foreground">{t('invoiceCount', { count: d.cobroInvoices.length })}</div>}
                       </td>
                       <td className="p-3 font-mono text-xs">
-                        {d.pagos > 0 ? <span className="text-destructive font-semibold">−{fmtEur(Math.round(d.pagos))}</span> : <span className="text-muted-foreground">—</span>}
-                        {d.pagoInvoices.length > 0 && <div className="text-[9px] text-muted-foreground">{d.pagoInvoices.length} fact.</div>}
+                        {d.pagos > 0 ? <span className="text-destructive font-semibold">{'\u2212'}{fmtEur(Math.round(d.pagos))}</span> : <span className="text-muted-foreground">—</span>}
+                        {d.pagoInvoices.length > 0 && <div className="text-[9px] text-muted-foreground">{t('invoiceCount', { count: d.pagoInvoices.length })}</div>}
                       </td>
                       <td className="p-3 font-mono text-xs font-semibold">
                         <span className={d.net >= 0 ? 'text-success' : 'text-destructive'}>
@@ -254,7 +261,7 @@ export default function ProyeccionDiariaPage() {
                         <span className={d.balance < 0 ? 'text-destructive' : ''}>
                           {fmtEur(Math.round(d.balance))}
                         </span>
-                        {isMin && <Badge variant="warning" className="ml-1 text-[8px]">Mín</Badge>}
+                        {isMin && <Badge variant="warning" className="ml-1 text-[8px]">{t('badgeMin')}</Badge>}
                       </td>
                     </tr>
                   )
@@ -271,12 +278,12 @@ export default function ProyeccionDiariaPage() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <TrendingDown size={16} className={minBalance < 0 ? 'text-destructive' : 'text-warning'} />
-                <CardTitle>Punto Mínimo de Caja</CardTitle>
+                <CardTitle>{t('minPointTitle')}</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className={`p-4 rounded-lg border-2 text-center ${minBalance < 0 ? 'border-destructive/30 bg-destructive/5' : 'border-warning/30 bg-warning/5'}`}>
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Saldo Mínimo Proyectado</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('projectedMinBalance')}</div>
                 <div className={`font-mono text-2xl font-bold ${minBalance < 0 ? 'text-destructive' : 'text-warning'}`}>{fmtEur(Math.round(minBalance))}</div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {minDay && new Date(minDay.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -284,30 +291,30 @@ export default function ProyeccionDiariaPage() {
               </div>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between py-1.5 border-b border-border">
-                  <span className="text-muted-foreground">Saldo actual</span>
+                  <span className="text-muted-foreground">{t('insightCurrentBalance')}</span>
                   <span className="font-mono font-semibold">{fmtEur(currentCash)}</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-border">
-                  <span className="text-muted-foreground">Variación hasta mínimo</span>
+                  <span className="text-muted-foreground">{t('insightVariationToMin')}</span>
                   <span className={`font-mono font-semibold ${minBalance - currentCash < 0 ? 'text-destructive' : 'text-success'}`}>{fmtEur(Math.round(minBalance - currentCash))}</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-border">
-                  <span className="text-muted-foreground">Días hasta mínimo</span>
+                  <span className="text-muted-foreground">{t('insightDaysToMin')}</span>
                   <span className="font-mono font-semibold">{minDay ? Math.ceil((new Date(minDay.date).getTime() - today.getTime()) / 86400000) : 0}d</span>
                 </div>
                 <div className="flex justify-between py-1.5">
-                  <span className="text-muted-foreground">Saldo final (D+{horizon})</span>
+                  <span className="text-muted-foreground">{t('insightEndBalance', { horizon })}</span>
                   <span className="font-mono font-semibold">{fmtEur(Math.round(endBalance))}</span>
                 </div>
               </div>
               {minBalance < 0 && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive">
-                  Se necesitan <strong>{fmtEur(Math.abs(Math.round(minBalance)))}</strong> adicionales para evitar descubierto. Considerar: acelerar cobros, retrasar pagos, o activar línea de crédito.
+                  {t('overdraftWarning', { amount: fmtEur(Math.abs(Math.round(minBalance))) })}
                 </div>
               )}
               {minBalance >= 0 && minBalance < currentCash * 0.2 && (
                 <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
-                  El saldo cae un <strong>{Math.round((1 - minBalance / currentCash) * 100)}%</strong> respecto al actual. Monitorizar de cerca y preparar contingencia.
+                  {t('lowBalanceWarning', { pct: Math.round((1 - minBalance / currentCash) * 100) })}
                 </div>
               )}
             </CardContent>
@@ -333,7 +340,7 @@ export default function ProyeccionDiariaPage() {
                     <ArrowUpFromLine size={12} className="text-destructive flex-shrink-0" />
                     <span className="font-mono font-semibold">{inv.number}</span>
                     <span className="flex-1 truncate text-muted-foreground">{inv.supplier?.name}</span>
-                    <span className="font-mono font-semibold text-destructive">−{fmtEur(Math.round(Number(inv.totalAmount) - Number(inv.paidAmount)))}</span>
+                    <span className="font-mono font-semibold text-destructive">{'\u2212'}{fmtEur(Math.round(Number(inv.totalAmount) - Number(inv.paidAmount)))}</span>
                   </div>
                 ))}
               </CardContent>

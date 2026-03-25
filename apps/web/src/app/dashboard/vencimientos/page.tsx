@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, fmt } from '@/lib/utils'
@@ -8,8 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { ChevronLeft, ChevronRight, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Zap } from 'lucide-react'
-
-const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+import { useTranslations } from 'next-intl'
 
 interface DayData {
   date: string
@@ -40,22 +40,23 @@ function heatColor(value: number, max: number, type: 'cobro' | 'pago' | 'net'): 
   const intensity = Math.min(value / (max || 1), 1)
   if (type === 'cobro') {
     const alpha = 0.15 + intensity * 0.55
-    return `rgba(34, 197, 94, ${alpha})`
+    return `hsl(var(--success) / ${alpha})`
   }
   if (type === 'pago') {
     const alpha = 0.15 + intensity * 0.55
-    return `rgba(239, 68, 68, ${alpha})`
+    return `hsl(var(--destructive) / ${alpha})`
   }
   // net
   if (value > 0) {
     const alpha = 0.15 + intensity * 0.55
-    return `rgba(34, 197, 94, ${alpha})`
+    return `hsl(var(--success) / ${alpha})`
   }
   const alpha = 0.15 + Math.min(Math.abs(value) / (max || 1), 1) * 0.55
-  return `rgba(239, 68, 68, ${alpha})`
+  return `hsl(var(--destructive) / ${alpha})`
 }
 
 export default function VencimientosPage() {
+  const t = useTranslations('vencimientos')
   const [arData, setArData] = useState<any[]>([])
   const [apData, setApData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,6 +64,8 @@ export default function VencimientosPage() {
   const [viewMode, setViewMode] = useState<'net' | 'cobros' | 'pagos'>('net')
   const [selectedDay, setSelectedDay] = useState<DayData | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const WEEKDAYS = [t('weekMon'), t('weekTue'), t('weekWed'), t('weekThu'), t('weekFri'), t('weekSat'), t('weekSun')]
 
   function fetchData() {
     return Promise.all([api.treasury.ar(), api.treasury.ap()])
@@ -79,7 +82,9 @@ export default function VencimientosPage() {
     fetchData()
   }, [])
 
-  if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -134,8 +139,8 @@ export default function VencimientosPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Mapa de Vencimientos"
-        subtitle="Calendario de cobros y pagos · Detecta picos de tensión de tesorería"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={handleRefresh}
         actions={
@@ -146,7 +151,7 @@ export default function VencimientosPage() {
                 onClick={() => setViewMode(m)}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === m ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
               >
-                {m === 'net' ? 'Neto' : m === 'cobros' ? 'Cobros' : 'Pagos'}
+                {m === 'net' ? t('viewNet') : m === 'cobros' ? t('viewCollections') : t('viewPayments')}
               </button>
             ))}
           </div>
@@ -158,21 +163,21 @@ export default function VencimientosPage() {
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <ArrowDownToLine size={14} className="text-success" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Cobros del Mes</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiMonthlyCollections')}</span>
           </div>
           <div className="font-mono text-xl font-bold text-success">+{fmtEur(Math.round(totalCobros))}</div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <ArrowUpFromLine size={14} className="text-destructive" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Pagos del Mes</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiMonthlyPayments')}</span>
           </div>
-          <div className="font-mono text-xl font-bold text-destructive">−{fmtEur(Math.round(totalPagos))}</div>
+          <div className="font-mono text-xl font-bold text-destructive">{'\u2212'}{fmtEur(Math.round(totalPagos))}</div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <Zap size={14} className="text-warning" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Día Pico</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiPeakDay')}</span>
           </div>
           <div className="font-mono text-xl font-bold">{peakDay?.date ? new Date(peakDay.date).getDate() : '—'}</div>
           <div className="text-[10px] text-muted-foreground">{peakDay ? fmtEur(Math.round(peakDay.cobros + peakDay.pagos)) : ''}</div>
@@ -180,10 +185,10 @@ export default function VencimientosPage() {
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <div className="flex items-center justify-center gap-1.5 mb-2">
             <AlertTriangle size={14} className={tensionDays.length > 0 ? 'text-destructive' : 'text-success'} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Días Tensión</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiTensionDays')}</span>
           </div>
           <div className={`font-mono text-xl font-bold ${tensionDays.length > 0 ? 'text-destructive' : 'text-success'}`}>{tensionDays.length}</div>
-          <div className="text-[10px] text-muted-foreground">Pagos &gt; Cobros +10k €</div>
+          <div className="text-[10px] text-muted-foreground">{t('tensionThreshold')}</div>
         </div>
       </div>
 
@@ -234,7 +239,7 @@ export default function VencimientosPage() {
                   {hasData && (
                     <div className="flex flex-col items-center gap-0 mt-0.5">
                       {cell.cobros > 0 && <span className="text-[8px] font-mono font-semibold text-success leading-tight">+{cell.cobros >= 1000 ? `${Math.round(cell.cobros / 1000)}k` : Math.round(cell.cobros)}</span>}
-                      {cell.pagos > 0 && <span className="text-[8px] font-mono font-semibold text-destructive leading-tight">−{cell.pagos >= 1000 ? `${Math.round(cell.pagos / 1000)}k` : Math.round(cell.pagos)}</span>}
+                      {cell.pagos > 0 && <span className="text-[8px] font-mono font-semibold text-destructive leading-tight">{'\u2212'}{cell.pagos >= 1000 ? `${Math.round(cell.pagos / 1000)}k` : Math.round(cell.pagos)}</span>}
                     </div>
                   )}
                   {/* Tension indicator */}
@@ -249,16 +254,16 @@ export default function VencimientosPage() {
           {/* Legend */}
           <div className="flex items-center justify-center gap-6 mt-4 pt-3 border-t border-border">
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <div className="w-3 h-3 rounded" style={{ background: 'rgba(34, 197, 94, 0.4)' }} />
-              <span>Cobros (AR)</span>
+              <div className="w-3 h-3 rounded" style={{ background: 'hsl(var(--success) / 0.4)' }} />
+              <span>{t('legendCollections')}</span>
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <div className="w-3 h-3 rounded" style={{ background: 'rgba(239, 68, 68, 0.4)' }} />
-              <span>Pagos (AP)</span>
+              <div className="w-3 h-3 rounded" style={{ background: 'hsl(var(--destructive) / 0.4)' }} />
+              <span>{t('legendPayments')}</span>
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
-              <span>Día de tensión (&gt;10k € neto negativo)</span>
+              <span>{t('legendTensionDay')}</span>
             </div>
           </div>
         </CardContent>
@@ -270,13 +275,13 @@ export default function VencimientosPage() {
           <CardHeader>
             <div className="flex items-center justify-between w-full">
               <CardTitle>
-                Detalle — {new Date(selectedDay.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {t('detail')} — {new Date(selectedDay.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
               </CardTitle>
               <div className="flex items-center gap-3">
-                {selectedDay.cobros > 0 && <Badge variant="success">Cobros: +{fmtEur(Math.round(selectedDay.cobros))}</Badge>}
-                {selectedDay.pagos > 0 && <Badge variant="destructive">Pagos: −{fmtEur(Math.round(selectedDay.pagos))}</Badge>}
+                {selectedDay.cobros > 0 && <Badge variant="success">{t('badgeCollections')}: +{fmtEur(Math.round(selectedDay.cobros))}</Badge>}
+                {selectedDay.pagos > 0 && <Badge variant="destructive">{t('badgePayments')}: {'\u2212'}{fmtEur(Math.round(selectedDay.pagos))}</Badge>}
                 <Badge variant={selectedDay.net >= 0 ? 'success' : 'destructive'}>
-                  Neto: {selectedDay.net >= 0 ? '+' : ''}{fmtEur(Math.round(selectedDay.net))}
+                  {t('badgeNet')}: {selectedDay.net >= 0 ? '+' : ''}{fmtEur(Math.round(selectedDay.net))}
                 </Badge>
               </div>
             </div>
@@ -290,13 +295,13 @@ export default function VencimientosPage() {
                     {inv.type === 'AR' ? <ArrowDownToLine size={14} /> : <ArrowUpFromLine size={14} />}
                   </span>
                   <Badge variant={inv.type === 'AR' ? 'success' : 'destructive'} className="text-[10px] flex-shrink-0">
-                    {inv.type === 'AR' ? 'Cobro' : 'Pago'}
+                    {inv.type === 'AR' ? t('collection') : t('payment')}
                   </Badge>
                   <span className="font-mono text-xs font-semibold flex-shrink-0">{inv.number}</span>
                   <span className="text-sm flex-1 truncate">{inv.counterparty}</span>
                   <Badge variant="secondary" className="text-[10px]">{inv.status}</Badge>
                   <span className={`font-mono text-sm font-semibold flex-shrink-0 ${inv.type === 'AR' ? 'text-success' : 'text-destructive'}`}>
-                    {inv.type === 'AR' ? '+' : '−'}{fmtEur(Math.round(inv.amount))}
+                    {inv.type === 'AR' ? '+' : '\u2212'}{fmtEur(Math.round(inv.amount))}
                   </span>
                 </div>
               ))
@@ -311,7 +316,7 @@ export default function VencimientosPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <AlertTriangle size={16} className="text-destructive" />
-              <CardTitle>Días de Tensión de Tesorería</CardTitle>
+              <CardTitle>{t('tensionTitle')}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -327,7 +332,7 @@ export default function VencimientosPage() {
                     <div className="text-xs font-medium">{new Date(d.date).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                     <div className="font-mono text-lg font-bold text-destructive">{fmtEur(Math.round(d.net))}</div>
                     <div className="text-[10px] text-muted-foreground mt-1">
-                      {d.cobroCount} cobro{d.cobroCount !== 1 ? 's' : ''} · {d.pagoCount} pago{d.pagoCount !== 1 ? 's' : ''}
+                      {t('tensionDetail', { cobros: d.cobroCount, pagos: d.pagoCount })}
                     </div>
                   </div>
                 ))}

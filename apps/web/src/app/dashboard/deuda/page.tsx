@@ -1,6 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
+import { useState } from 'react'
+import { useDebtSummary, useAmortization } from '@/hooks/use-api'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { fmtEur, fmt, fmtPct } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,15 +16,7 @@ import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { SkeletonDeuda } from '@/components/ui/skeleton-page'
-
-const DEBT_LABELS: Record<string, string> = {
-  SYNDICATED_LOAN: 'Préstamo Sindicado',
-  CREDIT_LINE: 'Línea de Crédito',
-  LEASING: 'Leasing',
-  BOND: 'Bono',
-  FACTORING: 'Factoring',
-  OTHER: 'Otro',
-}
+import { useTranslations } from 'next-intl'
 
 const DEBT_TYPES = ['SYNDICATED_LOAN', 'CREDIT_LINE', 'LEASING', 'BOND', 'FACTORING', 'OTHER']
 
@@ -32,42 +25,41 @@ const COLORS = [
   'hsl(var(--warning))',
   'hsl(var(--success))',
   'hsl(var(--destructive))',
-  'hsl(210, 60%, 55%)',
-  'hsl(280, 50%, 55%)',
+  'hsl(var(--chart-blue))',
+  'hsl(var(--chart-purple))',
 ]
 
 export default function DeudaPage() {
-  const [data, setData] = useState<any>(null)
-  const [amort, setAmort] = useState<any>(null)
+  const t = useTranslations('deuda')
+
+  const DEBT_LABELS: Record<string, string> = {
+    SYNDICATED_LOAN: t('typeSyndicatedLoan'),
+    CREDIT_LINE: t('typeCreditLine'),
+    LEASING: t('typeLeasing'),
+    BOND: t('typeBond'),
+    FACTORING: t('typeFactoring'),
+    OTHER: t('typeOther'),
+  }
+
+  const { data, isLoading: summaryLoading, mutate: mutateSummary } = useDebtSummary()
+  const { data: amort, isLoading: amortLoading, mutate: mutateAmort } = useAmortization()
   const [simOpen, setSimOpen] = useState(false)
   const [simInst, setSimInst] = useState<any>(null)
   const [simRate, setSimRate] = useState(0)
   const [simMonths, setSimMonths] = useState(0)
   const [simType, setSimType] = useState('')
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [lastUpdated] = useState<Date | null>(() => new Date())
 
-  useEffect(() => {
-    Promise.all([
-      api.debt.summary().then(setData),
-      api.debt.amortization().then(setAmort),
-    ])
-      .catch(console.error)
-      .finally(() => { setLastUpdated(new Date()) })
-  }, [])
+  const loading = summaryLoading || amortLoading
 
-  async function refresh() {
-    try {
-      const [summaryResult, amortResult] = await Promise.all([
-        api.debt.summary(),
-        api.debt.amortization(),
-      ])
-      setData(summaryResult)
-      setAmort(amortResult)
-    } catch (err) { console.error(err) }
-    finally { setLastUpdated(new Date()) }
+  function refresh() {
+    mutateSummary()
+    mutateAmort()
   }
 
-  if (!data) return <SkeletonDeuda />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading || !data) return <SkeletonDeuda />
 
   const instruments = data?.instruments || []
   const covenants = data?.covenants || []
@@ -163,24 +155,24 @@ export default function DeudaPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Deuda & Covenants"
-        subtitle="Instrumentos de financiación y cumplimiento bancario"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
       />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox label="Deuda Total" value={fmtEur(data?.totalDebt || 0)} tooltip="Suma del saldo vivo de todos los instrumentos de financiación activos (préstamos, líneas, leasing, bonos)." source="Instrumentos de deuda (outstanding)" />
-        <KpiBox label="Deuda Neta" value={fmtEur(data?.netDebt || 0)} tooltip="Deuda financiera total menos la caja disponible. Mide el endeudamiento real descontando la liquidez." source="Deuda Total − Saldo cuentas bancarias" />
-        <KpiBox label="Coste Medio" value={`${fmt((data?.avgRate || 0) * 100, 2)}%`} color="text-warning" tooltip="Tipo de interés medio ponderado de toda la cartera de deuda financiera." source="Media de interestRate de instrumentos activos" />
-        <KpiBox label="Covenants OK" value={`${covenants.filter((c: any) => c.status === 'COMPLIANT').length}/${covenants.length}`} color="text-success" tooltip="Número de covenants financieros en cumplimiento vs total. Incumplir puede activar cláusulas de vencimiento anticipado." source="Modelo Covenant (status COMPLIANT)" />
+        <KpiBox label={t('kpiTotalDebt')} value={fmtEur(data?.totalDebt || 0)} tooltip={t('kpiTotalDebtTooltip')} source={t('kpiTotalDebtSource')} />
+        <KpiBox label={t('kpiNetDebt')} value={fmtEur(data?.netDebt || 0)} tooltip={t('kpiNetDebtTooltip')} source={t('kpiNetDebtSource')} />
+        <KpiBox label={t('kpiAvgCost')} value={`${fmt((data?.avgRate || 0) * 100, 2)}%`} color="text-warning" tooltip={t('kpiAvgCostTooltip')} source={t('kpiAvgCostSource')} />
+        <KpiBox label={t('kpiCovenantsOk')} value={`${covenants.filter((c: any) => c.status === 'COMPLIANT').length}/${covenants.length}`} color="text-success" tooltip={t('kpiCovenantsOkTooltip')} source={t('kpiCovenantsOkSource')} />
       </div>
 
       {/* Amortization Chart + Maturity Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle>Calendario de Amortización</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('amortizationTitle')}</CardTitle></CardHeader>
           <CardContent>
             {amort?.schedule ? (
               <ResponsiveContainer width="100%" height={320}>
@@ -189,7 +181,9 @@ export default function DeudaPage() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} interval={2} />
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                     formatter={(value: number, name: string) => {
                       const inst = amort.instruments?.find((i: any) => i.id === name)
                       const label = inst ? `${DEBT_LABELS[inst.type] || inst.type} (${inst.bank})` : name
@@ -209,13 +203,13 @@ export default function DeudaPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[320px] flex items-center justify-center text-muted-foreground text-sm">Cargando...</div>
+              <div className="h-[320px] flex items-center justify-center text-muted-foreground text-sm">{t('loading')}</div>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Timeline de Vencimientos</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('maturityTimelineTitle')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {(amort?.instruments || []).map((inst: any, idx: number) => {
               const matDate = new Date(inst.maturityDate)
@@ -235,31 +229,31 @@ export default function DeudaPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => openSimulator(fullInst)}>
-                        <Calculator size={10} className="mr-1" />Simular
+                        <Calculator size={10} className="mr-1" />{t('simulate')}
                       </Button>
                       <Badge variant={isUrgent ? 'destructive' : isWarning ? 'warning' : 'secondary'}>
                         {isUrgent ? <AlertTriangle size={12} className="mr-1" /> : <Clock size={12} className="mr-1" />}
-                        {totalMonths} meses
+                        {t('months', { count: totalMonths })}
                       </Badge>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-xs mb-3">
                     <div>
-                      <span className="text-muted-foreground">Saldo vivo</span>
+                      <span className="text-muted-foreground">{t('outstandingBalance')}</span>
                       <div className="font-mono font-semibold">{fmtEur(inst.outstanding)}</div>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Tipo</span>
+                      <span className="text-muted-foreground">{t('rateLabel')}</span>
                       <div className="font-mono font-semibold text-warning">{fmt(inst.interestRate * 100, 2)}%</div>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Vencimiento</span>
+                      <span className="text-muted-foreground">{t('maturityLabel')}</span>
                       <div className="font-mono font-semibold">{matDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</div>
                     </div>
                   </div>
                   <div className="space-y-1">
                     <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>Amortizado: {pctElapsed}%</span>
+                      <span>{t('amortized')}: {pctElapsed}%</span>
                       <span>{fmtEur(inst.totalAmount - inst.outstanding)} / {fmtEur(inst.totalAmount)}</span>
                     </div>
                     <div className="h-2 bg-background rounded-full overflow-hidden">
@@ -273,7 +267,7 @@ export default function DeudaPage() {
               )
             })}
             {!amort?.instruments?.length && (
-              <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">Cargando...</div>
+              <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">{t('loading')}</div>
             )}
           </CardContent>
         </Card>
@@ -282,10 +276,10 @@ export default function DeudaPage() {
       {/* Instruments Table + Covenants */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle>Instrumentos de Deuda</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('instrumentsTitle')}</CardTitle></CardHeader>
           <ScrollableTable>
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-border">{['Instrumento','Entidad','Saldo Vivo','Tipo','Vencimiento',''].map(h => <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-border">{[t('thInstrument'), t('thEntity'), t('thOutstanding'), t('thRate'), t('thMaturity'), ''].map(h => <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>)}</tr></thead>
               <tbody>
                 {instruments.map((d: any) => (
                   <tr key={d.id} className="border-b border-border hover:bg-muted/50">
@@ -296,7 +290,7 @@ export default function DeudaPage() {
                     <td className="p-3 font-mono text-xs">{String(d.maturityDate).slice(0,7)}</td>
                     <td className="p-3">
                       <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => openSimulator(d)}>
-                        <RotateCcw size={10} className="mr-1" />Refinanciar
+                        <RotateCcw size={10} className="mr-1" />{t('refinance')}
                       </Button>
                     </td>
                   </tr>
@@ -307,8 +301,8 @@ export default function DeudaPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Estado Covenants</CardTitle>
-            {data?.allCompliant && <Badge variant="success"><CheckCircle2 size={12} className="mr-1" />Todos OK</Badge>}
+            <CardTitle>{t('covenantsTitle')}</CardTitle>
+            {data?.allCompliant && <Badge variant="success"><CheckCircle2 size={12} className="mr-1" />{t('covenantsAllOk')}</Badge>}
           </CardHeader>
           <CardContent className="space-y-4">
             {covenants.map((cv: any) => (
@@ -321,13 +315,13 @@ export default function DeudaPage() {
                   </Badge>
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                  <span>Actual: <strong className="text-foreground">{typeof cv.currentValue === 'number' && cv.currentValue > 1000 ? fmtEur(cv.currentValue) : `${Number(cv.currentValue)}x`}</strong></span>
-                  <span>Límite: {typeof cv.limitValue === 'number' && cv.limitValue > 1000 ? fmtEur(cv.limitValue) : `${Number(cv.limitValue)}x`}</span>
+                  <span>{t('covenantCurrent')}: <strong className="text-foreground">{typeof cv.currentValue === 'number' && cv.currentValue > 1000 ? fmtEur(cv.currentValue) : `${Number(cv.currentValue)}x`}</strong></span>
+                  <span>{t('covenantLimit')}: {typeof cv.limitValue === 'number' && cv.limitValue > 1000 ? fmtEur(cv.limitValue) : `${Number(cv.limitValue)}x`}</span>
                 </div>
                 <div className="h-1.5 bg-background rounded-full overflow-hidden">
                   <div className="h-full bg-success rounded-full" style={{ width: `${Math.min(90, 100 - Number(cv.margin))}%` }} />
                 </div>
-                <div className="text-xs text-success mt-1.5 font-medium">Margen disponible: +{Number(cv.margin)}%</div>
+                <div className="text-xs text-success mt-1.5 font-medium">{t('covenantMargin')}: +{Number(cv.margin)}%</div>
               </div>
             ))}
           </CardContent>
@@ -342,17 +336,17 @@ export default function DeudaPage() {
               <DialogHeader>
                 <div className="flex items-center gap-2">
                   <RotateCcw size={18} className="text-primary" />
-                  <DialogTitle>Simulador de Refinanciación</DialogTitle>
+                  <DialogTitle>{t('simTitle')}</DialogTitle>
                 </div>
                 <DialogDescription>
-                  {DEBT_LABELS[simInst.type] || simInst.type} — {simInst.bank} · Saldo vivo: {fmtEur(Number(simInst.outstanding))}
+                  {DEBT_LABELS[simInst.type] || simInst.type} — {simInst.bank} · {t('outstandingBalance')}: {fmtEur(Number(simInst.outstanding))}
                 </DialogDescription>
               </DialogHeader>
 
               {/* Parameters */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Nuevo tipo de interés (%)</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t('simNewRate')}</label>
                   <Input
                     type="number"
                     min={0}
@@ -364,7 +358,7 @@ export default function DeudaPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Nuevo plazo (meses)</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t('simNewTerm')}</label>
                   <Input
                     type="number"
                     min={1}
@@ -376,13 +370,13 @@ export default function DeudaPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">Tipo de instrumento</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t('simInstrumentType')}</label>
                   <select
                     value={simType}
                     onChange={e => setSimType(e.target.value)}
                     className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm font-medium"
                   >
-                    {DEBT_TYPES.map(t => <option key={t} value={t}>{DEBT_LABELS[t]}</option>)}
+                    {DEBT_TYPES.map(t_ => <option key={t_} value={t_}>{DEBT_LABELS[t_]}</option>)}
                   </select>
                 </div>
               </div>
@@ -390,23 +384,23 @@ export default function DeudaPage() {
               {/* Results: Before vs After */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Condiciones Actuales</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('simCurrentConditions')}</div>
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="font-mono font-semibold">{fmt(sim.origRate, 2)}%</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Plazo restante</span><span className="font-mono font-semibold">{sim.origMonths} meses</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Cuota mensual</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.origMonthlyTotal))}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Intereses totales</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.origTotalInterest))}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Vencimiento</span><span className="font-mono font-semibold">{sim.origMatDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('rateLabel')}</span><span className="font-mono font-semibold">{fmt(sim.origRate, 2)}%</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('simRemainingTerm')}</span><span className="font-mono font-semibold">{t('months', { count: sim.origMonths })}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('simMonthlyPayment')}</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.origMonthlyTotal))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('simTotalInterest')}</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.origTotalInterest))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('maturityLabel')}</span><span className="font-mono font-semibold">{sim.origMatDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</span></div>
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="text-[10px] text-primary uppercase tracking-widest mb-2">Refinanciado</div>
+                  <div className="text-[10px] text-primary uppercase tracking-widest mb-2">{t('simRefinanced')}</div>
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Tipo</span><span className="font-mono font-semibold">{fmt(sim.newRate, 2)}%</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Plazo</span><span className="font-mono font-semibold">{sim.newMonths} meses</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Cuota mensual</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.newMonthlyTotal))}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Intereses totales</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.newTotalInterest))}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Vencimiento</span><span className="font-mono font-semibold">{sim.newMatDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('rateLabel')}</span><span className="font-mono font-semibold">{fmt(sim.newRate, 2)}%</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('simTerm')}</span><span className="font-mono font-semibold">{t('months', { count: sim.newMonths })}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('simMonthlyPayment')}</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.newMonthlyTotal))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('simTotalInterest')}</span><span className="font-mono font-semibold">{fmtEur(Math.round(sim.newTotalInterest))}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">{t('maturityLabel')}</span><span className="font-mono font-semibold">{sim.newMatDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}</span></div>
                   </div>
                 </div>
               </div>
@@ -414,19 +408,19 @@ export default function DeudaPage() {
               {/* Impact Summary */}
               <div className="grid grid-cols-3 gap-3">
                 <div className={`p-3 rounded-lg border text-center ${sim.interestSaving > 0 ? 'bg-success/10 border-success/20' : sim.interestSaving < 0 ? 'bg-destructive/10 border-destructive/20' : 'bg-muted/50 border-border'}`}>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Ahorro Anual Intereses</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('simAnnualSaving')}</div>
                   <div className={`font-mono text-lg font-bold ${sim.interestSaving > 0 ? 'text-success' : sim.interestSaving < 0 ? 'text-destructive' : ''}`}>
                     {sim.interestSaving >= 0 ? '+' : ''}{fmtEur(Math.round(sim.interestSaving))}
                   </div>
                 </div>
                 <div className={`p-3 rounded-lg border text-center ${sim.totalSaving > 0 ? 'bg-success/10 border-success/20' : sim.totalSaving < 0 ? 'bg-destructive/10 border-destructive/20' : 'bg-muted/50 border-border'}`}>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Ahorro Total Intereses</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('simTotalSaving')}</div>
                   <div className={`font-mono text-lg font-bold ${sim.totalSaving > 0 ? 'text-success' : sim.totalSaving < 0 ? 'text-destructive' : ''}`}>
                     {sim.totalSaving >= 0 ? '+' : ''}{fmtEur(Math.round(sim.totalSaving))}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50 border border-border text-center">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Coste Medio Cartera</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('simPortfolioCost')}</div>
                   <div className="font-mono text-lg font-bold">
                     {fmt(sim.origWeightedRate, 2)}%
                     <span className="text-sm text-muted-foreground mx-1">→</span>
@@ -437,21 +431,21 @@ export default function DeudaPage() {
 
               {/* Monthly payment comparison */}
               <div className="p-3 rounded-lg bg-muted/30 border border-border">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Variación Cuota Mensual</div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t('simMonthlyChange')}</div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 text-center">
-                    <div className="text-[10px] text-muted-foreground">Actual</div>
+                    <div className="text-[10px] text-muted-foreground">{t('simCurrent')}</div>
                     <div className="font-mono text-sm font-bold">{fmtEur(Math.round(sim.origMonthlyTotal))}</div>
                   </div>
                   <ArrowRight size={16} className="text-muted-foreground" />
                   <div className="flex-1 text-center">
-                    <div className="text-[10px] text-muted-foreground">Refinanciado</div>
+                    <div className="text-[10px] text-muted-foreground">{t('simRefinanced')}</div>
                     <div className="font-mono text-sm font-bold">{fmtEur(Math.round(sim.newMonthlyTotal))}</div>
                   </div>
                   <div className="flex-1 text-center">
-                    <div className="text-[10px] text-muted-foreground">Diferencia</div>
+                    <div className="text-[10px] text-muted-foreground">{t('simDifference')}</div>
                     <div className={`font-mono text-sm font-bold ${sim.newMonthlyTotal < sim.origMonthlyTotal ? 'text-success' : sim.newMonthlyTotal > sim.origMonthlyTotal ? 'text-destructive' : ''}`}>
-                      {sim.newMonthlyTotal <= sim.origMonthlyTotal ? '' : '+'}{fmtEur(Math.round(sim.newMonthlyTotal - sim.origMonthlyTotal))}/mes
+                      {sim.newMonthlyTotal <= sim.origMonthlyTotal ? '' : '+'}{fmtEur(Math.round(sim.newMonthlyTotal - sim.origMonthlyTotal))}/{t('simPerMonth')}
                     </div>
                   </div>
                 </div>
@@ -459,15 +453,17 @@ export default function DeudaPage() {
 
               {/* Amortization comparison chart */}
               <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Comparación de Cuotas (24 meses)</div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t('simPaymentComparison')}</div>
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={sim.schedule.slice(0, 24)} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis dataKey="month" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} interval={3} />
                     <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
                     <Tooltip
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
-                      formatter={(v: number, name: string) => [fmtEur(v), name === 'original' ? 'Actual' : 'Refinanciado']}
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                      formatter={(v: number, name: string) => [fmtEur(v), name === 'original' ? t('simCurrent') : t('simRefinanced')]}
                     />
                     <Bar dataKey="original" fill="hsl(var(--muted-foreground))" opacity={0.4} radius={[2, 2, 0, 0]} name="original" />
                     <Bar dataKey="refinanciado" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} name="refinanciado" />
@@ -481,8 +477,8 @@ export default function DeudaPage() {
                   {sim.interestSaving > 0 ? <TrendingDown size={14} className="mt-0.5 flex-shrink-0" /> : <TrendingUp size={14} className="mt-0.5 flex-shrink-0" />}
                   <span>
                     {sim.interestSaving > 0
-                      ? `Refinanciar a ${fmt(sim.newRate, 2)}% ahorraría ${fmtEur(Math.round(sim.interestSaving))}/año en intereses (${fmtEur(Math.round(sim.totalSaving))} total). El coste medio de la cartera bajaría de ${fmt(sim.origWeightedRate, 2)}% a ${fmt(sim.newWeightedRate, 2)}%.`
-                      : `Atención: las nuevas condiciones incrementarían el coste en ${fmtEur(Math.round(Math.abs(sim.interestSaving)))}/año. ${sim.newMonths > sim.origMonths ? `El plazo mayor (${sim.newMonths} vs ${sim.origMonths} meses) reduce la cuota pero aumenta el coste total.` : ''}`
+                      ? t('simInsightPositive', { rate: fmt(sim.newRate, 2), annualSaving: fmtEur(Math.round(sim.interestSaving)), totalSaving: fmtEur(Math.round(sim.totalSaving)), origRate: fmt(sim.origWeightedRate, 2), newRate: fmt(sim.newWeightedRate, 2) })
+                      : t('simInsightNegative', { annualCost: fmtEur(Math.round(Math.abs(sim.interestSaving))), longerTerm: sim.newMonths > sim.origMonths ? t('simInsightLongerTerm', { newMonths: sim.newMonths, origMonths: sim.origMonths }) : '' })
                     }
                   </span>
                 </div>

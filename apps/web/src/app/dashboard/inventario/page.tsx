@@ -1,5 +1,7 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { fmtEur, fmt, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -9,12 +11,7 @@ import { Download, AlertTriangle, Siren } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
-
-const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' }> = {
-  NORMAL: { label: 'Normal', variant: 'success' },
-  CRITICAL: { label: 'Crítico', variant: 'destructive' },
-  OBSOLETE: { label: 'Obsoleto', variant: 'warning' },
-}
+import { exportXLSX } from '@/lib/export-xlsx'
 
 function rotationColor(days: number) {
   if (days >= 120) return 'text-destructive'
@@ -22,13 +19,8 @@ function rotationColor(days: number) {
   return 'text-success'
 }
 
-function rotationLabel(days: number) {
-  if (days >= 120) return 'Lenta'
-  if (days >= 60) return 'Media'
-  return 'Alta'
-}
-
 export default function InventarioPage() {
+  const t = useTranslations('inventario')
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('ALL')
@@ -52,8 +44,22 @@ export default function InventarioPage() {
     finally { setLastUpdated(new Date()) }
   }
 
-  if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
-  if (!data) return <div className="text-center text-muted-foreground py-20">Error cargando inventario</div>
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
+  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}</div>
+
+  const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' }> = {
+    NORMAL: { label: t('statusNormal'), variant: 'success' },
+    CRITICAL: { label: t('statusCritical'), variant: 'destructive' },
+    OBSOLETE: { label: t('statusObsolete'), variant: 'warning' },
+  }
+
+  function rotationLabel(days: number) {
+    if (days >= 120) return t('rotationSlow')
+    if (days >= 60) return t('rotationMedium')
+    return t('rotationHigh')
+  }
 
   const items = (data.items || [])
     .filter((i: any) => filter === 'ALL' || i.status === filter)
@@ -72,18 +78,21 @@ export default function InventarioPage() {
     else { setSortBy(col); setSortDir('desc') }
   }
 
-  const sortIcon = (col: string) => sortBy === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''
+  const sortIcon = (col: string) => sortBy === col ? (sortDir === 'desc' ? ' \u2193' : ' \u2191') : ''
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Gestión de Inventario"
-        subtitle={`Grupo Ibérico SA · Marzo 2026 · ${totalItems} referencias`}
+        title={t('title')}
+        subtitle={t('subtitle', { count: totalItems })}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
-          <Button variant="outline" size="sm" onClick={() => exportCSV('inventario', ['SKU', 'Descripción', 'Stock', 'Coste Unit.', 'Valor Total', 'Rotación (días)', 'Estado'], (data.items || []).map((i: any) => [i.sku, i.description, Number(i.stock), Number(i.unitCost), Number(i.totalValue), i.rotationDays, i.status]))}><Download size={14} className="mr-1" />Exportar</Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('inventario', [t('thSku'), t('thDescription'), t('thStock'), t('thUnitCost'), t('thTotalValue'), t('thRotationDays'), t('thStatus')], (data.items || []).map((i: any) => [i.sku, i.description, Number(i.stock), Number(i.unitCost), Number(i.totalValue), i.rotationDays, i.status]))}><Download size={14} className="mr-1" />CSV</Button>
+            <Button variant="outline" size="sm" onClick={() => exportXLSX('inventario', [t('thSku'), t('thDescription'), t('thStock'), t('thUnitCost'), t('thTotalValue'), t('thRotationDays'), t('thStatus')], (data.items || []).map((i: any) => [i.sku, i.description, Number(i.stock), Number(i.unitCost), Number(i.totalValue), i.rotationDays, i.status]))}><Download size={14} className="mr-1" />Excel</Button>
+          </>
         }
       />
 
@@ -92,8 +101,8 @@ export default function InventarioPage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-warning/30 bg-warning/10 text-warning">
           <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <div className="font-semibold text-sm">{data.obsoleteCount} referencia{data.obsoleteCount > 1 ? 's' : ''} obsoleta{data.obsoleteCount > 1 ? 's' : ''} detectada{data.obsoleteCount > 1 ? 's' : ''}</div>
-            <div className="text-xs opacity-80 mt-0.5">Rotación superior a 120 días — considerar liquidación o provisión contable</div>
+            <div className="font-semibold text-sm">{t('alertObsolete', { count: data.obsoleteCount })}</div>
+            <div className="text-xs opacity-80 mt-0.5">{t('alertObsoleteHint')}</div>
           </div>
         </div>
       )}
@@ -101,8 +110,8 @@ export default function InventarioPage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
           <Siren size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <div className="font-semibold text-sm">{data.criticalCount} referencia{data.criticalCount > 1 ? 's' : ''} en nivel crítico</div>
-            <div className="text-xs opacity-80 mt-0.5">Stock bajo mínimo de seguridad — riesgo de rotura de suministro</div>
+            <div className="font-semibold text-sm">{t('alertCritical', { count: data.criticalCount })}</div>
+            <div className="text-xs opacity-80 mt-0.5">{t('alertCriticalHint')}</div>
           </div>
         </div>
       )}
@@ -110,10 +119,10 @@ export default function InventarioPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Valor Total Stock', value: fmtEur(data.totalValue), color: 'text-foreground' },
-          { label: 'Unidades Totales', value: fmt(totalStock), color: 'text-foreground' },
-          { label: 'Rotación Media', value: `${avgRotation} días`, color: rotationColor(avgRotation) },
-          { label: 'Cobertura', value: `${Math.round(avgRotation / 7)} sem`, color: 'text-foreground' },
+          { label: t('kpiTotalStockValue'), value: fmtEur(data.totalValue), color: 'text-foreground' },
+          { label: t('kpiTotalUnits'), value: fmt(totalStock), color: 'text-foreground' },
+          { label: t('kpiAvgRotation'), value: t('kpiAvgRotationValue', { days: avgRotation }), color: rotationColor(avgRotation) },
+          { label: t('kpiCoverage'), value: t('kpiCoverageValue', { weeks: Math.round(avgRotation / 7) }), color: 'text-foreground' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -127,7 +136,7 @@ export default function InventarioPage() {
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle>Distribución por Valor</CardTitle>
+              <CardTitle>{t('valueDistribution')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {(data.items || [])
@@ -158,7 +167,7 @@ export default function InventarioPage() {
         </div>
 
         <Card>
-          <CardHeader><CardTitle>Resumen por Estado</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('summaryByStatus')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {[
               { status: 'NORMAL', count: (data.items || []).filter((i: any) => i.status === 'NORMAL').length, value: (data.items || []).filter((i: any) => i.status === 'NORMAL').reduce((s: number, i: any) => s + Number(i.totalValue), 0) },
@@ -170,7 +179,7 @@ export default function InventarioPage() {
                 <div key={g.status} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <div className="flex items-center gap-2.5">
                     <Badge variant={cfg.variant}>{cfg.label}</Badge>
-                    <span className="text-xs text-muted-foreground">{g.count} ref.</span>
+                    <span className="text-xs text-muted-foreground">{t('refCount', { count: g.count })}</span>
                   </div>
                   <span className="font-mono text-xs font-semibold">{fmtEur(g.value)}</span>
                 </div>
@@ -184,13 +193,13 @@ export default function InventarioPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between w-full">
-            <CardTitle>Detalle de Inventario</CardTitle>
+            <CardTitle>{t('inventoryDetail')}</CardTitle>
             <div className="flex gap-1.5">
               {[
-                { key: 'ALL', label: 'Todos' },
-                { key: 'NORMAL', label: 'Normal' },
-                { key: 'CRITICAL', label: 'Crítico' },
-                { key: 'OBSOLETE', label: 'Obsoleto' },
+                { key: 'ALL', label: t('filterAll') },
+                { key: 'NORMAL', label: t('statusNormal') },
+                { key: 'CRITICAL', label: t('statusCritical') },
+                { key: 'OBSOLETE', label: t('statusObsolete') },
               ].map(f => (
                 <button
                   key={f.key}
@@ -207,20 +216,20 @@ export default function InventarioPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">SKU</th>
-                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Descripción</th>
+                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{t('thSku')}</th>
+                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{t('thDescription')}</th>
                 <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort('stock')}>
-                  Stock{sortIcon('stock')}
+                  {t('thStock')}{sortIcon('stock')}
                 </th>
-                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Coste Unit.</th>
+                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{t('thUnitCost')}</th>
                 <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort('totalValue')}>
-                  Valor Total{sortIcon('totalValue')}
+                  {t('thTotalValue')}{sortIcon('totalValue')}
                 </th>
                 <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider cursor-pointer hover:text-foreground" onClick={() => handleSort('rotationDays')}>
-                  Rotación{sortIcon('rotationDays')}
+                  {t('thRotation')}{sortIcon('rotationDays')}
                 </th>
-                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Estado</th>
-                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">% del Total</th>
+                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{t('thStatus')}</th>
+                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{t('thPercentTotal')}</th>
               </tr>
             </thead>
             <tbody>
@@ -260,12 +269,12 @@ export default function InventarioPage() {
 </ScrollableTable>
         {items.length > 10 && (
           <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>←</Button>
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>{'\u2190'}</Button>
             {Array.from({ length: Math.ceil(items.length / 10) }, (_, i) => (
               <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
             ))}
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(items.length / 10) - 1} onClick={() => setPage(p => p + 1)}>→</Button>
-            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}–{Math.min((page + 1) * 10, items.length)} de {items.length}</span>
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(items.length / 10) - 1} onClick={() => setPage(p => p + 1)}>{'\u2192'}</Button>
+            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}{'\u2013'}{Math.min((page + 1) * 10, items.length)} {t('of')} {items.length}</span>
           </div>
         )}
       </Card>

@@ -1,24 +1,25 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
+import { useHydrated } from '@/hooks/use-hydrated'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { createUserSchema, editUserSchema, type CreateUserForm, type EditUserForm } from '@/lib/validations'
 import { api } from '@/lib/api'
+import { useUsers } from '@/hooks/use-api'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FieldError } from '@/components/ui/field-error'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
-import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { SkeletonUsuarios } from '@/components/ui/skeleton-page'
 import { UserPlus, Pencil, Trash2, Shield, Eye, EyeOff, Search } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
+import { useTranslations } from 'next-intl'
 
 const ROLES = ['ADMIN', 'CFO', 'CONTROLLER', 'ANALYST', 'VIEWER'] as const
-const ROLE_CONFIG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'success' | 'secondary' | 'default'; desc: string }> = {
-  ADMIN: { label: 'Admin', variant: 'destructive', desc: 'Acceso total al sistema y gestión de usuarios' },
-  CFO: { label: 'CFO', variant: 'default', desc: 'Acceso completo a datos financieros y aprobaciones' },
-  CONTROLLER: { label: 'Controller', variant: 'warning', desc: 'Control financiero y reporting' },
-  ANALYST: { label: 'Analista', variant: 'secondary', desc: 'Consulta y análisis de datos' },
-  VIEWER: { label: 'Visor', variant: 'secondary', desc: 'Solo lectura' },
-}
 
 interface User {
   id: string
@@ -32,8 +33,17 @@ interface User {
 }
 
 export default function UsuariosPage() {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const t = useTranslations('usuarios')
+
+  const ROLE_CONFIG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'success' | 'secondary' | 'default'; desc: string }> = {
+    ADMIN: { label: 'Admin', variant: 'destructive', desc: t('roleAdminDesc') },
+    CFO: { label: 'CFO', variant: 'default', desc: t('roleCfoDesc') },
+    CONTROLLER: { label: 'Controller', variant: 'warning', desc: t('roleControllerDesc') },
+    ANALYST: { label: t('roleAnalyst'), variant: 'secondary', desc: t('roleAnalystDesc') },
+    VIEWER: { label: t('roleViewer'), variant: 'secondary', desc: t('roleViewerDesc') },
+  }
+
+  const { data: users = [], isLoading, mutate } = useUsers()
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editUser, setEditUser] = useState<User | null>(null)
@@ -41,25 +51,21 @@ export default function UsuariosPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Form state
-  const [formName, setFormName] = useState('')
-  const [formEmail, setFormEmail] = useState('')
-  const [formRole, setFormRole] = useState<string>('ANALYST')
-  const [formPassword, setFormPassword] = useState('')
+  const form = useForm<CreateUserForm | EditUserForm>({
+    resolver: zodResolver(editUser ? editUserSchema : createUserSchema),
+    defaultValues: { name: '', email: '', role: 'ANALYST', password: '' },
+  })
 
   const { toast } = useToast()
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const loadUsers = useCallback(() => {
-    return api.users.list()
-      .then(setUsers)
-      .catch(console.error)
-      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
-  }, [])
+  useKeyboardShortcuts([
+    { key: 'n', label: t('shortcutNewUser'), action: () => openCreate() },
+    { key: 'r', label: t('shortcutRefresh'), action: () => { mutate() } },
+  ])
 
-  useEffect(() => { loadUsers() }, [loadUsers])
+  const hydrated = useHydrated()
 
-  if (loading) return <SkeletonKPIsAndTable cols={5} rows={4} />
+  if (!hydrated || isLoading) return <SkeletonUsuarios />
 
   const filtered = search
     ? users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
@@ -67,47 +73,32 @@ export default function UsuariosPage() {
 
   function openCreate() {
     setEditUser(null)
-    setFormName('')
-    setFormEmail('')
-    setFormRole('ANALYST')
-    setFormPassword('')
+    form.reset({ name: '', email: '', role: 'ANALYST', password: '' })
     setShowPassword(false)
     setDialogOpen(true)
   }
 
   function openEdit(user: User) {
     setEditUser(user)
-    setFormName(user.name)
-    setFormEmail(user.email)
-    setFormRole(user.role)
-    setFormPassword('')
+    form.reset({ name: user.name, email: user.email, role: user.role as any, password: '' })
     setShowPassword(false)
     setDialogOpen(true)
   }
 
-  async function handleSave() {
-    if (!formName.trim() || !formEmail.trim()) {
-      toast({ title: 'Error', description: 'Nombre y email son obligatorios', variant: 'destructive' })
-      return
-    }
-    if (!editUser && !formPassword) {
-      toast({ title: 'Error', description: 'La contraseña es obligatoria para nuevos usuarios', variant: 'destructive' })
-      return
-    }
-
+  async function handleSave(data: CreateUserForm | EditUserForm) {
     setSaving(true)
     try {
       if (editUser) {
-        const data: any = { name: formName, email: formEmail, role: formRole }
-        if (formPassword) data.password = formPassword
-        await api.users.update(editUser.id, data)
-        toast({ title: 'Usuario actualizado', description: `${formName} actualizado correctamente` })
+        const payload: any = { name: data.name, email: data.email, role: data.role }
+        if (data.password) payload.password = data.password
+        await api.users.update(editUser.id, payload)
+        toast({ title: t('toastUserUpdated'), description: t('toastUserUpdatedDesc', { name: data.name }) })
       } else {
-        await api.users.create({ name: formName, email: formEmail, role: formRole, password: formPassword })
-        toast({ title: 'Usuario creado', description: `${formName} añadido al tenant` })
+        await api.users.create({ name: data.name, email: data.email, role: data.role, password: data.password })
+        toast({ title: t('toastUserCreated'), description: t('toastUserCreatedDesc', { name: data.name }) })
       }
       setDialogOpen(false)
-      loadUsers()
+      mutate()
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' })
     } finally {
@@ -119,9 +110,9 @@ export default function UsuariosPage() {
     if (!deleteConfirm) return
     try {
       await api.users.remove(deleteConfirm.id)
-      toast({ title: 'Usuario eliminado', description: `${deleteConfirm.name} ha sido eliminado` })
+      toast({ title: t('toastUserDeleted'), description: t('toastUserDeletedDesc', { name: deleteConfirm.name }) })
       setDeleteConfirm(null)
-      loadUsers()
+      mutate()
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' })
       setDeleteConfirm(null)
@@ -129,14 +120,14 @@ export default function UsuariosPage() {
   }
 
   function fmtDate(d: string | null) {
-    if (!d) return 'Nunca'
+    if (!d) return t('timeNever')
     const date = new Date(d)
     const now = new Date()
     const diffH = Math.floor((now.getTime() - date.getTime()) / 3600000)
-    if (diffH < 1) return 'Hace momentos'
-    if (diffH < 24) return `Hace ${diffH}h`
+    if (diffH < 1) return t('timeMomentsAgo')
+    if (diffH < 24) return t('timeHoursAgo', { hours: diffH })
     const diffD = Math.floor(diffH / 24)
-    if (diffD < 7) return `Hace ${diffD}d`
+    if (diffD < 7) return t('timeDaysAgo', { days: diffD })
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
@@ -148,13 +139,13 @@ export default function UsuariosPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Gestión de Usuarios"
-        subtitle={`Grupo Ibérico SA · ${users.length} usuario${users.length !== 1 ? 's' : ''} registrado${users.length !== 1 ? 's' : ''}`}
-        lastUpdated={lastUpdated}
-        onRefresh={loadUsers}
+        title={t('title')}
+        subtitle={t('subtitle', { count: users.length })}
+        lastUpdated={null}
+        onRefresh={() => mutate()}
         actions={
           <Button size="sm" onClick={openCreate}>
-            <UserPlus size={14} className="mr-1" />Nuevo Usuario
+            <UserPlus size={14} className="mr-1" />{t('newUser')}
           </Button>
         }
       />
@@ -175,7 +166,7 @@ export default function UsuariosPage() {
       {/* Search */}
       <div className="relative max-w-sm">
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre o email..." className="pl-8 h-9 text-sm" />
+        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} className="pl-8 h-9 text-sm" />
       </div>
 
       {/* User cards */}
@@ -197,9 +188,9 @@ export default function UsuariosPage() {
                     </div>
                     <div className="text-xs text-muted-foreground truncate">{user.email}</div>
                     <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
-                      <span>Último acceso: {fmtDate(user.lastLogin)}</span>
+                      <span>{t('lastAccess')}: {fmtDate(user.lastLogin)}</span>
                       <span>·</span>
-                      <span>Creado: {fmtDate(user.createdAt)}</span>
+                      <span>{t('created')}: {fmtDate(user.createdAt)}</span>
                     </div>
                   </div>
                 </div>
@@ -223,7 +214,7 @@ export default function UsuariosPage() {
 
       {filtered.length === 0 && (
         <div className="text-center py-12 text-sm text-muted-foreground">
-          {search ? 'No se encontraron usuarios con esa búsqueda' : 'No hay usuarios registrados'}
+          {search ? t('noUsersFoundSearch') : t('noUsersRegistered')}
         </div>
       )}
 
@@ -231,46 +222,49 @@ export default function UsuariosPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editUser ? 'Editar Usuario' : 'Nuevo Usuario'}</DialogTitle>
-            <DialogDescription>{editUser ? `Modificar datos de ${editUser.name}` : 'Añadir un nuevo usuario al tenant'}</DialogDescription>
+            <DialogTitle>{editUser ? t('editUser') : t('newUser')}</DialogTitle>
+            <DialogDescription>{editUser ? t('editUserDesc', { name: editUser.name }) : t('newUserDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <form onSubmit={form.handleSubmit(handleSave)} className="space-y-3">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Nombre completo *</label>
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Nombre y apellidos" />
+              <label className="text-xs text-muted-foreground block mb-1">{t('labelFullName')} *</label>
+              <Input {...form.register('name')} placeholder={t('placeholderFullName')} className={form.formState.errors.name ? 'border-destructive' : ''} />
+              <FieldError message={form.formState.errors.name?.message} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Email *</label>
-              <Input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="usuario@empresa.es" />
+              <label className="text-xs text-muted-foreground block mb-1">{t('labelEmail')} *</label>
+              <Input type="email" {...form.register('email')} placeholder={t('placeholderEmail')} className={form.formState.errors.email ? 'border-destructive' : ''} />
+              <FieldError message={form.formState.errors.email?.message} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Rol *</label>
+              <label className="text-xs text-muted-foreground block mb-1">{t('labelRole')} *</label>
               <div className="grid grid-cols-5 gap-1.5">
                 {ROLES.map(r => {
                   const cfg = ROLE_CONFIG[r]
                   return (
                     <button
                       key={r}
-                      onClick={() => setFormRole(r)}
-                      className={`p-2 rounded-lg border text-center transition-colors ${formRole === r ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/50 text-muted-foreground hover:text-foreground'}`}
+                      type="button"
+                      onClick={() => form.setValue('role', r)}
+                      className={`p-2 rounded-lg border text-center transition-colors ${form.watch('role') === r ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/50 text-muted-foreground hover:text-foreground'}`}
                     >
                       <div className="text-[10px] font-semibold">{cfg.label}</div>
                     </button>
                   )
                 })}
               </div>
-              <div className="text-[10px] text-muted-foreground mt-1">{ROLE_CONFIG[formRole]?.desc}</div>
+              <div className="text-[10px] text-muted-foreground mt-1">{ROLE_CONFIG[form.watch('role')]?.desc}</div>
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">
-                Contraseña {editUser ? '(dejar vacío para no cambiar)' : '*'}
+                {t('labelPassword')} {editUser ? t('passwordOptionalHint') : '*'}
               </label>
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}
-                  value={formPassword}
-                  onChange={e => setFormPassword(e.target.value)}
-                  placeholder={editUser ? '••••••••' : 'Mínimo 6 caracteres'}
+                  {...form.register('password')}
+                  placeholder={editUser ? '••••••••' : t('placeholderPassword')}
+                  className={form.formState.errors.password ? 'border-destructive' : ''}
                 />
                 <button
                   type="button"
@@ -280,14 +274,18 @@ export default function UsuariosPage() {
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
+              <FieldError message={form.formState.errors.password?.message} />
+              {!editUser && !form.formState.errors.password && (
+                <p className="text-[10px] text-muted-foreground mt-1">{t('passwordRequirements')}</p>
+              )}
             </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Guardando...' : editUser ? 'Guardar Cambios' : 'Crear Usuario'}
-            </Button>
-          </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('cancel')}</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? t('saving') : editUser ? t('saveChanges') : t('createUser')}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -295,15 +293,15 @@ export default function UsuariosPage() {
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Eliminar Usuario</DialogTitle>
+            <DialogTitle>{t('deleteUser')}</DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que quieres eliminar a <strong>{deleteConfirm?.name}</strong> ({deleteConfirm?.email})?
-              Esta acción no se puede deshacer.
+              {t('deleteUserConfirm', { name: deleteConfirm?.name || '', email: deleteConfirm?.email || '' })}
+              {' '}{t('deleteUserWarning')}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleDelete}>Eliminar</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>{t('cancel')}</Button>
+            <Button variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
           </div>
         </DialogContent>
       </Dialog>

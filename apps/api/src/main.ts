@@ -5,11 +5,12 @@ import * as compression from 'compression'
 import helmet from 'helmet'
 import { AppModule } from './app.module'
 import { AuditInterceptor } from './common/interceptors/audit.interceptor'
+import { RequestLoggerInterceptor } from './common/interceptors/request-logger.interceptor'
+import { StructuredLogger } from './common/logger/structured.logger'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log'],
-  })
+  const logger = new StructuredLogger()
+  const app = await NestFactory.create(AppModule, { logger })
 
   app.use(helmet())
   app.use(compression())
@@ -17,9 +18,9 @@ async function bootstrap() {
     origin: process.env.NEXTAUTH_URL || 'http://localhost:3000',
     credentials: true,
   })
-  app.setGlobalPrefix('api/v1')
+  app.setGlobalPrefix('api/v1', { exclude: ['health'] })
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }))
-  app.useGlobalInterceptors(new AuditInterceptor())
+  app.useGlobalInterceptors(new RequestLoggerInterceptor(), new AuditInterceptor())
 
   // Swagger
   const config = new DocumentBuilder()
@@ -33,7 +34,8 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001
   await app.listen(port)
-  console.log(`🚀 GEACFO API running on http://localhost:${port}`)
-  console.log(`📚 Swagger docs: http://localhost:${port}/api/docs`)
+  logger.log(`GEACFO API running on http://localhost:${port}`, 'Bootstrap')
+  logger.log(`Swagger docs: http://localhost:${port}/api/docs`, 'Bootstrap')
+  logger.log(`Health check: http://localhost:${port}/health`, 'Bootstrap')
 }
 bootstrap()

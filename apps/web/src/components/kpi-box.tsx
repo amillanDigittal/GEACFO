@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { Info } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 
@@ -13,7 +14,7 @@ interface KpiBoxProps {
   highlight?: boolean
 }
 
-export function KpiBox({ label, value, color, icon, tooltip, source, highlight }: KpiBoxProps) {
+export const KpiBox = memo(function KpiBox({ label, value, color, icon, tooltip, source, highlight }: KpiBoxProps) {
   const box = (
     <div className={`border rounded-xl p-3 md:p-4 text-center group relative ${highlight ? 'bg-primary/5 border-primary/20' : 'bg-card border-border'}`}>
       {tooltip && (
@@ -45,4 +46,4 @@ export function KpiBox({ label, value, color, icon, tooltip, source, highlight }
       </Tooltip>
     </TooltipProvider>
   )
-}
+})

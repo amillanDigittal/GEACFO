@@ -1,7 +1,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+interface CockpitLayout {
+  /** KPI keys in display order. null = use default order */
+  order: string[] | null
+  /** KPI keys that are hidden */
+  hidden: string[]
+}
+
+export type CompareMode = 'mom' | 'yoy'
+
 interface AppState {
+  _hydrated: boolean
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   setSidebarCollapsed: (v: boolean) => void
@@ -9,11 +19,18 @@ interface AppState {
   addFavorite: (href: string) => void
   removeFavorite: (href: string) => void
   toggleFavorite: (href: string) => void
+  cockpitLayout: CockpitLayout
+  setCockpitOrder: (order: string[]) => void
+  toggleCockpitKpi: (key: string) => void
+  resetCockpitLayout: () => void
+  compareMode: CompareMode
+  setCompareMode: (mode: CompareMode) => void
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      _hydrated: false,
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
@@ -25,7 +42,23 @@ export const useAppStore = create<AppState>()(
         if (favorites.includes(href)) set({ favorites: favorites.filter(f => f !== href) })
         else set({ favorites: [...favorites, href] })
       },
+      cockpitLayout: { order: null, hidden: [] },
+      setCockpitOrder: (order) => set((s) => ({ cockpitLayout: { ...s.cockpitLayout, order } })),
+      toggleCockpitKpi: (key) => set((s) => {
+        const hidden = s.cockpitLayout.hidden.includes(key)
+          ? s.cockpitLayout.hidden.filter(k => k !== key)
+          : [...s.cockpitLayout.hidden, key]
+        return { cockpitLayout: { ...s.cockpitLayout, hidden } }
+      }),
+      resetCockpitLayout: () => set({ cockpitLayout: { order: null, hidden: [] } }),
+      compareMode: 'mom' as CompareMode,
+      setCompareMode: (mode) => set({ compareMode: mode }),
     }),
-    { name: 'geacfo-app' }
+    {
+      name: 'geacfo-app',
+      onRehydrateStorage: () => () => {
+        useAppStore.setState({ _hydrated: true })
+      },
+    }
   )
 )

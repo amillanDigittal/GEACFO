@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
+import { APP_GUARD } from '@nestjs/core'
 import { ThrottlerModule } from '@nestjs/throttler'
+import { EventEmitterModule } from '@nestjs/event-emitter'
+import { UserThrottlerGuard } from './common/guards/user-throttler.guard'
 import { AuthModule } from './auth/auth.module'
 import { TreasuryModule } from './treasury/treasury.module'
 import { CustomersModule } from './customers/customers.module'
@@ -18,11 +21,19 @@ import { ProvisionsModule } from './provisions/provisions.module'
 import { BudgetModule } from './budget/budget.module'
 import { SuppliersModule } from './suppliers/suppliers.module'
 import { ImportModule } from './import/import.module'
+import { NotificationsModule } from './notifications/notifications.module'
+import { HealthModule } from './health/health.module'
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    ThrottlerModule.forRoot([
+      // Default: 100 req/min per user (or per IP if unauthenticated)
+      { name: 'default', ttl: 60_000, limit: 100 },
+      // Short burst protection: 20 req/10s
+      { name: 'short', ttl: 10_000, limit: 20 },
+    ]),
+    EventEmitterModule.forRoot(),
     AuthModule,
     TreasuryModule,
     CustomersModule,
@@ -40,6 +51,11 @@ import { ImportModule } from './import/import.module'
     BudgetModule,
     SuppliersModule,
     ImportModule,
+    NotificationsModule,
+    HealthModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: UserThrottlerGuard },
   ],
 })
 export class AppModule {}

@@ -44,7 +44,17 @@ docker compose up postgres -d
 docker compose up -d
 ```
 
-There are no tests in this codebase. `@nestjs/testing` is a devDependency but no test files or configs exist. There is no CI/CD pipeline (no `.github/workflows/`).
+There are no unit tests. `@nestjs/testing` is a devDependency but no unit test files or configs exist. There is no CI/CD pipeline (no `.github/workflows/`).
+
+**E2E tests** exist using Playwright (`apps/web/e2e/`). Tests cover login, cockpit, pagos, usuarios, shortcuts, and hydration. Auth setup runs first, then Chromium tests reuse the stored auth state.
+
+```bash
+# E2E tests (requires dev server running on localhost:3000)
+pnpm --filter @geacfo/web test:e2e        # headless Playwright
+pnpm --filter @geacfo/web test:e2e:ui     # Playwright UI mode
+```
+
+**Engine requirements**: Node >= 18.0.0, pnpm 8.15.0 (enforced).
 
 **Local dev gotchas**:
 - Dev scripts load env vars via `export $(grep -v '^#' ../../.env | xargs)` — they don't use dotenv at runtime.
@@ -68,14 +78,19 @@ There are no tests in this codebase. `@nestjs/testing` is a devDependency but no
 ### Web → API Communication
 Browser-side calls go through a **Next.js API proxy route** at `apps/web/src/app/api/v1/[...path]/route.ts`. The client in `apps/web/src/lib/api.ts` calls `/api/v1/...` on the same origin (relative path), which the proxy forwards to NestJS, injecting the Bearer token from the NextAuth JWT. The proxy uses `API_INTERNAL_URL` (Docker: `http://api:3001`) or falls back to `NEXT_PUBLIC_API_URL`. The `fetchAPI` helper auto-redirects to `/auth/login` on 401 responses. The proxy route uses `force-dynamic` (no caching).
 
-API client namespaces: `api.auth` (login, me), `api.treasury` (cockpit, forecast, forecastCompare, cashflow, ratios, ar, ap, approveAP, accounts, reconciliation, autoMatch), `api.customers` (list, get, recalculate), `api.debt` (summary, instruments, covenants), `api.inventory` (list), `api.scenarios` (compare, simulate, variance), `api.bot` (chat, history, sessions), `api.alerts` (counts, notifications, resolutions, updateResolution), `api.board` (pack), `api.governance` (sources, audit), `api.users`, `api.settings`, `api.reporting`.
+API client namespaces: `api.auth` (login, me), `api.treasury` (cockpit, forecast, forecastCompare, cashflow, ratios, ar, ap, approveAP, accounts, reconciliation, autoMatch), `api.customers` (list, get, recalculate), `api.debt` (summary, instruments, covenants), `api.inventory` (list), `api.scenarios` (compare, simulate, variance), `api.bot` (chat, history, sessions), `api.alerts` (counts, notifications, resolutions, updateResolution), `api.board` (pack), `api.governance` (sources, audit), `api.import` (templates, movements, invoicesAR, invoicesAP, suppliers, debt, inventory), `api.users`, `api.settings`, `api.reporting`.
 
 ### API Structure
 All API routes are prefixed with `/api/v1`. Global `ValidationPipe` with `transform: true, whitelist: true`. Swagger docs at `/api/docs`. Rate limit: 100 req/60s.
 
-Modules: `auth`, `treasury`, `customers`, `debt`, `inventory`, `scenarios`, `bot`, `board`, `governance`, `alerts`, `users`, `settings`, `reporting`. Each module has its own controller, service, and module file. Each service instantiates `new PrismaClient()` directly (not using DI or the shared singleton from `@geacfo/database`).
+Modules: `auth`, `treasury`, `customers`, `debt`, `inventory`, `scenarios`, `bot`, `board`, `governance`, `alerts`, `users`, `settings`, `reporting`, `import`, `notifications`, `health`, `budget`, `provisions`, `suppliers`. Each module has its own controller, service, and module file. Each service instantiates `new PrismaClient()` directly (not using DI or the shared singleton from `@geacfo/database`).
 
-Middleware stack: Helmet (security headers) and compression are enabled globally in `main.ts`. Auth uses two Passport guards: `LocalAuthGuard` (credentials login) and `JwtAuthGuard` (token validation on protected routes).
+Additional module notes:
+- `health` — `GET /health` endpoint (skips rate limit), checks DB connectivity and reports memory/uptime. Used by Docker HEALTHCHECK and load balancers.
+- `import` — Excel/CSV bulk import for bank movements, invoices AR/AP, suppliers, debt instruments, inventory. Has a stricter rate limit (10 req/min).
+- `notifications` — WebSocket gateway (Socket.IO) on `/notifications` namespace. Uses `@nestjs/event-emitter` to broadcast real-time events (payment approved/rejected, invoice created, covenant risk, alert resolved) to connected clients scoped by tenant room.
+
+Middleware stack: Helmet (security headers) and compression are enabled globally in `main.ts`. Global interceptors: `RequestLoggerInterceptor` (structured request logging) and `AuditInterceptor` (writes to `AuditLog` table). Auth uses two Passport guards: `LocalAuthGuard` (credentials login) and `JwtAuthGuard` (token validation on protected routes). Common infrastructure lives in `src/common/` — guards (`user-throttler.guard.ts`), interceptors, logger (`StructuredLogger`), and filters.
 
 ### Database
 PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `tenantId` FK to `Tenant`. All IDs use `cuid()`. Key enums: `Role` (ADMIN/CFO/CONTROLLER/ANALYST/VIEWER), `RiskLevel`, `InvoiceStatus`, `DebtType`, `SyncStatus`. Key models: `Tenant`, `User`, `Session`, `BankAccount`, `BankMovement`, `Reconciliation`, `Customer`, `ScoreHistory`, `InvoiceAR`, `Supplier`, `InvoiceAP`, `DebtInstrument`, `Covenant`, `InventoryItem`, `ForecastWeek`, `DataSource`, `AuditLog`, `BotMessage`, `AlertResolution`, `ReportSchedule`. `ForecastWeek` has a composite unique on `(tenantId, scenario, weekNumber)`.
@@ -87,7 +102,7 @@ PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `ten
 - Charts: Recharts
 - Dashboard layout (`src/app/dashboard/layout.tsx`) is a server component that checks session and redirects to `/auth/login` if unauthenticated
 - Dashboard routes use **Spanish names** (e.g., `deuda`, `cobros`, `pagos`, `conciliacion`, `gobierno`) while API modules use English (`debt`, `treasury`, `customers`, `governance`)
-- Dashboard pages live under `src/app/dashboard/` — cockpit, forecast, deuda, scoring, bot, conciliacion, and boardpack have full UI; the remaining pages (cobros, pagos, escenarios, fraude, gobierno, inventario, variance) are stubs rendering raw JSON
+- Dashboard pages live under `src/app/dashboard/` — 28 routes total. Key route → API mapping: `cobros` → treasury/ar, `pagos` → treasury/ap, `deuda` → debt, `conciliacion` → treasury/reconciliation, `gobierno` → governance, `importar` → import, `proveedores` → suppliers, `notificaciones` → alerts, `usuarios` → users, `configuracion` → settings, `inventario`/`inventario-abc` → inventory, `presupuesto` → budget, `provisiones` → provisions, `proyeccion-diaria`/`vencimientos`/`ratios`/`cashflow` → treasury
 
 ### Bot CFO
 `apps/api/src/bot/bot.service.ts` calls Anthropic API with `claude-sonnet-4-20250514`. The system prompt includes live financial data (cash positions, covenants, customer alerts) fetched from DB at request time.

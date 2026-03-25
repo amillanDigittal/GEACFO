@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { fmtEur, fmtM } from '@/lib/utils'
@@ -8,14 +9,6 @@ import {
   ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, RefreshCw,
   Calendar,
 } from 'lucide-react'
-
-function timeGreeting() {
-  const h = new Date().getHours()
-  if (h < 7) return 'Buenas noches'
-  if (h < 13) return 'Buenos días'
-  if (h < 20) return 'Buenas tardes'
-  return 'Buenas noches'
-}
 
 function fmtDate() {
   return new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -28,11 +21,20 @@ const TASK_TYPE_STYLES = {
 }
 
 export default function ResumenPage() {
+  const t = useTranslations('resumen')
   const [data, setData] = useState<any>(null)
   const [alerts, setAlerts] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const router = useRouter()
+
+  function timeGreeting() {
+    const h = new Date().getHours()
+    if (h < 7) return t('greetingNight')
+    if (h < 13) return t('greetingMorning')
+    if (h < 20) return t('greetingAfternoon')
+    return t('greetingNight')
+  }
 
   async function loadAll() {
     try {
@@ -67,7 +69,7 @@ export default function ResumenPage() {
     )
   }
 
-  if (!data) return <div className="text-center text-muted-foreground py-20">Error cargando datos</div>
+  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}</div>
 
   const caja = data.caja?.value || 0
   const ebitda = data.ebitda?.value || 0
@@ -79,7 +81,7 @@ export default function ResumenPage() {
 
   const kpis = [
     {
-      label: 'Caja',
+      label: t('kpiCash'),
       value: fmtM(caja),
       icon: <Landmark size={18} />,
       trend: '+3.2%',
@@ -89,7 +91,7 @@ export default function ResumenPage() {
       href: '/dashboard/conciliacion',
     },
     {
-      label: 'EBITDA',
+      label: t('kpiEbitda'),
       value: fmtM(ebitda),
       icon: <TrendingUp size={18} />,
       trend: `${ebitdaMargin}%`,
@@ -99,7 +101,7 @@ export default function ResumenPage() {
       href: '/dashboard/variance',
     },
     {
-      label: 'Deuda Neta',
+      label: t('kpiNetDebt'),
       value: fmtM(deuda),
       icon: <CreditCard size={18} />,
       trend: '−1.2%',
@@ -109,10 +111,10 @@ export default function ResumenPage() {
       href: '/dashboard/deuda',
     },
     {
-      label: 'DSO',
+      label: t('kpiDso'),
       value: `${dso}d`,
       icon: <Calendar size={18} />,
-      trend: 'obj. 45d',
+      trend: t('dsoTarget'),
       up: dso <= 45,
       color: 'from-violet-500/20 to-violet-600/5',
       iconColor: 'text-violet-400',
@@ -125,7 +127,7 @@ export default function ResumenPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-bold text-foreground">{timeGreeting()}, Ana</h1>
+          <h1 className="text-lg font-bold text-foreground">{t('greeting', { greeting: timeGreeting(), name: 'Ana' })}</h1>
           <p className="text-xs text-muted-foreground capitalize mt-0.5">{fmtDate()}</p>
         </div>
         <button
@@ -163,7 +165,7 @@ export default function ResumenPage() {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             <AlertTriangle size={12} />
-            Alertas Urgentes
+            {t('urgentAlerts')}
           </div>
           {urgentAlerts.map((a: any, i: number) => (
             <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
@@ -182,7 +184,7 @@ export default function ResumenPage() {
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             <Clock size={12} />
-            Acciones Pendientes
+            {t('pendingActions')}
           </div>
           <div className="space-y-2">
             {tasks.map((t: any, i: number) => {
@@ -210,7 +212,7 @@ export default function ResumenPage() {
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
           <Landmark size={12} />
-          Posición de Caja
+          {t('cashPosition')}
         </div>
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
           {(data.caja?.accounts || []).map((acc: any) => {
@@ -230,7 +232,7 @@ export default function ResumenPage() {
             )
           })}
           <div className="flex items-center justify-between pt-2 border-t border-border">
-            <span className="text-xs font-semibold text-muted-foreground">Total</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t('total')}</span>
             <span className="font-mono text-sm font-bold text-primary">{fmtEur(caja)}</span>
           </div>
         </div>
@@ -240,13 +242,13 @@ export default function ResumenPage() {
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
           <TrendingUp size={12} />
-          Capital Circulante
+          {t('workingCapital')}
         </div>
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Por Cobrar', value: fmtM(data.workingCapital?.ar || 0), color: 'text-success' },
-            { label: 'Por Pagar', value: fmtM(data.workingCapital?.ap || 0), color: 'text-destructive' },
-            { label: 'Forecast', value: fmtM(data.workingCapital?.forecast || 0), color: 'text-primary' },
+            { label: t('receivables'), value: fmtM(data.workingCapital?.ar || 0), color: 'text-success' },
+            { label: t('payables'), value: fmtM(data.workingCapital?.ap || 0), color: 'text-destructive' },
+            { label: t('forecast'), value: fmtM(data.workingCapital?.forecast || 0), color: 'text-primary' },
           ].map(item => (
             <div key={item.label} className="rounded-xl border border-border bg-card p-3 text-center">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{item.label}</div>
@@ -258,13 +260,13 @@ export default function ResumenPage() {
 
       {/* Quick nav */}
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Accesos Rápidos</div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{t('quickAccess')}</div>
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: 'Cockpit CFO', href: '/dashboard/cockpit', icon: '📊' },
-            { label: 'Forecast', href: '/dashboard/forecast', icon: '📈' },
-            { label: 'Scoring', href: '/dashboard/scoring', icon: '🎯' },
-            { label: 'Bot CFO', href: '/dashboard/bot', icon: '🤖' },
+            { label: t('navCockpit'), href: '/dashboard/cockpit', icon: '📊' },
+            { label: t('navForecast'), href: '/dashboard/forecast', icon: '📈' },
+            { label: t('navScoring'), href: '/dashboard/scoring', icon: '🎯' },
+            { label: t('navBotCfo'), href: '/dashboard/bot', icon: '🤖' },
           ].map(item => (
             <button
               key={item.label}

@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn('rounded-xl border border-border bg-card text-card-foreground', className)} {...props} />
+  ({ className, ...props }, ref) => <div ref={ref} className={cn('card-base rounded-xl border border-border bg-card text-card-foreground', className)} {...props} />
 )
 const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => <div ref={ref} className={cn('flex flex-col space-y-1.5 p-5 border-b border-border', className)} {...props} />

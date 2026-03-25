@@ -1,13 +1,17 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/app'
 import { useTheme } from 'next-themes'
-import { api } from '@/lib/api'
-import { FileText, Bot, Bell, Sun, Moon, Menu, X, CheckCircle2, LogOut, ChevronRight, Home, Search } from 'lucide-react'
+import { useNotifications } from '@/hooks/use-api'
+import { FileText, Bot, Bell, Sun, Moon, Menu, X, CheckCircle2, LogOut, ChevronRight, Home, Search, Wifi, WifiOff } from 'lucide-react'
 import Link from 'next/link'
+import { useLocale, useTranslations } from 'next-intl'
+import { useSocket, RealtimeNotification } from '@/providers/socket-provider'
+import { setLocale } from '@/i18n/set-locale'
+import { type Locale, locales } from '@/i18n/config'
 
 const BREADCRUMBS: Record<string, { section: string; label: string }> = {
   '/dashboard/cockpit': { section: '', label: 'Cockpit CFO' },
@@ -30,6 +34,7 @@ const BREADCRUMBS: Record<string, { section: string; label: string }> = {
   '/dashboard/usuarios': { section: 'Plataforma', label: 'Usuarios' },
   '/dashboard/configuracion': { section: 'Plataforma', label: 'Configuración' },
   '/dashboard/gobierno': { section: 'Plataforma', label: 'Gobierno' },
+  '/dashboard/auditoria': { section: 'Plataforma', label: 'Auditoría' },
   '/dashboard/bot': { section: 'Plataforma', label: 'Bot CFO' },
   '/dashboard/boardpack': { section: 'Plataforma', label: 'Board Pack' },
   '/dashboard/reporting': { section: 'Plataforma', label: 'Reporting' },
@@ -61,18 +66,33 @@ export function Topbar({ session }: { session: any }) {
   const { toggleSidebar } = useAppStore()
   const { theme, setTheme } = useTheme()
   const router = useRouter()
-  const date = new Date().toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+  const locale = useLocale() as Locale
+  // Defer client-only values to avoid SSR/client hydration mismatch
+  const [mounted, setMounted] = useState(false)
+  const [date, setDate] = useState('')
+  useEffect(() => {
+    setMounted(true)
+    setDate(new Date().toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }))
+  }, [])
 
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const { data: notifications = [] } = useNotifications()
   const [open, setOpen] = useState(false)
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
+  const { notifications: realtimeNotifs, isConnected: wsConnected, clearNotifications: clearRealtime, requestPushPermission, pushPermission } = useSocket()
+  const [hasNewRealtime, setHasNewRealtime] = useState(false)
+  const prevRealtimeCount = useRef(0)
 
+  // Flash the bell when new realtime notifications arrive
   useEffect(() => {
-    api.alerts.notifications()
-      .then(setNotifications)
-      .catch(() => {})
-  }, [])
+    if (realtimeNotifs.length > prevRealtimeCount.current) {
+      setHasNewRealtime(true)
+      const timer = setTimeout(() => setHasNewRealtime(false), 3000)
+      prevRealtimeCount.current = realtimeNotifs.length
+      return () => clearTimeout(timer)
+    }
+    prevRealtimeCount.current = realtimeNotifs.length
+  }, [realtimeNotifs.length])
 
   // Close panel on click outside
   useEffect(() => {
@@ -85,7 +105,13 @@ export function Topbar({ session }: { session: any }) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  const activeNotifications = notifications.filter(n => !dismissed.has(n.id))
+  // Merge realtime notifications (at top) with REST-fetched ones
+  const realtimeAsNotifications: Notification[] = realtimeNotifs.map(n => ({
+    ...n,
+    icon: n.severity === 'critical' ? '🚨' : n.severity === 'warning' ? '⚠️' : '✅',
+  }))
+  const allNotifications = [...realtimeAsNotifications, ...notifications]
+  const activeNotifications = allNotifications.filter(n => !dismissed.has(n.id))
   const criticalCount = activeNotifications.filter(n => n.severity === 'critical').length
   const totalCount = activeNotifications.length
 
@@ -105,7 +131,7 @@ export function Topbar({ session }: { session: any }) {
   }
 
   return (
-    <header className="h-[60px] bg-card border-b border-border flex items-center px-4 gap-3 flex-shrink-0">
+    <header data-print-hide className="h-[60px] bg-card border-b border-border flex items-center px-4 gap-3 flex-shrink-0">
       <button onClick={toggleSidebar} aria-label="Abrir menú lateral" className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><Menu size={18} /></button>
       <nav aria-label="Migas de pan" className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden">
         <Link href="/dashboard/cockpit" aria-label="Ir al Cockpit" className="hover:text-foreground transition-colors flex-shrink-0">
@@ -145,8 +171,8 @@ export function Topbar({ session }: { session: any }) {
         <div className="relative" ref={panelRef}>
           <button
             onClick={() => setOpen(!open)}
-            className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors relative"
-            aria-label={`Notificaciones${totalCount > 0 ? `, ${totalCount} pendientes` : ''}`}
+            className={`w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors relative ${hasNewRealtime ? 'animate-pulse' : ''}`}
+            aria-label={`Notificaciones${totalCount > 0 ? `, ${totalCount} pendientes` : ''}${wsConnected ? ' · Tiempo real activo' : ''}`}
             aria-expanded={open}
             aria-haspopup="true"
           >
@@ -155,6 +181,9 @@ export function Topbar({ session }: { session: any }) {
               <span aria-hidden="true" className={`absolute -top-0.5 -right-0.5 text-[9px] font-bold px-1 py-0 rounded-full text-white min-w-[16px] text-center ${criticalCount > 0 ? 'bg-destructive' : 'bg-warning'}`}>
                 {totalCount}
               </span>
+            )}
+            {wsConnected && (
+              <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-success border border-card" title="Tiempo real activo" />
             )}
           </button>
 
@@ -168,16 +197,33 @@ export function Topbar({ session }: { session: any }) {
                   {criticalCount > 0 && (
                     <span className="bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">{criticalCount} crítica{criticalCount > 1 ? 's' : ''}</span>
                   )}
+                  <span className={`flex items-center gap-1 text-[10px] ${wsConnected ? 'text-success' : 'text-muted-foreground'}`} title={wsConnected ? 'Conectado en tiempo real' : 'Sin conexión en tiempo real'}>
+                    {wsConnected ? <Wifi size={10} /> : <WifiOff size={10} />}
+                    {wsConnected ? 'Live' : 'Offline'}
+                  </span>
                 </div>
                 {activeNotifications.length > 0 && (
                   <button
-                    onClick={() => setDismissed(new Set(notifications.map(n => n.id)))}
+                    onClick={() => { setDismissed(new Set(allNotifications.map(n => n.id))); clearRealtime() }}
                     className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Marcar todo leído
                   </button>
                 )}
               </div>
+
+              {/* Push permission prompt */}
+              {pushPermission === 'default' && (
+                <div className="px-4 py-2.5 border-b border-border bg-muted/50 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">Recibir alertas críticas aunque la pestaña no tenga foco</span>
+                  <button
+                    onClick={requestPushPermission}
+                    className="text-[11px] font-medium text-primary hover:underline whitespace-nowrap"
+                  >
+                    Activar
+                  </button>
+                </div>
+              )}
 
               {/* Notifications list */}
               <div className="flex-1 overflow-y-auto">
@@ -238,8 +284,19 @@ export function Topbar({ session }: { session: any }) {
           )}
         </div>
 
-        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={`Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}`} className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
-          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        <button
+          onClick={async () => {
+            const next = locale === 'es' ? 'en' : 'es'
+            await setLocale(next as Locale)
+            router.refresh()
+          }}
+          aria-label={locale === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+          className="h-7 px-2 rounded-md text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors border border-border uppercase"
+        >
+          {locale === 'es' ? 'EN' : 'ES'}
+        </button>
+        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={`Cambiar a modo ${theme === 'dark' ? 'claro' : 'oscuro'}`} className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors" suppressHydrationWarning>
+          {mounted ? (theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />) : <div className="w-4 h-4" />}
         </button>
         <button onClick={() => signOut()} aria-label="Cerrar sesión" className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"><LogOut size={14} /></button>
       </div>

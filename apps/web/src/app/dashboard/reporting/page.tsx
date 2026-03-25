@@ -1,5 +1,7 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -12,26 +14,13 @@ import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { exportBoardPackPDF } from '@/lib/export-pdf'
 import { Plus, Send, Pencil, Trash2, Clock, CheckCircle2, Pause, Play, FileDown, Calendar, Mail } from 'lucide-react'
 
-const REPORT_TYPES: Record<string, { label: string; desc: string }> = {
-  board_pack: { label: 'Board Pack', desc: 'Informe completo para el Consejo' },
-  cockpit_summary: { label: 'Resumen Cockpit', desc: 'KPIs principales y alertas' },
-  forecast_report: { label: 'Forecast 13S', desc: 'Proyección de tesorería' },
-  debt_covenants: { label: 'Deuda & Covenants', desc: 'Estado de endeudamiento' },
-}
-
-const FREQUENCIES: Record<string, { label: string; desc: string }> = {
-  weekly: { label: 'Semanal', desc: 'Cada lunes' },
-  biweekly: { label: 'Quincenal', desc: 'Cada dos semanas' },
-  monthly: { label: 'Mensual', desc: 'Primer día del mes' },
-  quarterly: { label: 'Trimestral', desc: 'Inicio de cada trimestre' },
-}
-
 interface Schedule {
   id: string; name: string; reportType: string; frequency: string; recipients: string
   enabled: boolean; lastSentAt: string | null; nextRunAt: string | null; createdBy: string; createdAt: string
 }
 
 export default function ReportingPage() {
+  const t = useTranslations('reporting')
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -49,6 +38,20 @@ export default function ReportingPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { toast } = useToast()
 
+  const REPORT_TYPES: Record<string, { label: string; desc: string }> = {
+    board_pack: { label: t('reportTypeBoardPack'), desc: t('reportTypeBoardPackDesc') },
+    cockpit_summary: { label: t('reportTypeCockpitSummary'), desc: t('reportTypeCockpitSummaryDesc') },
+    forecast_report: { label: t('reportTypeForecast'), desc: t('reportTypeForecastDesc') },
+    debt_covenants: { label: t('reportTypeDebtCovenants'), desc: t('reportTypeDebtCovenantsDesc') },
+  }
+
+  const FREQUENCIES: Record<string, { label: string; desc: string }> = {
+    weekly: { label: t('freqWeekly'), desc: t('freqWeeklyDesc') },
+    biweekly: { label: t('freqBiweekly'), desc: t('freqBiweeklyDesc') },
+    monthly: { label: t('freqMonthly'), desc: t('freqMonthlyDesc') },
+    quarterly: { label: t('freqQuarterly'), desc: t('freqQuarterlyDesc') },
+  }
+
   const load = useCallback(() => {
     api.reporting.list()
       .then(d => { setSchedules(d); setLastUpdated(new Date()) })
@@ -58,7 +61,9 @@ export default function ReportingPage() {
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <SkeletonKPIsAndTable cols={5} rows={3} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonKPIsAndTable cols={5} rows={3} />
 
   function openCreate() {
     setEditSchedule(null)
@@ -80,22 +85,22 @@ export default function ReportingPage() {
 
   async function handleSave() {
     if (!formName.trim() || !formRecipients.trim()) {
-      toast({ title: 'Error', description: 'Nombre y destinatarios son obligatorios', variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: t('toastNameRecipientsRequired'), variant: 'destructive' })
       return
     }
     setSaving(true)
     try {
       if (editSchedule) {
         await api.reporting.update(editSchedule.id, { name: formName, frequency: formFreq, recipients: formRecipients })
-        toast({ title: 'Programación actualizada' })
+        toast({ title: t('toastScheduleUpdated') })
       } else {
         await api.reporting.create({ name: formName, reportType: formType, frequency: formFreq, recipients: formRecipients })
-        toast({ title: 'Programación creada', description: `"${formName}" programado ${FREQUENCIES[formFreq]?.label.toLowerCase()}` })
+        toast({ title: t('toastScheduleCreated'), description: t('toastScheduleCreatedDesc', { name: formName, frequency: FREQUENCIES[formFreq]?.label.toLowerCase() }) })
       }
       setDialogOpen(false)
       load()
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -104,10 +109,10 @@ export default function ReportingPage() {
   async function handleToggle(s: Schedule) {
     try {
       await api.reporting.update(s.id, { enabled: !s.enabled })
-      toast({ title: s.enabled ? 'Programación pausada' : 'Programación activada' })
+      toast({ title: s.enabled ? t('toastSchedulePaused') : t('toastScheduleActivated') })
       load()
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
     }
   }
 
@@ -120,10 +125,10 @@ export default function ReportingPage() {
         exportBoardPackPDF(data)
       }
       await api.reporting.send(s.id)
-      toast({ title: 'Reporte generado', description: `"${s.name}" descargado y marcado como enviado. Configurar SMTP para envío automático por email.` })
+      toast({ title: t('toastReportGenerated'), description: t('toastReportGeneratedDesc', { name: s.name }) })
       load()
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
     } finally {
       setSending(null)
     }
@@ -133,17 +138,17 @@ export default function ReportingPage() {
     if (!deleteConfirm) return
     try {
       await api.reporting.remove(deleteConfirm.id)
-      toast({ title: 'Programación eliminada' })
+      toast({ title: t('toastScheduleDeleted') })
       setDeleteConfirm(null)
       load()
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
       setDeleteConfirm(null)
     }
   }
 
   function fmtDate(d: string | null) {
-    if (!d) return 'Nunca'
+    if (!d) return t('never')
     return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
@@ -152,10 +157,10 @@ export default function ReportingPage() {
     const date = new Date(d)
     const now = new Date()
     const diffD = Math.ceil((date.getTime() - now.getTime()) / 86400000)
-    if (diffD < 0) return 'Vencido'
-    if (diffD === 0) return 'Hoy'
-    if (diffD === 1) return 'Mañana'
-    if (diffD < 7) return `En ${diffD} días`
+    if (diffD < 0) return t('overdue')
+    if (diffD === 0) return t('today')
+    if (diffD === 1) return t('tomorrow')
+    if (diffD < 7) return t('inDays', { count: diffD })
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
   }
 
@@ -166,13 +171,13 @@ export default function ReportingPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Reporting Automatizado"
-        subtitle={`Programar envío de informes a stakeholders · ${schedules.length} programación${schedules.length !== 1 ? 'es' : ''}`}
+        title={t('title')}
+        subtitle={t('subtitle', { count: schedules.length })}
         lastUpdated={lastUpdated}
         onRefresh={load}
         actions={
           <Button size="sm" onClick={openCreate}>
-            <Plus size={14} className="mr-1" />Nueva Programación
+            <Plus size={14} className="mr-1" />{t('newSchedule')}
           </Button>
         }
       />
@@ -180,10 +185,10 @@ export default function ReportingPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Programaciones', value: schedules.length, icon: <Calendar size={14} /> },
-          { label: 'Activas', value: activeCount, icon: <Play size={14} />, color: 'text-success' },
-          { label: 'Destinatarios', value: totalRecipients, icon: <Mail size={14} /> },
-          { label: 'Último Envío', value: schedules.filter(s => s.lastSentAt).length > 0 ? fmtRelative(schedules.filter(s => s.lastSentAt).sort((a, b) => new Date(b.lastSentAt!).getTime() - new Date(a.lastSentAt!).getTime())[0].lastSentAt) : 'Nunca', icon: <Send size={14} /> },
+          { label: t('kpiSchedules'), value: schedules.length, icon: <Calendar size={14} /> },
+          { label: t('kpiActive'), value: activeCount, icon: <Play size={14} />, color: 'text-success' },
+          { label: t('kpiRecipients'), value: totalRecipients, icon: <Mail size={14} /> },
+          { label: t('kpiLastSent'), value: schedules.filter(s => s.lastSentAt).length > 0 ? fmtRelative(schedules.filter(s => s.lastSentAt).sort((a, b) => new Date(b.lastSentAt!).getTime() - new Date(a.lastSentAt!).getTime())[0].lastSentAt) : t('never'), icon: <Send size={14} /> },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="flex items-center justify-center gap-1.5 mb-2">
@@ -199,8 +204,7 @@ export default function ReportingPage() {
       <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
         <Mail size={16} className="text-primary mt-0.5 flex-shrink-0" />
         <div className="text-xs text-muted-foreground">
-          <strong className="text-foreground">Envío automático por email:</strong> Requiere configuración SMTP en las variables de entorno.
-          Mientras tanto, puedes usar "Enviar ahora" para generar y descargar el PDF manualmente.
+          <strong className="text-foreground">{t('smtpNoticeTitle')}</strong> {t('smtpNoticeDesc')}
         </div>
       </div>
 
@@ -209,8 +213,8 @@ export default function ReportingPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <Send size={32} className="mx-auto text-muted-foreground mb-3" />
-            <div className="text-sm text-muted-foreground mb-3">No hay programaciones de informes</div>
-            <Button size="sm" onClick={openCreate}><Plus size={14} className="mr-1" />Crear Primera Programación</Button>
+            <div className="text-sm text-muted-foreground mb-3">{t('emptyState')}</div>
+            <Button size="sm" onClick={openCreate}><Plus size={14} className="mr-1" />{t('createFirstSchedule')}</Button>
           </CardContent>
         </Card>
       ) : (
@@ -231,7 +235,7 @@ export default function ReportingPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="font-semibold text-sm">{s.name}</span>
-                        <Badge variant={s.enabled ? 'success' : 'secondary'}>{s.enabled ? 'Activa' : 'Pausada'}</Badge>
+                        <Badge variant={s.enabled ? 'success' : 'secondary'}>{s.enabled ? t('badgeActive') : t('badgePaused')}</Badge>
                         <Badge variant="outline" className="text-[10px]">{rtCfg.label}</Badge>
                         <Badge variant="secondary" className="text-[10px]">{frCfg.label}</Badge>
                       </div>
@@ -250,15 +254,15 @@ export default function ReportingPage() {
                       <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock size={10} />
-                          Próximo envío: <strong className="text-foreground">{s.enabled ? fmtRelative(s.nextRunAt) : 'Pausado'}</strong>
+                          {t('nextSend')}: <strong className="text-foreground">{s.enabled ? fmtRelative(s.nextRunAt) : t('paused')}</strong>
                         </span>
                         {s.lastSentAt && (
                           <span className="flex items-center gap-1">
                             <CheckCircle2 size={10} className="text-success" />
-                            Último: {fmtDate(s.lastSentAt)}
+                            {t('lastSent')}: {fmtDate(s.lastSentAt)}
                           </span>
                         )}
-                        <span>Creado por: {s.createdBy}</span>
+                        <span>{t('createdBy')}: {s.createdBy}</span>
                       </div>
                     </div>
 
@@ -271,7 +275,7 @@ export default function ReportingPage() {
                         onClick={() => handleSendNow(s)}
                         disabled={sending === s.id}
                       >
-                        <Send size={12} />{sending === s.id ? 'Generando...' : 'Enviar ahora'}
+                        <Send size={12} />{sending === s.id ? t('generating') : t('sendNow')}
                       </Button>
                       <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => handleToggle(s)}>
                         {s.enabled ? <Pause size={14} /> : <Play size={14} />}
@@ -295,18 +299,18 @@ export default function ReportingPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editSchedule ? 'Editar Programación' : 'Nueva Programación'}</DialogTitle>
-            <DialogDescription>Configura el envío automático de informes</DialogDescription>
+            <DialogTitle>{editSchedule ? t('dialogEditTitle') : t('dialogCreateTitle')}</DialogTitle>
+            <DialogDescription>{t('dialogDescription')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Nombre *</label>
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Ej: Board Pack mensual Consejo" />
+              <label className="text-xs text-muted-foreground block mb-1">{t('fieldName')} *</label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder={t('fieldNamePlaceholder')} />
             </div>
 
             {!editSchedule && (
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Tipo de Informe *</label>
+                <label className="text-xs text-muted-foreground block mb-1">{t('fieldReportType')} *</label>
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(REPORT_TYPES).map(([key, cfg]) => (
                     <button
@@ -323,7 +327,7 @@ export default function ReportingPage() {
             )}
 
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Frecuencia *</label>
+              <label className="text-xs text-muted-foreground block mb-1">{t('fieldFrequency')} *</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {Object.entries(FREQUENCIES).map(([key, cfg]) => (
                   <button
@@ -339,7 +343,7 @@ export default function ReportingPage() {
             </div>
 
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Destinatarios * <span className="text-[10px]">(separados por comas)</span></label>
+              <label className="text-xs text-muted-foreground block mb-1">{t('fieldRecipients')} * <span className="text-[10px]">({t('fieldRecipientsHint')})</span></label>
               <Input
                 value={formRecipients}
                 onChange={e => setFormRecipients(e.target.value)}
@@ -348,9 +352,9 @@ export default function ReportingPage() {
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t('cancel')}</Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Guardando...' : editSchedule ? 'Guardar Cambios' : 'Crear Programación'}
+              {saving ? t('saving') : editSchedule ? t('saveChanges') : t('createSchedule')}
             </Button>
           </div>
         </DialogContent>
@@ -360,14 +364,14 @@ export default function ReportingPage() {
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Eliminar Programación</DialogTitle>
+            <DialogTitle>{t('deleteDialogTitle')}</DialogTitle>
             <DialogDescription>
-              ¿Eliminar "{deleteConfirm?.name}"? Los destinatarios dejarán de recibir este informe.
+              {t('deleteDialogDesc', { name: deleteConfirm?.name || '' })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleDelete}>Eliminar</Button>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>{t('cancel')}</Button>
+            <Button variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
           </div>
         </DialogContent>
       </Dialog>

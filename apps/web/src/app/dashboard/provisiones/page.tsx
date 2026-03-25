@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, fmtPct, riskLabel, riskVariant } from '@/lib/utils'
@@ -8,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Save } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
-import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { SkeletonProvisiones } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
+import { useTranslations } from 'next-intl'
 
 const RISK_ORDER = ['VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 
@@ -22,6 +24,7 @@ function cellBg(rate: number): string {
 }
 
 export default function ProvisionesPage() {
+  const t = useTranslations('provisiones')
   const [data, setData] = useState<any>(null)
   const [snapshots, setSnapshots] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,13 +62,15 @@ export default function ProvisionesPage() {
     finally { setSaving(false) }
   }
 
-  if (loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonProvisiones />
 
   if (!data || data.customerCount === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Provisión de Insolvencia" subtitle="Modelo NIIF 9 · Pérdida Crediticia Esperada (ECL)" lastUpdated={lastUpdated} onRefresh={refresh} />
-        <Card><CardContent className="py-16 text-center text-muted-foreground">No hay facturas pendientes de cobro para calcular provisiones.</CardContent></Card>
+        <PageHeader title={t('title')} subtitle={t('subtitle')} lastUpdated={lastUpdated} onRefresh={refresh} />
+        <Card><CardContent className="py-16 text-center text-muted-foreground">{t('noInvoices')}</CardContent></Card>
       </div>
     )
   }
@@ -105,14 +110,14 @@ export default function ProvisionesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Provisión de Insolvencia"
-        subtitle="Modelo NIIF 9 · Pérdida Crediticia Esperada (ECL)"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
           <Button variant="outline" size="sm" onClick={saveSnapshot} disabled={saving}>
             <Save size={14} className="mr-1" />
-            {saving ? 'Guardando…' : 'Guardar Snapshot'}
+            {saving ? t('saving') : t('saveSnapshot')}
           </Button>
         }
       />
@@ -120,10 +125,10 @@ export default function ProvisionesPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Exposición Total', value: fmtEur(data.totalExposure), color: '' },
-          { label: 'Provisión NIIF 9', value: fmtEur(data.totalProvision), color: 'text-warning' },
-          { label: 'Cobertura ECL', value: fmtPct(data.coverageRate), color: 'text-primary' },
-          { label: 'Clientes en Riesgo', value: String(data.customersAtRisk), color: data.customersAtRisk > 0 ? 'text-destructive' : 'text-success' },
+          { label: t('totalExposure'), value: fmtEur(data.totalExposure), color: '' },
+          { label: t('provisionNiif9'), value: fmtEur(data.totalProvision), color: 'text-warning' },
+          { label: t('eclCoverage'), value: fmtPct(data.coverageRate), color: 'text-primary' },
+          { label: t('customersAtRisk'), value: String(data.customersAtRisk), color: data.customersAtRisk > 0 ? 'text-destructive' : 'text-success' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -134,16 +139,16 @@ export default function ProvisionesPage() {
 
       {/* Provision Matrix */}
       <Card>
-        <CardHeader><CardTitle>Matriz de Provisión NIIF 9</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('provisionMatrix')}</CardTitle></CardHeader>
         <ScrollableTable>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Antigüedad</th>
+                <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{t('aging')}</th>
                 {RISK_ORDER.map(r => (
                   <th key={r} className="text-center p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{riskLabel(r)}</th>
                 ))}
-                <th className="text-center p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider bg-muted/50">Total</th>
+                <th className="text-center p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider bg-muted/50">{t('total')}</th>
               </tr>
             </thead>
             <tbody>
@@ -174,7 +179,7 @@ export default function ProvisionesPage() {
               ))}
               {/* Column totals */}
               <tr className="border-t-2 border-border bg-muted/50 font-semibold">
-                <td className="p-3 text-xs">TOTAL</td>
+                <td className="p-3 text-xs">{t('total')}</td>
                 {colTotals.map((ct, i) => (
                   <td key={i} className="p-3 text-center">
                     <div className="font-mono text-xs">{fmtEur(ct.exposure)}</div>
@@ -194,7 +199,7 @@ export default function ProvisionesPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader><CardTitle>Distribución por Antigüedad</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('distributionByAging')}</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartData}>
@@ -202,10 +207,12 @@ export default function ProvisionesPage() {
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                 <Tooltip
-                  formatter={(v: any, name: string) => [fmtEur(v), name === 'exposicion' ? 'Exposición' : 'Provisión']}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: any, name: string) => [fmtEur(v), name === 'exposicion' ? t('exposureLabel') : t('provisionLabel')]}
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                 />
-                <Legend formatter={(value: string) => value === 'exposicion' ? 'Exposición' : 'Provisión ECL'} />
+                <Legend formatter={(value: string) => value === 'exposicion' ? t('exposureLabel') : t('provisionEclLabel')} />
                 <Bar dataKey="exposicion" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="provision" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -214,7 +221,7 @@ export default function ProvisionesPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Evolución de Provisión</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('provisionEvolution')}</CardTitle></CardHeader>
           <CardContent>
             {snapshotChart.length > 1 ? (
               <ResponsiveContainer width="100%" height={280}>
@@ -223,17 +230,19 @@ export default function ProvisionesPage() {
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                   <Tooltip
-                    formatter={(v: any, name: string) => [fmtEur(v), name === 'provision' ? 'Provisión' : 'Exposición']}
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                    formatter={(v: any, name: string) => [fmtEur(v), name === 'provision' ? t('provisionLabel') : t('exposureLabel')]}
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                   />
-                  <Legend formatter={(value: string) => value === 'provision' ? 'Provisión ECL' : 'Exposición'} />
+                  <Legend formatter={(value: string) => value === 'provision' ? t('provisionEclLabel') : t('exposureLabel')} />
                   <Line type="monotone" dataKey="provision" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="exposicion" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-[280px] text-sm text-muted-foreground">
-                Guarda snapshots periódicos para ver la evolución temporal de la provisión.
+                {t('snapshotHint')}
               </div>
             )}
           </CardContent>
@@ -242,12 +251,12 @@ export default function ProvisionesPage() {
 
       {/* Detail Table */}
       <Card>
-        <CardHeader><CardTitle>Provisión por Cliente</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('provisionByClient')}</CardTitle></CardHeader>
         <ScrollableTable>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {['Cliente', 'Score', 'Riesgo', 'Exposición', 'Provisión', 'Cobertura', 'Al corriente', 'Vencida'].map(h => (
+                {[t('colClient'), t('colScore'), t('colRisk'), t('colExposure'), t('colProvision'), t('colCoverage'), t('colCurrent'), t('colOverdue')].map(h => (
                   <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -292,7 +301,7 @@ export default function ProvisionesPage() {
               <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
             ))}
             <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>&#8594;</Button>
-            <span className="text-xs text-muted-foreground ml-2">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, details.length)} de {details.length}</span>
+            <span className="text-xs text-muted-foreground ml-2">{t('pagination', { from: page * pageSize + 1, to: Math.min((page + 1) * pageSize, details.length), total: details.length })}</span>
           </div>
         )}
       </Card>

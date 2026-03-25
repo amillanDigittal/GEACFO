@@ -1,6 +1,8 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import { api } from '@/lib/api'
+import { useNotifications, useResolutions, usePredictive } from '@/hooks/use-api'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { exportCSV } from '@/lib/utils'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -14,29 +16,7 @@ import {
   Bell, BellOff, Search, Download, Filter, CheckCircle2, Clock, Eye,
   AlertTriangle, XCircle, ExternalLink, MessageSquare, ChevronDown,
 } from 'lucide-react'
-
-const SEVERITY_CONFIG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'secondary'; color: string }> = {
-  critical: { label: 'Crítica', variant: 'destructive', color: 'text-destructive' },
-  warning: { label: 'Advertencia', variant: 'warning', color: 'text-warning' },
-  info: { label: 'Info', variant: 'secondary', color: 'text-muted-foreground' },
-}
-
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; variant: 'destructive' | 'warning' | 'success' | 'secondary' | 'default' }> = {
-  OPEN: { label: 'Pendiente', icon: <Bell size={12} />, variant: 'destructive' },
-  INVESTIGATING: { label: 'Investigando', icon: <Eye size={12} />, variant: 'warning' },
-  RESOLVED: { label: 'Resuelta', icon: <CheckCircle2 size={12} />, variant: 'success' },
-  FALSE_POSITIVE: { label: 'Falso positivo', icon: <XCircle size={12} />, variant: 'secondary' },
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  forecast: 'Forecast',
-  cobros: 'Cobros',
-  pagos: 'Pagos',
-  deuda: 'Deuda',
-  scoring: 'Scoring',
-  inventario: 'Inventario',
-  gobierno: 'Gobierno',
-}
+import { useTranslations } from 'next-intl'
 
 const PAGE_SIZE = 10
 
@@ -61,9 +41,42 @@ interface Resolution {
 }
 
 export default function NotificacionesPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [resolutions, setResolutions] = useState<Resolution[]>([])
-  const [loading, setLoading] = useState(true)
+  const t = useTranslations('notificaciones')
+
+  const SEVERITY_CONFIG: Record<string, { label: string; variant: 'destructive' | 'warning' | 'secondary'; color: string }> = {
+    critical: { label: t('severityCritical'), variant: 'destructive', color: 'text-destructive' },
+    warning: { label: t('severityWarning'), variant: 'warning', color: 'text-warning' },
+    info: { label: t('severityInfo'), variant: 'secondary', color: 'text-muted-foreground' },
+  }
+
+  const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; variant: 'destructive' | 'warning' | 'success' | 'secondary' | 'default' }> = {
+    OPEN: { label: t('statusOpen'), icon: <Bell size={12} />, variant: 'destructive' },
+    INVESTIGATING: { label: t('statusInvestigating'), icon: <Eye size={12} />, variant: 'warning' },
+    RESOLVED: { label: t('statusResolved'), icon: <CheckCircle2 size={12} />, variant: 'success' },
+    FALSE_POSITIVE: { label: t('statusFalsePositive'), icon: <XCircle size={12} />, variant: 'secondary' },
+  }
+
+  const TYPE_LABELS: Record<string, string> = {
+    forecast: 'Forecast',
+    cobros: t('typeCobros'),
+    pagos: t('typePagos'),
+    deuda: t('typeDeuda'),
+    scoring: 'Scoring',
+    inventario: t('typeInventario'),
+    gobierno: t('typeGobierno'),
+  }
+
+  const { data: rawNotifications, error: nError, isLoading: nLoading, mutate: mutateNotifications } = useNotifications()
+  const { data: rawResolutions, error: rError, isLoading: rLoading, mutate: mutateResolutions } = useResolutions()
+  const { data: rawPredictive, error: pError, isLoading: pLoading, mutate: mutatePredictive } = usePredictive()
+
+  const notifications: Notification[] = rawNotifications ?? []
+  const resolutions: Resolution[] = rawResolutions ?? []
+  const predictive: any[] = rawPredictive?.alerts ?? []
+
+  const loading = nLoading || rLoading || pLoading
+  const lastUpdated = (!loading && (rawNotifications || rawResolutions || rawPredictive)) ? new Date() : null
+
   const [search, setSearch] = useState('')
   const [filterSeverity, setFilterSeverity] = useState<string>('ALL')
   const [filterType, setFilterType] = useState<string>('ALL')
@@ -72,27 +85,18 @@ export default function NotificacionesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [noteInput, setNoteInput] = useState('')
   const [updating, setUpdating] = useState<string | null>(null)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { toast } = useToast()
   const router = useRouter()
 
-  const [predictive, setPredictive] = useState<any[]>([])
+  const loadData = () => {
+    mutateNotifications()
+    mutateResolutions()
+    mutatePredictive()
+  }
 
-  const loadData = useCallback(() => {
-    Promise.all([api.alerts.notifications(), api.alerts.resolutions(), api.alerts.predictive().catch(() => ({ alerts: [] }))])
-      .then(([notifs, res, pred]) => {
-        setNotifications(notifs)
-        setResolutions(res)
-        setPredictive(pred.alerts || [])
-        setLastUpdated(new Date())
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+  const hydrated = useHydrated()
 
-  useEffect(() => { loadData() }, [loadData])
-
-  if (loading) return <SkeletonKPIsAndTable cols={5} rows={8} />
+  if (!hydrated || loading) return <SkeletonKPIsAndTable cols={5} rows={8} />
 
   // Build resolution map
   const resMap = new Map<string, Resolution>()
@@ -131,10 +135,10 @@ export default function NotificacionesPage() {
     setUpdating(alertId)
     try {
       await api.alerts.updateResolution(alertId, newStatus, noteInput || undefined)
-      toast({ title: 'Estado actualizado', description: `Alerta marcada como "${STATUS_CONFIG[newStatus]?.label || newStatus}"` })
+      toast({ title: t('statusUpdated'), description: t('alertMarkedAs', { status: STATUS_CONFIG[newStatus]?.label || newStatus }) })
       setNoteInput('')
       setExpandedId(null)
-      loadData()
+      mutateResolutions()
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' })
     } finally {
@@ -148,12 +152,12 @@ export default function NotificacionesPage() {
     const diffMs = now.getTime() - date.getTime()
     const diffMin = Math.floor(diffMs / 60000)
     if (diffMin < 0) return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
-    if (diffMin < 1) return 'Ahora'
-    if (diffMin < 60) return `Hace ${diffMin}m`
+    if (diffMin < 1) return t('timeNow')
+    if (diffMin < 60) return t('timeMinutesAgo', { minutes: diffMin })
     const diffH = Math.floor(diffMin / 60)
-    if (diffH < 24) return `Hace ${diffH}h`
+    if (diffH < 24) return t('timeHoursAgo', { hours: diffH })
     const diffD = Math.floor(diffH / 24)
-    if (diffD < 7) return `Hace ${diffD}d`
+    if (diffD < 7) return t('timeDaysAgo', { days: diffD })
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
@@ -161,25 +165,25 @@ export default function NotificacionesPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Centro de Notificaciones"
-        subtitle={`Historial de alertas del sistema · ${notifications.length} alertas totales`}
+        title={t('title')}
+        subtitle={t('subtitle', { count: notifications.length })}
         lastUpdated={lastUpdated}
         onRefresh={loadData}
         actions={
           <Button variant="outline" size="sm" onClick={() => exportCSV('alertas',
-            ['Título', 'Tipo', 'Severidad', 'Estado', 'Descripción', 'Fecha'],
+            [t('csvTitle'), t('csvType'), t('csvSeverity'), t('csvStatus'), t('csvDescription'), t('csvDate')],
             notifications.map(n => [n.title, TYPE_LABELS[n.type] || n.type, n.severity, getStatus(n.id), n.description, new Date(n.timestamp).toLocaleDateString('es-ES')])
-          )}><Download size={14} className="mr-1" />Exportar</Button>
+          )}><Download size={14} className="mr-1" />{t('export')}</Button>
         }
       />
 
       {/* KPI summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Pendientes', value: totalOpen, icon: <Bell size={16} />, color: totalOpen > 0 ? 'text-destructive' : 'text-success' },
-          { label: 'Investigando', value: totalInvestigating, icon: <Eye size={16} />, color: totalInvestigating > 0 ? 'text-warning' : 'text-foreground' },
-          { label: 'Resueltas', value: totalResolved, icon: <CheckCircle2 size={16} />, color: 'text-success' },
-          { label: 'Críticas Abiertas', value: criticalCount, icon: <AlertTriangle size={16} />, color: criticalCount > 0 ? 'text-destructive' : 'text-success' },
+          { label: t('kpiPending'), value: totalOpen, icon: <Bell size={16} />, color: totalOpen > 0 ? 'text-destructive' : 'text-success' },
+          { label: t('kpiInvestigating'), value: totalInvestigating, icon: <Eye size={16} />, color: totalInvestigating > 0 ? 'text-warning' : 'text-foreground' },
+          { label: t('kpiResolved'), value: totalResolved, icon: <CheckCircle2 size={16} />, color: 'text-success' },
+          { label: t('kpiCriticalOpen'), value: criticalCount, icon: <AlertTriangle size={16} />, color: criticalCount > 0 ? 'text-destructive' : 'text-success' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="flex items-center justify-center gap-1.5 mb-2">
@@ -197,8 +201,8 @@ export default function NotificacionesPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <span className="text-lg">🔮</span>
-              <CardTitle>Alertas Predictivas</CardTitle>
-              <Badge variant="secondary" className="text-[10px]">{predictive.length} predicciones</Badge>
+              <CardTitle>{t('predictiveAlerts')}</CardTitle>
+              <Badge variant="secondary" className="text-[10px]">{t('predictionsCount', { count: predictive.length })}</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -216,10 +220,10 @@ export default function NotificacionesPage() {
                         {p.weeksAhead && (
                           <Badge variant="outline" className="text-[10px] gap-1">
                             <Clock size={10} />
-                            {p.weeksAhead}sem
+                            {t('weeksAhead', { weeks: p.weeksAhead })}
                           </Badge>
                         )}
-                        <Badge variant="outline" className="text-[10px] font-mono">{p.confidence}% confianza</Badge>
+                        <Badge variant="outline" className="text-[10px] font-mono">{t('confidence', { percent: p.confidence })}</Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">{p.description}</p>
                       <p className="text-xs text-primary mt-1 font-medium">📊 {p.prediction}</p>
@@ -227,21 +231,21 @@ export default function NotificacionesPage() {
                       {p.threshold > 0 && (
                         <div className="mt-2 space-y-1">
                           <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-muted-foreground w-14">Actual</span>
+                            <span className="text-muted-foreground w-14">{t('metricCurrent')}</span>
                             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                               <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(pctBar, 100)}%` }} />
                             </div>
                             <span className="font-mono w-16 text-right">{typeof p.currentValue === 'number' && p.currentValue > 1000 ? `${(p.currentValue / 1000).toFixed(0)}k` : p.currentValue}</span>
                           </div>
                           <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-muted-foreground w-14">Proyectado</span>
+                            <span className="text-muted-foreground w-14">{t('metricProjected')}</span>
                             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                               <div className={`h-full rounded-full transition-all ${projBar > 100 ? 'bg-destructive' : 'bg-warning'}`} style={{ width: `${Math.min(projBar, 100)}%` }} />
                             </div>
                             <span className="font-mono w-16 text-right">{typeof p.projectedValue === 'number' && Math.abs(p.projectedValue) > 1000 ? `${(p.projectedValue / 1000).toFixed(0)}k` : p.projectedValue}</span>
                           </div>
                           <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-muted-foreground w-14">Umbral</span>
+                            <span className="text-muted-foreground w-14">{t('metricThreshold')}</span>
                             <div className="flex-1 h-px bg-destructive/50 relative">
                               <div className="absolute -top-1 right-0 w-1.5 h-1.5 rounded-full bg-destructive" />
                             </div>
@@ -271,7 +275,7 @@ export default function NotificacionesPage() {
               <Input
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0) }}
-                placeholder="Buscar alertas..."
+                placeholder={t('searchPlaceholder')}
                 className="pl-8 h-8 text-xs"
               />
             </div>
@@ -285,7 +289,7 @@ export default function NotificacionesPage() {
                   onClick={() => { setFilterSeverity(s); setPage(0) }}
                   className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${filterSeverity === s ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
-                  {s === 'ALL' ? 'Todas' : SEVERITY_CONFIG[s]?.label}
+                  {s === 'ALL' ? t('filterAll') : SEVERITY_CONFIG[s]?.label}
                 </button>
               ))}
             </div>
@@ -296,8 +300,8 @@ export default function NotificacionesPage() {
               onChange={e => { setFilterType(e.target.value); setPage(0) }}
               className="h-8 rounded-md border border-border bg-background px-2 text-xs"
             >
-              <option value="ALL">Todos los tipos</option>
-              {types.map(t => <option key={t} value={t}>{TYPE_LABELS[t] || t}</option>)}
+              <option value="ALL">{t('filterAllTypes')}</option>
+              {types.map(tp => <option key={tp} value={tp}>{TYPE_LABELS[tp] || tp}</option>)}
             </select>
 
             {/* Status filter */}
@@ -306,11 +310,11 @@ export default function NotificacionesPage() {
               onChange={e => { setFilterStatus(e.target.value); setPage(0) }}
               className="h-8 rounded-md border border-border bg-background px-2 text-xs"
             >
-              <option value="ALL">Todos los estados</option>
+              <option value="ALL">{t('filterAllStatuses')}</option>
               {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
 
-            <span className="text-xs text-muted-foreground ml-auto">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-muted-foreground ml-auto">{t('resultsCount', { count: filtered.length })}</span>
           </div>
         </CardContent>
       </Card>
@@ -321,7 +325,7 @@ export default function NotificacionesPage() {
           <Card>
             <CardContent className="py-12 text-center">
               <BellOff size={32} className="mx-auto text-muted-foreground mb-3" />
-              <div className="text-sm text-muted-foreground">No se encontraron alertas con los filtros aplicados</div>
+              <div className="text-sm text-muted-foreground">{t('noAlertsFound')}</div>
             </CardContent>
           </Card>
         )}
@@ -380,7 +384,7 @@ export default function NotificacionesPage() {
                 {isExpanded && (
                   <div className="mt-3 pt-3 border-t border-border space-y-3">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-muted-foreground">Cambiar estado:</span>
+                      <span className="text-xs text-muted-foreground">{t('changeStatus')}:</span>
                       {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
                         <Button
                           key={key}
@@ -398,7 +402,7 @@ export default function NotificacionesPage() {
                       <Input
                         value={noteInput}
                         onChange={e => setNoteInput(e.target.value)}
-                        placeholder="Añadir nota..."
+                        placeholder={t('addNotePlaceholder')}
                         className="h-8 text-xs flex-1"
                         onKeyDown={e => {
                           if (e.key === 'Enter' && noteInput.trim()) {
@@ -408,15 +412,15 @@ export default function NotificacionesPage() {
                       />
                       {noteInput.trim() && (
                         <Button size="sm" className="h-8 text-xs" onClick={() => handleStatusChange(n.id, status)} disabled={updating === n.id}>
-                          Guardar nota
+                          {t('saveNote')}
                         </Button>
                       )}
                     </div>
                     {resolution && (
                       <div className="text-[10px] text-muted-foreground space-y-0.5">
-                        {resolution.resolvedBy && <div>Resuelta por: {resolution.resolvedBy}</div>}
-                        {resolution.resolvedAt && <div>Fecha resolución: {new Date(resolution.resolvedAt).toLocaleString('es-ES')}</div>}
-                        <div>Última actualización: {new Date(resolution.updatedAt).toLocaleString('es-ES')}</div>
+                        {resolution.resolvedBy && <div>{t('resolvedBy')}: {resolution.resolvedBy}</div>}
+                        {resolution.resolvedAt && <div>{t('resolutionDate')}: {new Date(resolution.resolvedAt).toLocaleString('es-ES')}</div>}
+                        <div>{t('lastUpdate')}: {new Date(resolution.updatedAt).toLocaleString('es-ES')}</div>
                       </div>
                     )}
                   </div>
@@ -443,7 +447,7 @@ export default function NotificacionesPage() {
             ))}
           </div>
           <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>→</Button>
-          <span className="text-xs text-muted-foreground ml-2">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}</span>
+          <span className="text-xs text-muted-foreground ml-2">{t('paginationInfo', { from: page * PAGE_SIZE + 1, to: Math.min((page + 1) * PAGE_SIZE, filtered.length), total: filtered.length })}</span>
         </div>
       )}
     </div>

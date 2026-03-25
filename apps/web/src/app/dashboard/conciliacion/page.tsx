@@ -1,6 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
+import { useHydrated } from '@/hooks/use-hydrated'
+import { useAccounts, useReconciliation, useAutoMatch } from '@/hooks/use-api'
 import { fmtEur, fmt, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,64 +12,38 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Download, ClipboardList, Link2, CheckCircle2, Search, X, Zap, ArrowDownToLine, ArrowUpFromLine, Check, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
-import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { ScrollableTable, Th } from '@/components/ui/scrollable-table'
+import { VirtualTableBody } from '@/components/ui/virtual-table'
+import { exportXLSX } from '@/lib/export-xlsx'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonConciliacion } from '@/components/ui/skeleton-page'
 
 const bankColors: Record<string, string> = {
-  BBVA: 'hsl(210 80% 50%)',
-  Santander: 'hsl(0 70% 50%)',
-  CaixaBank: 'hsl(200 60% 45%)',
-  Sabadell: 'hsl(220 50% 55%)',
+  BBVA: 'hsl(var(--bank-bbva))',
+  Santander: 'hsl(var(--bank-santander))',
+  CaixaBank: 'hsl(var(--bank-caixabank))',
+  Sabadell: 'hsl(var(--bank-sabadell))',
 }
 
 export default function ConciliacionPage() {
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [reconciliations, setReconciliations] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const t = useTranslations('conciliacion')
+  const { data: accounts = [], isLoading: accountsLoading, mutate: mutateAccounts } = useAccounts()
+  const { data: reconciliations = [], isLoading: reconciliationsLoading, mutate: mutateReconciliation } = useReconciliation()
+  const { data: autoMatches, isLoading: matchLoading, mutate: mutateAutoMatch } = useAutoMatch()
+  const loading = accountsLoading || reconciliationsLoading
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [reconciling, setReconciling] = useState(false)
-  const [movPage, setMovPage] = useState(0)
-  const [recPage, setRecPage] = useState(0)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [searchCounterparty, setSearchCounterparty] = useState('')
-  const PAGE_SIZE = 10
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [autoMatches, setAutoMatches] = useState<any>(null)
-  const [matchLoading, setMatchLoading] = useState(false)
   const [acceptedMatches, setAcceptedMatches] = useState<Set<string>>(new Set())
   const [dismissedMatches, setDismissedMatches] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
-  const loadData = () => {
-    Promise.all([
-      api.treasury.accounts(),
-      api.treasury.reconciliation(),
-    ])
-      .then(([acc, rec]) => { setAccounts(acc); setReconciliations(rec) })
-      .catch(console.error)
-      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
-  }
-
-  const loadAutoMatches = () => {
-    setMatchLoading(true)
-    api.treasury.autoMatch()
-      .then(setAutoMatches)
-      .catch(console.error)
-      .finally(() => setMatchLoading(false))
-  }
-
-  useEffect(() => { loadData(); loadAutoMatches() }, [])
-
   async function refresh() {
     try {
-      const [acc, rec] = await Promise.all([
-        api.treasury.accounts(),
-        api.treasury.reconciliation(),
-      ])
-      setAccounts(acc)
-      setReconciliations(rec)
+      await Promise.all([mutateAccounts(), mutateReconciliation()])
     } catch (err) { console.error(err) }
     finally { setLastUpdated(new Date()) }
   }
@@ -96,18 +74,24 @@ export default function ConciliacionPage() {
       } else {
         await api.treasury.reconcileBatch(ids)
       }
-      toast({ title: 'Conciliación actualizada', description: `${ids.length} movimiento${ids.length > 1 ? 's' : ''} actualizado${ids.length > 1 ? 's' : ''}` })
+      toast({ title: t('toastReconciliationUpdated'), description: t('toastMovementsUpdated', { count: ids.length }) })
       setSelected(new Set())
-      setLoading(true)
-      loadData()
+      await Promise.all([mutateAccounts(), mutateReconciliation()])
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastError'), description: err.message, variant: 'destructive' })
     } finally {
       setReconciling(false)
     }
   }
 
-  if (loading) return <SkeletonConciliacion />
+  useKeyboardShortcuts([
+    { key: 'm', label: t('shortcutAutoMatch'), action: () => { mutateAutoMatch() } },
+    { key: 'r', label: t('shortcutRefresh'), action: refresh },
+  ])
+
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonConciliacion />
 
   const totalBalance = accounts.reduce((s, a) => s + Number(a.balance), 0)
   const totalMovements = accounts.reduce((s, a) => s + (a.movements?.length || 0), 0)
@@ -132,28 +116,31 @@ export default function ConciliacionPage() {
   })
 
   const hasActiveFilters = dateFrom || dateTo || searchCounterparty
-  const clearFilters = () => { setDateFrom(''); setDateTo(''); setSearchCounterparty(''); setMovPage(0) }
+  const clearFilters = () => { setDateFrom(''); setDateTo(''); setSearchCounterparty('');  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Conciliación Bancaria"
-        subtitle={`Grupo Ibérico SA · ${accounts.length} cuentas · Marzo 2026`}
+        title={t('title')}
+        subtitle={t('subtitle', { count: accounts.length })}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
-          <Button variant="outline" size="sm" onClick={() => exportCSV('conciliacion_movimientos', ['Fecha', 'Cuenta', 'Concepto', 'Contraparte', 'Importe', 'Saldo', 'Conciliado'], allMovements.map((m: any) => [m.date?.slice(0, 10), m.accountAlias, m.concept, m.counterparty || '', Number(m.amount), Number(m.balance), m.reconciled ? 'Sí' : 'No']))}><Download size={14} className="mr-1" />Exportar</Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('conciliacion_movimientos', [t('thDate'), t('thAccount'), t('thConcept'), t('thCounterparty'), t('thAmount'), t('thBalance'), t('thReconciled')], allMovements.map((m: any) => [m.date?.slice(0, 10), m.accountAlias, m.concept, m.counterparty || '', Number(m.amount), Number(m.balance), m.reconciled ? t('yes') : t('no')]))}><Download size={14} className="mr-1" />CSV</Button>
+            <Button variant="outline" size="sm" onClick={() => exportXLSX('conciliacion_movimientos', [t('thDate'), t('thAccount'), t('thConcept'), t('thCounterparty'), t('thAmount'), t('thBalance'), t('thReconciled')], allMovements.map((m: any) => [m.date?.slice(0, 10), m.accountAlias, m.concept, m.counterparty || '', Number(m.amount), Number(m.balance), m.reconciled ? t('yes') : t('no')]))}><Download size={14} className="mr-1" />Excel</Button>
+          </>
         }
       />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Saldo Total', value: fmtEur(totalBalance), color: 'text-foreground' },
-          { label: 'Cuentas Activas', value: `${accounts.length}`, color: 'text-foreground' },
-          { label: 'Movimientos', value: totalMovements > 0 ? `${totalMovements}` : 'Sin datos', color: totalMovements > 0 ? 'text-foreground' : 'text-muted-foreground' },
-          { label: 'Conciliaciones', value: reconciliations.length > 0 ? `${reconciledCount}/${reconciliations.length}` : 'Sin datos', color: reconciliations.length > 0 ? 'text-success' : 'text-muted-foreground' },
+          { label: t('kpiTotalBalance'), value: fmtEur(totalBalance), color: 'text-foreground' },
+          { label: t('kpiActiveAccounts'), value: `${accounts.length}`, color: 'text-foreground' },
+          { label: t('kpiMovements'), value: totalMovements > 0 ? `${totalMovements}` : t('noData'), color: totalMovements > 0 ? 'text-foreground' : 'text-muted-foreground' },
+          { label: t('kpiReconciliations'), value: reconciliations.length > 0 ? `${reconciledCount}/${reconciliations.length}` : t('noData'), color: reconciliations.length > 0 ? 'text-success' : 'text-muted-foreground' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -180,14 +167,14 @@ export default function ConciliacionPage() {
                       <div className="text-xs text-muted-foreground">{acc.bankName}</div>
                     </div>
                   </div>
-                  <Badge variant="success">Activa</Badge>
+                  <Badge variant="success">{t('badgeActive')}</Badge>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">Saldo</div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('labelBalance')}</div>
                     <div className="font-mono text-2xl font-bold">{fmtEur(Number(acc.balance))}</div>
-                    <div className="text-xs text-muted-foreground">{pct.toFixed(1)}% del total</div>
+                    <div className="text-xs text-muted-foreground">{t('ofTotal', { pct: pct.toFixed(1) })}</div>
                   </div>
 
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -200,17 +187,17 @@ export default function ConciliacionPage() {
                       <div className="font-mono text-[11px] text-foreground">{acc.iban}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-muted-foreground uppercase">Moneda</div>
+                      <div className="text-[10px] text-muted-foreground uppercase">{t('labelCurrency')}</div>
                       <div className="text-xs font-medium">{acc.currency}</div>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <div className="text-xs text-muted-foreground">
-                      {acc.movements?.length || 0} movimientos
+                      {t('movementsCount', { count: acc.movements?.length || 0 })}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {acc.syncedAt ? `Sync: ${fmtDate(acc.syncedAt)}` : 'Sin sincronizar'}
+                      {acc.syncedAt ? t('syncDate', { date: fmtDate(acc.syncedAt) }) : t('notSynced')}
                     </div>
                   </div>
                 </div>
@@ -222,7 +209,7 @@ export default function ConciliacionPage() {
 
       {/* Distribución */}
       <Card>
-        <CardHeader><CardTitle>Distribución de Saldos</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('balanceDistribution')}</CardTitle></CardHeader>
         <CardContent>
           <div className="space-y-3">
             {accounts
@@ -244,7 +231,7 @@ export default function ConciliacionPage() {
               })}
           </div>
           <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
-            <span className="text-sm font-semibold">Total Consolidado</span>
+            <span className="text-sm font-semibold">{t('totalConsolidated')}</span>
             <span className="font-mono text-lg font-bold">{fmtEur(totalBalance)}</span>
           </div>
         </CardContent>
@@ -256,24 +243,24 @@ export default function ConciliacionPage() {
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               <Zap size={16} className="text-primary" />
-              <CardTitle>Conciliación Automática</CardTitle>
-              {autoMatches && <Badge variant="secondary">{autoMatches.matches?.filter((m: any) => !dismissedMatches.has(m.movementId)).length || 0} sugerencias</Badge>}
+              <CardTitle>{t('autoReconciliation')}</CardTitle>
+              {autoMatches && <Badge variant="secondary">{t('suggestionsCount', { count: autoMatches.matches?.filter((m: any) => !dismissedMatches.has(m.movementId)).length || 0 })}</Badge>}
             </div>
-            <Button variant="outline" size="sm" onClick={loadAutoMatches} disabled={matchLoading}>
+            <Button variant="outline" size="sm" onClick={() => mutateAutoMatch()} disabled={matchLoading}>
               <Zap size={14} className={`mr-1 ${matchLoading ? 'animate-pulse' : ''}`} />
-              {matchLoading ? 'Analizando...' : 'Buscar coincidencias'}
+              {matchLoading ? t('analyzing') : t('findMatches')}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {!autoMatches ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">Pulsa "Buscar coincidencias" para analizar movimientos pendientes</div>
+            <div className="text-center py-8 text-sm text-muted-foreground">{t('findMatchesPrompt')}</div>
           ) : autoMatches.matches?.filter((m: any) => !dismissedMatches.has(m.movementId) && !acceptedMatches.has(m.movementId)).length === 0 ? (
             <div className="text-center py-8">
               <CheckCircle2 size={24} className="mx-auto text-success mb-2 opacity-50" />
               <div className="text-sm text-muted-foreground">
-                {acceptedMatches.size > 0 ? `${acceptedMatches.size} coincidencia${acceptedMatches.size > 1 ? 's' : ''} aceptada${acceptedMatches.size > 1 ? 's' : ''}. ` : ''}
-                {autoMatches.unmatched > 0 ? `${autoMatches.unmatched} movimiento${autoMatches.unmatched > 1 ? 's' : ''} sin coincidencia.` : 'Todos los movimientos tienen match o están conciliados.'}
+                {acceptedMatches.size > 0 ? t('matchesAccepted', { count: acceptedMatches.size }) + ' ' : ''}
+                {autoMatches.unmatched > 0 ? t('unmatchedMovements', { count: autoMatches.unmatched }) : t('allMovementsMatched')}
               </div>
             </div>
           ) : (
@@ -293,23 +280,23 @@ export default function ConciliacionPage() {
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         <Badge variant={match.invoiceType === 'AR' ? 'success' : 'destructive'} className="gap-1">
                           {match.invoiceType === 'AR' ? <ArrowDownToLine size={10} /> : <ArrowUpFromLine size={10} />}
-                          {match.invoiceType === 'AR' ? 'Cobro' : 'Pago'}
+                          {match.invoiceType === 'AR' ? t('collection') : t('payment')}
                         </Badge>
                         <span className="font-mono text-xs font-semibold">{match.invoiceNumber}</span>
-                        <span className="text-xs text-muted-foreground">→</span>
+                        <span className="text-xs text-muted-foreground">{'\u2192'}</span>
                         <span className="text-xs">{match.counterparty}</span>
                       </div>
 
                       {/* Side by side: movement vs invoice */}
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div className="p-2 rounded bg-card border border-border">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Movimiento Bancario</div>
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">{t('bankMovement')}</div>
                           <div className="font-mono font-semibold">{match.movement.amount >= 0 ? '+' : ''}{fmtEur(match.movement.amount)}</div>
                           <div className="text-muted-foreground truncate">{match.movement.concept}</div>
                           <div className="text-muted-foreground">{match.movement.account} · {fmtDate(match.movement.date)}</div>
                         </div>
                         <div className="p-2 rounded bg-card border border-border">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Factura {match.invoiceType}</div>
+                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">{t('invoice', { type: match.invoiceType })}</div>
                           <div className="font-mono font-semibold">{fmtEur(match.invoiceAmount)}</div>
                           <div className="text-muted-foreground">{match.invoiceNumber}</div>
                           <div className="text-muted-foreground">{match.counterparty}</div>
@@ -333,12 +320,12 @@ export default function ConciliacionPage() {
                           try {
                             await api.treasury.reconcileMovement(match.movementId)
                             setAcceptedMatches(prev => new Set(prev).add(match.movementId))
-                            toast({ title: 'Conciliado', description: `${match.invoiceNumber} ↔ ${match.movement.concept}` })
-                            loadData()
-                          } catch (err: any) { toast({ title: 'Error', description: err.message, variant: 'destructive' }) }
+                            toast({ title: t('toastReconciled'), description: `${match.invoiceNumber} \u2194 ${match.movement.concept}` })
+                            await Promise.all([mutateAccounts(), mutateReconciliation()])
+                          } catch (err: any) { toast({ title: t('toastError'), description: err.message, variant: 'destructive' }) }
                         }}
                       >
-                        <Check size={12} />Aceptar
+                        <Check size={12} />{t('accept')}
                       </Button>
                       <Button
                         variant="ghost"
@@ -346,7 +333,7 @@ export default function ConciliacionPage() {
                         className="h-8 text-xs gap-1 text-muted-foreground"
                         onClick={() => setDismissedMatches(prev => new Set(prev).add(match.movementId))}
                       >
-                        <XCircle size={12} />Descartar
+                        <XCircle size={12} />{t('dismiss')}
                       </Button>
                     </div>
                   </div>
@@ -354,7 +341,7 @@ export default function ConciliacionPage() {
               ))}
               {autoMatches.unmatched > 0 && (
                 <div className="text-xs text-muted-foreground text-center pt-2">
-                  {autoMatches.unmatched} movimiento{autoMatches.unmatched > 1 ? 's' : ''} pendiente{autoMatches.unmatched > 1 ? 's' : ''} sin coincidencia automática
+                  {t('pendingWithoutAutoMatch', { count: autoMatches.unmatched })}
                 </div>
               )}
             </div>
@@ -366,17 +353,17 @@ export default function ConciliacionPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between w-full">
-            <CardTitle>Movimientos Recientes</CardTitle>
+            <CardTitle>{t('recentMovements')}</CardTitle>
             <div className="flex items-center gap-2">
               {selected.size > 0 && (
                 <Button size="sm" onClick={() => handleReconcile([...selected])} disabled={reconciling}>
                   <CheckCircle2 size={14} className="mr-1" />
-                  {reconciling ? 'Procesando...' : `Conciliar (${selected.size})`}
+                  {reconciling ? t('processing') : t('reconcileSelected', { count: selected.size })}
                 </Button>
               )}
               {allMovements.length > 0 && (
                 <Badge variant="secondary">
-                  {hasActiveFilters ? `${filteredMovements.length} de ${allMovements.length}` : allMovements.length} movimientos
+                  {hasActiveFilters ? t('filteredMovements', { filtered: filteredMovements.length, total: allMovements.length }) : t('movementsCount', { count: allMovements.length })}
                 </Badge>
               )}
             </div>
@@ -387,38 +374,38 @@ export default function ConciliacionPage() {
           {allMovements.length > 0 && (
             <div className="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-border">
               <div className="flex-1 min-w-[200px]">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">Buscar contraparte / concepto</label>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">{t('searchCounterpartyConcept')}</label>
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Ej: Aceros, nómina, transferencia..."
+                    placeholder={t('searchPlaceholder')}
                     value={searchCounterparty}
-                    onChange={e => { setSearchCounterparty(e.target.value); setMovPage(0) }}
+                    onChange={e => { setSearchCounterparty(e.target.value);  }}
                     className="pl-9 h-9 text-sm bg-muted border-border"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">Desde</label>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">{t('filterFrom')}</label>
                 <Input
                   type="date"
                   value={dateFrom}
-                  onChange={e => { setDateFrom(e.target.value); setMovPage(0) }}
+                  onChange={e => { setDateFrom(e.target.value);  }}
                   className="h-9 text-sm bg-muted border-border w-[150px]"
                 />
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">Hasta</label>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">{t('filterTo')}</label>
                 <Input
                   type="date"
                   value={dateTo}
-                  onChange={e => { setDateTo(e.target.value); setMovPage(0) }}
+                  onChange={e => { setDateTo(e.target.value);  }}
                   className="h-9 text-sm bg-muted border-border w-[150px]"
                 />
               </div>
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-xs text-muted-foreground">
-                  <X size={14} className="mr-1" />Limpiar
+                  <X size={14} className="mr-1" />{t('clearFilters')}
                 </Button>
               )}
             </div>
@@ -427,87 +414,66 @@ export default function ConciliacionPage() {
           {allMovements.length === 0 ? (
             <div className="text-center py-12">
               <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
-              <div className="text-sm text-muted-foreground">No hay movimientos bancarios registrados</div>
-              <div className="text-xs text-muted-foreground mt-1">Los movimientos aparecerán aquí cuando se sincronicen las cuentas bancarias</div>
+              <div className="text-sm text-muted-foreground">{t('noMovements')}</div>
+              <div className="text-xs text-muted-foreground mt-1">{t('noMovementsHint')}</div>
             </div>
           ) : (
             <>
-            <ScrollableTable>
+            <ScrollableTable label={t('bankMovementsLabel')}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="p-3 w-8">
+                    <th scope="col" className="p-3 w-8">
                       <input
                         type="checkbox"
-                        aria-label="Seleccionar todos los movimientos no conciliados"
+                        aria-label={t('selectAllUnreconciled')}
                         className="rounded border-border"
                         checked={filteredMovements.filter((m: any) => !m.reconciled).length > 0 && filteredMovements.filter((m: any) => !m.reconciled).every((m: any) => selected.has(m.id))}
                         onChange={() => toggleSelectAll(filteredMovements)}
                       />
                     </th>
-                    {['Fecha', 'Cuenta', 'Concepto', 'Contraparte', 'Importe', 'Saldo', 'Estado', ''].map(h => (
-                      <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
+                    {[t('thDate'), t('thAccount'), t('thConcept'), t('thCounterparty'), t('thAmount'), t('thBalance'), t('thStatus')].map(h => (
+                      <Th key={h}>{h}</Th>
                     ))}
+                    <th scope="col" className="p-3"><span className="sr-only">{t('thActions')}</span></th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filteredMovements.slice(movPage * PAGE_SIZE, (movPage + 1) * PAGE_SIZE).map((m: any) => (
-                    <tr key={m.id} className={`border-b border-border hover:bg-muted/50 transition-colors ${selected.has(m.id) ? 'bg-primary/5' : ''}`}>
-                      <td className="p-3">
-                        {!m.reconciled && (
-                          <input
-                            type="checkbox"
-                            aria-label={`Seleccionar movimiento ${m.concept}`}
-                            className="rounded border-border"
-                            checked={selected.has(m.id)}
-                            onChange={() => toggleSelect(m.id)}
-                          />
-                        )}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">{fmtDate(m.date)}</td>
-                      <td className="p-3 text-xs">{m.accountAlias}</td>
-                      <td className="p-3 text-xs">{m.concept}</td>
-                      <td className="p-3 text-xs text-muted-foreground">{m.counterparty || '—'}</td>
-                      <td className={`p-3 font-mono text-xs font-semibold ${Number(m.amount) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                        {Number(m.amount) >= 0 ? '+' : ''}{fmtEur(Number(m.amount))}
-                      </td>
-                      <td className="p-3 font-mono text-xs">{fmtEur(Number(m.balance))}</td>
-                      <td className="p-3">
-                        <Badge variant={m.reconciled ? 'success' : 'warning'}>
-                          {m.reconciled ? 'Conciliado' : 'Pendiente'}
-                        </Badge>
-                      </td>
-                      <td className="p-3">
-                        <Button
-                          variant={m.reconciled ? 'outline' : 'default'}
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => handleReconcile([m.id])}
-                          disabled={reconciling}
-                        >
-                          {m.reconciled ? 'Deshacer' : 'Conciliar'}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
               </table>
             </ScrollableTable>
-            {filteredMovements.length > PAGE_SIZE && (
-              <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
-                <span className="text-xs text-muted-foreground">
-                  {movPage * PAGE_SIZE + 1}–{Math.min((movPage + 1) * PAGE_SIZE, filteredMovements.length)} de {filteredMovements.length}
-                </span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={movPage === 0} onClick={() => setMovPage(p => p - 1)}>Anterior</Button>
-                  <Button variant="outline" size="sm" disabled={(movPage + 1) * PAGE_SIZE >= filteredMovements.length} onClick={() => setMovPage(p => p + 1)}>Siguiente</Button>
-                </div>
-              </div>
-            )}
+            <VirtualTableBody
+              data={filteredMovements}
+              getKey={(m: any) => m.id}
+              rowClassName={(m: any) => selected.has(m.id) ? 'bg-primary/5' : ''}
+              renderRow={(m: any) => (
+                <>
+                  <td className="p-3">
+                    {!m.reconciled && (
+                      <input type="checkbox" aria-label={t('selectMovement', { concept: m.concept })} className="rounded border-border" checked={selected.has(m.id)} onChange={() => toggleSelect(m.id)} />
+                    )}
+                  </td>
+                  <td className="p-3 text-xs text-muted-foreground">{fmtDate(m.date)}</td>
+                  <td className="p-3 text-xs">{m.accountAlias}</td>
+                  <td className="p-3 text-xs">{m.concept}</td>
+                  <td className="p-3 text-xs text-muted-foreground">{m.counterparty || '\u2014'}</td>
+                  <td className={`p-3 font-mono text-xs font-semibold ${Number(m.amount) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {Number(m.amount) >= 0 ? '+' : ''}{fmtEur(Number(m.amount))}
+                  </td>
+                  <td className="p-3 font-mono text-xs">{fmtEur(Number(m.balance))}</td>
+                  <td className="p-3">
+                    <Badge variant={m.reconciled ? 'success' : 'warning'}>{m.reconciled ? t('statusReconciled') : t('statusPending')}</Badge>
+                  </td>
+                  <td className="p-3">
+                    <Button variant={m.reconciled ? 'outline' : 'default'} size="sm" className="h-7 text-xs" onClick={() => handleReconcile([m.id])} disabled={reconciling}>
+                      {m.reconciled ? t('undo') : t('reconcile')}
+                    </Button>
+                  </td>
+                </>
+              )}
+            />
             {hasActiveFilters && filteredMovements.length === 0 && (
               <div className="text-center py-8">
-                <div className="text-sm text-muted-foreground">No hay movimientos que coincidan con los filtros</div>
-                <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2 text-xs">Limpiar filtros</Button>
+                <div className="text-sm text-muted-foreground">{t('noMatchingMovements')}</div>
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-2 text-xs">{t('clearFilters')}</Button>
               </div>
             )}
             </>
@@ -519,9 +485,9 @@ export default function ConciliacionPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between w-full">
-            <CardTitle>Historial de Conciliaciones</CardTitle>
+            <CardTitle>{t('reconciliationHistory')}</CardTitle>
             {pendingRecon.length > 0 && (
-              <Badge variant="warning">{pendingRecon.length} pendiente{pendingRecon.length > 1 ? 's' : ''}</Badge>
+              <Badge variant="warning">{t('pendingCount', { count: pendingRecon.length })}</Badge>
             )}
           </div>
         </CardHeader>
@@ -529,56 +495,45 @@ export default function ConciliacionPage() {
           {reconciliations.length === 0 ? (
             <div className="text-center py-12">
               <div className="mb-3 opacity-30"><Link2 size={28} className="mx-auto text-muted-foreground" /></div>
-              <div className="text-sm text-muted-foreground">No hay conciliaciones registradas</div>
-              <div className="text-xs text-muted-foreground mt-1">Las conciliaciones automáticas se generarán al sincronizar movimientos bancarios con el ERP</div>
+              <div className="text-sm text-muted-foreground">{t('noReconciliations')}</div>
+              <div className="text-xs text-muted-foreground mt-1">{t('noReconciliationsHint')}</div>
             </div>
           ) : (
             <>
-            <ScrollableTable>
+            <ScrollableTable label={t('reconciliationHistoryLabel')}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    {['Período', 'Cuenta', 'Saldo Banco', 'Saldo ERP', 'Diferencia', 'Coincidentes', 'Sin Match', 'Estado'].map(h => (
-                      <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
+                    {[t('thPeriod'), t('thAccount'), t('thBankBalance'), t('thErpBalance'), t('thDifference'), t('thMatched'), t('thUnmatched'), t('thStatus')].map(h => (
+                      <Th key={h}>{h}</Th>
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {reconciliations.slice(recPage * PAGE_SIZE, (recPage + 1) * PAGE_SIZE).map((r: any) => {
-                    const diff = Number(r.difference)
-                    return (
-                      <tr key={r.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                        <td className="p-3 text-xs">{fmtDate(r.periodDate)}</td>
-                        <td className="p-3 text-xs">{r.bankAccount?.alias || '—'}</td>
-                        <td className="p-3 font-mono text-xs">{fmtEur(Number(r.bankBalance))}</td>
-                        <td className="p-3 font-mono text-xs">{fmtEur(Number(r.erpBalance))}</td>
-                        <td className={`p-3 font-mono text-xs font-semibold ${diff === 0 ? 'text-success' : 'text-destructive'}`}>
-                          {diff === 0 ? '0 €' : fmtEur(diff)}
-                        </td>
-                        <td className="p-3 font-mono text-xs text-success">{r.matchedCount}</td>
-                        <td className="p-3 font-mono text-xs text-warning">{r.unmatchedCount}</td>
-                        <td className="p-3">
-                          <Badge variant={r.status === 'COMPLETED' ? 'success' : r.status === 'IN_PROGRESS' ? 'warning' : 'secondary'}>
-                            {r.status === 'COMPLETED' ? 'Completada' : r.status === 'IN_PROGRESS' ? 'En curso' : 'Pendiente'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
               </table>
             </ScrollableTable>
-            {reconciliations.length > PAGE_SIZE && (
-              <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
-                <span className="text-xs text-muted-foreground">
-                  {recPage * PAGE_SIZE + 1}–{Math.min((recPage + 1) * PAGE_SIZE, reconciliations.length)} de {reconciliations.length}
-                </span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={recPage === 0} onClick={() => setRecPage(p => p - 1)}>Anterior</Button>
-                  <Button variant="outline" size="sm" disabled={(recPage + 1) * PAGE_SIZE >= reconciliations.length} onClick={() => setRecPage(p => p + 1)}>Siguiente</Button>
-                </div>
-              </div>
-            )}
+            <VirtualTableBody
+              data={reconciliations}
+              getKey={(r: any) => r.id}
+              renderRow={(r: any) => {
+                const diff = Number(r.difference)
+                return (
+                  <>
+                    <td className="p-3 text-xs">{fmtDate(r.periodDate)}</td>
+                    <td className="p-3 text-xs">{r.bankAccount?.alias || '\u2014'}</td>
+                    <td className="p-3 font-mono text-xs">{fmtEur(Number(r.bankBalance))}</td>
+                    <td className="p-3 font-mono text-xs">{fmtEur(Number(r.erpBalance))}</td>
+                    <td className={`p-3 font-mono text-xs font-semibold ${diff === 0 ? 'text-success' : 'text-destructive'}`}>{diff === 0 ? '0 \u20AC' : fmtEur(diff)}</td>
+                    <td className="p-3 font-mono text-xs text-success">{r.matchedCount}</td>
+                    <td className="p-3 font-mono text-xs text-warning">{r.unmatchedCount}</td>
+                    <td className="p-3">
+                      <Badge variant={r.status === 'COMPLETED' ? 'success' : r.status === 'IN_PROGRESS' ? 'warning' : 'secondary'}>
+                        {r.status === 'COMPLETED' ? t('statusCompleted') : r.status === 'IN_PROGRESS' ? t('statusInProgress') : t('statusPending')}
+                      </Badge>
+                    </td>
+                  </>
+                )
+              }}
+            />
             </>
           )}
         </CardContent>

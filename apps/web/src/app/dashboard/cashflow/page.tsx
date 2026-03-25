@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, fmt, exportCSV } from '@/lib/utils'
@@ -15,31 +16,10 @@ import {
 import { Download, TrendingUp, TrendingDown, ArrowRight, Banknote, Factory, Building2, Landmark, Wand2, FileDown } from 'lucide-react'
 import { exportCashFlowPDF } from '@/lib/export-pdf-modules'
 import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
-
-const CATEGORY_LABELS: Record<string, string> = {
-  COBRO: 'Cobros de clientes',
-  PAGO_PROV: 'Pagos a proveedores',
-  NOMINA: 'Nóminas',
-  SS: 'Seguridad Social',
-  IMPUESTO: 'Impuestos',
-  SUMINISTRO: 'Suministros',
-  ALQUILER: 'Alquileres',
-  SEGURO: 'Seguros',
-  COMISION: 'Comisiones bancarias',
-  DEVOLUCION: 'Devoluciones',
-  MANT: 'Mantenimiento',
-  LEASING: 'Leasing',
-  TRANSFER: 'Transferencias internas',
-  OTHER: 'Otros',
-}
-
-const FLOW_TYPE_CONFIG = {
-  operating: { label: 'Operativo', icon: <Factory size={18} />, color: 'hsl(var(--primary))' },
-  investing: { label: 'Inversión', icon: <Building2 size={18} />, color: 'hsl(var(--warning))' },
-  financing: { label: 'Financiación', icon: <Landmark size={18} />, color: 'hsl(var(--success))' },
-}
+import { useTranslations } from 'next-intl'
 
 export default function CashFlowPage() {
+  const t = useTranslations('cashflow')
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [detailSection, setDetailSection] = useState<'operating' | 'investing' | 'financing'>('operating')
@@ -51,6 +31,29 @@ export default function CashFlowPage() {
   const [periodLabel, setPeriodLabel] = useState<{ current: string; previous: string } | null>(null)
   const [dateFrom, setDateFrom] = useState<string | undefined>()
   const [dateTo, setDateTo] = useState<string | undefined>()
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    COBRO: t('categoryCustomerCollections'),
+    PAGO_PROV: t('categorySupplierPayments'),
+    NOMINA: t('categoryPayroll'),
+    SS: t('categorySocialSecurity'),
+    IMPUESTO: t('categoryTaxes'),
+    SUMINISTRO: t('categoryUtilities'),
+    ALQUILER: t('categoryRent'),
+    SEGURO: t('categoryInsurance'),
+    COMISION: t('categoryBankFees'),
+    DEVOLUCION: t('categoryReturns'),
+    MANT: t('categoryMaintenance'),
+    LEASING: t('categoryLeasing'),
+    TRANSFER: t('categoryInternalTransfers'),
+    OTHER: t('categoryOther'),
+  }
+
+  const FLOW_TYPE_CONFIG = {
+    operating: { label: t('flowOperating'), icon: <Factory size={18} />, color: 'hsl(var(--primary))' },
+    investing: { label: t('flowInvesting'), icon: <Building2 size={18} />, color: 'hsl(var(--warning))' },
+    financing: { label: t('flowFinancing'), icon: <Landmark size={18} />, color: 'hsl(var(--success))' },
+  }
 
   function fetchData() {
     return Promise.all([
@@ -95,17 +98,19 @@ export default function CashFlowPage() {
     fetchData()
   }, [])
 
-  if (loading || !data) return <SkeletonKPIsAndTable cols={6} rows={8} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading || !data) return <SkeletonKPIsAndTable cols={6} rows={8} />
 
   const { months, categoryBreakdown, totals, recentMovements } = data
 
   // Chart data
   const chartData = months.map((m: any) => ({
     month: m.month.slice(2).replace('-', '/'),
-    Operativo: Math.round(m.operating),
-    Inversión: Math.round(m.investing),
-    Financiación: Math.round(m.financing),
-    Neto: Math.round(m.operating + m.investing + m.financing),
+    [t('flowOperating')]: Math.round(m.operating),
+    [t('flowInvesting')]: Math.round(m.investing),
+    [t('flowFinancing')]: Math.round(m.financing),
+    [t('chartNet')]: Math.round(m.operating + m.investing + m.financing),
   }))
 
   // Category details grouped by flow type
@@ -126,8 +131,8 @@ export default function CashFlowPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Estado de Flujos de Efectivo"
-        subtitle={`Grupo Ibérico SA · Cash Flow Statement · ${data.movementCount} movimientos analizados`}
+        title={t('title')}
+        subtitle={t('subtitle', { count: data.movementCount })}
         lastUpdated={lastUpdated}
         onRefresh={handleRefresh}
         actions={
@@ -136,14 +141,14 @@ export default function CashFlowPage() {
             {catStats && catStats.uncategorized > 0 && (
               <Button variant="outline" size="sm" onClick={handleRecategorize} disabled={recategorizing}>
                 <Wand2 size={14} className="mr-1" />
-                {recategorizing ? 'Categorizando…' : `Auto-clasificar (${catStats.uncategorized} sin categoría)`}
+                {recategorizing ? t('categorizing') : t('autoClassify', { count: catStats.uncategorized })}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => exportCashFlowPDF(data)}><FileDown size={14} className="mr-1" />PDF</Button>
             <Button variant="outline" size="sm" onClick={() => exportCSV('cash_flow_statement',
-              ['Categoría', 'Tipo', 'Importe', 'Movimientos'],
+              [t('columnCategory'), t('columnType'), t('columnAmount'), t('columnMovements')],
               categories.map(([cat, v]) => [CATEGORY_LABELS[cat] || cat, v.type, v.amount, v.count])
-            )}><Download size={14} className="mr-1" />Exportar</Button>
+            )}><Download size={14} className="mr-1" />{t('export')}</Button>
           </div>
         }
       />
@@ -151,10 +156,10 @@ export default function CashFlowPage() {
       {/* Period comparison */}
       {prevData && periodLabel && (() => {
         const items = [
-          { label: 'F. Operativo', cur: totals.operating, prev: prevData.totals.operating },
-          { label: 'F. Inversión', cur: totals.investing, prev: prevData.totals.investing },
-          { label: 'F. Financiación', cur: totals.financing, prev: prevData.totals.financing },
-          { label: 'Flujo Neto', cur: totals.net, prev: prevData.totals.net },
+          { label: t('compOperating'), cur: totals.operating, prev: prevData.totals.operating },
+          { label: t('compInvesting'), cur: totals.investing, prev: prevData.totals.investing },
+          { label: t('compFinancing'), cur: totals.financing, prev: prevData.totals.financing },
+          { label: t('compNetFlow'), cur: totals.net, prev: prevData.totals.net },
         ]
         return (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -166,7 +171,7 @@ export default function CashFlowPage() {
                   <div className="flex items-end justify-between mt-1">
                     <div>
                       <div className="font-mono text-lg font-bold">{fmtEur(Math.round(c.cur))}</div>
-                      <div className="text-[10px] text-muted-foreground">vs {fmtEur(Math.round(c.prev))} ({periodLabel.previous})</div>
+                      <div className="text-[10px] text-muted-foreground">{t('vsPrevious', { amount: fmtEur(Math.round(c.prev)), period: periodLabel.previous })}</div>
                     </div>
                     <div className={`flex items-center gap-0.5 text-xs font-mono font-semibold ${cmp.positive ? 'text-success' : 'text-destructive'}`}>
                       {cmp.positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
@@ -182,18 +187,18 @@ export default function CashFlowPage() {
 
       {/* KPIs: Operating / Investing / Financing / Net */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox label="Flujo Operativo" value={`${totals.operating >= 0 ? '+' : ''}${fmtEur(Math.round(totals.operating))}`} icon={<Factory size={16} />} color={totals.operating >= 0 ? 'text-success' : 'text-destructive'} tooltip="Efectivo generado/consumido por la actividad principal: cobros de clientes menos pagos a proveedores, nóminas, impuestos y suministros." source="Movimientos bancarios: COBRO, PAGO_PROV, NOMINA, SS, IMPUESTO, etc." />
-        <KpiBox label="Flujo Inversión" value={`${totals.investing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.investing))}`} icon={<Building2 size={16} />} color={totals.investing >= 0 ? 'text-success' : 'text-destructive'} tooltip="Efectivo destinado a inversiones: leasing de maquinaria, adquisición de activos fijos." source="Movimientos bancarios: LEASING" />
-        <KpiBox label="Flujo Financiación" value={`${totals.financing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.financing))}`} icon={<Landmark size={16} />} color={totals.financing >= 0 ? 'text-success' : 'text-destructive'} tooltip="Movimientos entre entidades financieras: transferencias entre cuentas propias, disposiciones de crédito." source="Movimientos bancarios: TRANSFER" />
-        <KpiBox label="Flujo Neto Total" value={`${totals.net >= 0 ? '+' : ''}${fmtEur(Math.round(totals.net))}`} icon={<Banknote size={16} />} color={totals.net >= 0 ? 'text-success' : 'text-destructive'} highlight tooltip="Variación neta de caja: suma de flujos operativos + inversión + financiación. Indica si la empresa genera o consume efectivo." source="Operativo + Inversión + Financiación" />
+        <KpiBox label={t('kpiOperatingFlow')} value={`${totals.operating >= 0 ? '+' : ''}${fmtEur(Math.round(totals.operating))}`} icon={<Factory size={16} />} color={totals.operating >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiOperatingTooltip')} source={t('kpiOperatingSource')} />
+        <KpiBox label={t('kpiInvestingFlow')} value={`${totals.investing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.investing))}`} icon={<Building2 size={16} />} color={totals.investing >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiInvestingTooltip')} source={t('kpiInvestingSource')} />
+        <KpiBox label={t('kpiFinancingFlow')} value={`${totals.financing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.financing))}`} icon={<Landmark size={16} />} color={totals.financing >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiFinancingTooltip')} source={t('kpiFinancingSource')} />
+        <KpiBox label={t('kpiNetFlow')} value={`${totals.net >= 0 ? '+' : ''}${fmtEur(Math.round(totals.net))}`} icon={<Banknote size={16} />} color={totals.net >= 0 ? 'text-success' : 'text-destructive'} highlight tooltip={t('kpiNetTooltip')} source={t('kpiNetSource')} />
       </div>
 
       {/* Monthly chart */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between w-full">
-            <CardTitle>Flujos de Efectivo por Mes</CardTitle>
-            <Badge variant="secondary">{months.length} meses</Badge>
+            <CardTitle>{t('chartTitle')}</CardTitle>
+            <Badge variant="secondary">{t('chartMonths', { count: months.length })}</Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -203,14 +208,16 @@ export default function CashFlowPage() {
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
               <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : v <= -1000 ? `${Math.round(v / 1000)}k` : String(v)} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                 formatter={(v: number, name: string) => [fmtEur(v), name]}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-              <Bar dataKey="Operativo" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Inversión" fill="hsl(var(--warning))" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Financiación" fill="hsl(var(--success))" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={t('flowOperating')} fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={t('flowInvesting')} fill="hsl(var(--warning))" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={t('flowFinancing')} fill="hsl(var(--success))" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -222,15 +229,15 @@ export default function CashFlowPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between w-full">
-              <CardTitle>Desglose por Actividad</CardTitle>
+              <CardTitle>{t('breakdownTitle')}</CardTitle>
               <div className="flex gap-1">
-                {(['operating', 'investing', 'financing'] as const).map(t => (
+                {(['operating', 'investing', 'financing'] as const).map(t2 => (
                   <button
-                    key={t}
-                    onClick={() => setDetailSection(t)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${detailSection === t ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                    key={t2}
+                    onClick={() => setDetailSection(t2)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${detailSection === t2 ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                   >
-                    {FLOW_TYPE_CONFIG[t].label}
+                    {FLOW_TYPE_CONFIG[t2].label}
                   </button>
                 ))}
               </div>
@@ -245,7 +252,7 @@ export default function CashFlowPage() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm">{CATEGORY_LABELS[cat] || cat}</span>
-                      <span className="text-[10px] text-muted-foreground">({v.count} mov.)</span>
+                      <span className="text-[10px] text-muted-foreground">({t('movCount', { count: v.count })})</span>
                     </div>
                     <span className={`font-mono text-sm font-semibold ${v.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
                       {v.amount >= 0 ? '+' : ''}{fmtEur(Math.round(v.amount))}
@@ -263,12 +270,12 @@ export default function CashFlowPage() {
                 </div>
               )
             }) : (
-              <div className="text-center py-6 text-sm text-muted-foreground">Sin movimientos en esta categoría</div>
+              <div className="text-center py-6 text-sm text-muted-foreground">{t('noMovementsInCategory')}</div>
             )}
             {/* Subtotal */}
             {detailCats.length > 0 && (
               <div className="pt-2 mt-2 border-t-2 border-border flex items-center justify-between">
-                <span className="text-sm font-semibold">Total {FLOW_TYPE_CONFIG[detailSection].label}</span>
+                <span className="text-sm font-semibold">{t('total')} {FLOW_TYPE_CONFIG[detailSection].label}</span>
                 <span className={`font-mono text-base font-bold ${totals[detailSection] >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {totals[detailSection] >= 0 ? '+' : ''}{fmtEur(Math.round(totals[detailSection]))}
                 </span>
@@ -279,18 +286,18 @@ export default function CashFlowPage() {
 
         {/* Waterfall summary */}
         <Card>
-          <CardHeader><CardTitle>Cascada de Flujos</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('waterfallTitle')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {/* Operating breakdown */}
             <div className="p-4 rounded-lg bg-muted/50 border border-border">
               <div className="flex items-center gap-2 mb-3">
                 <Factory size={16} className="text-primary" />
-                <span className="text-sm font-semibold">Actividades Operativas</span>
+                <span className="text-sm font-semibold">{t('operatingActivities')}</span>
               </div>
               <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">Cobros de clientes</span><span className="font-mono font-semibold text-success">+{fmtEur(Math.round(operatingInflows))}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Pagos operativos</span><span className="font-mono font-semibold text-destructive">{fmtEur(Math.round(operatingOutflows))}</span></div>
-                <div className="flex justify-between border-t border-border pt-1.5"><span className="font-semibold">Flujo operativo neto</span><span className={`font-mono font-bold ${totals.operating >= 0 ? 'text-success' : 'text-destructive'}`}>{totals.operating >= 0 ? '+' : ''}{fmtEur(Math.round(totals.operating))}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{t('categoryCustomerCollections')}</span><span className="font-mono font-semibold text-success">+{fmtEur(Math.round(operatingInflows))}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{t('operatingPayments')}</span><span className="font-mono font-semibold text-destructive">{fmtEur(Math.round(operatingOutflows))}</span></div>
+                <div className="flex justify-between border-t border-border pt-1.5"><span className="font-semibold">{t('netOperatingFlow')}</span><span className={`font-mono font-bold ${totals.operating >= 0 ? 'text-success' : 'text-destructive'}`}>{totals.operating >= 0 ? '+' : ''}{fmtEur(Math.round(totals.operating))}</span></div>
               </div>
             </div>
 
@@ -298,13 +305,13 @@ export default function CashFlowPage() {
             <div className="p-4 rounded-lg bg-muted/50 border border-border">
               <div className="flex items-center gap-2 mb-3">
                 <Building2 size={16} className="text-warning" />
-                <span className="text-sm font-semibold">Actividades de Inversión</span>
+                <span className="text-sm font-semibold">{t('investingActivities')}</span>
               </div>
               <div className="space-y-1.5 text-xs">
                 {investingCats.map(([cat, v]) => (
                   <div key={cat} className="flex justify-between"><span className="text-muted-foreground">{CATEGORY_LABELS[cat]}</span><span className={`font-mono font-semibold ${v.amount >= 0 ? 'text-success' : 'text-destructive'}`}>{v.amount >= 0 ? '+' : ''}{fmtEur(Math.round(v.amount))}</span></div>
                 ))}
-                <div className="flex justify-between border-t border-border pt-1.5"><span className="font-semibold">Flujo inversión neto</span><span className={`font-mono font-bold ${totals.investing >= 0 ? 'text-success' : 'text-destructive'}`}>{totals.investing >= 0 ? '+' : ''}{fmtEur(Math.round(totals.investing))}</span></div>
+                <div className="flex justify-between border-t border-border pt-1.5"><span className="font-semibold">{t('netInvestingFlow')}</span><span className={`font-mono font-bold ${totals.investing >= 0 ? 'text-success' : 'text-destructive'}`}>{totals.investing >= 0 ? '+' : ''}{fmtEur(Math.round(totals.investing))}</span></div>
               </div>
             </div>
 
@@ -312,14 +319,14 @@ export default function CashFlowPage() {
             <div className="p-4 rounded-lg bg-muted/50 border border-border">
               <div className="flex items-center gap-2 mb-3">
                 <Landmark size={16} className="text-success" />
-                <span className="text-sm font-semibold">Actividades de Financiación</span>
+                <span className="text-sm font-semibold">{t('financingActivities')}</span>
               </div>
               <div className="space-y-1.5 text-xs">
                 {financingCats.map(([cat, v]) => (
                   <div key={cat} className="flex justify-between"><span className="text-muted-foreground">{CATEGORY_LABELS[cat]}</span><span className={`font-mono font-semibold ${v.amount >= 0 ? 'text-success' : 'text-destructive'}`}>{v.amount >= 0 ? '+' : ''}{fmtEur(Math.round(v.amount))}</span></div>
                 ))}
-                {financingCats.length === 0 && <div className="text-muted-foreground">Sin movimientos de financiación</div>}
-                <div className="flex justify-between border-t border-border pt-1.5"><span className="font-semibold">Flujo financiación neto</span><span className={`font-mono font-bold ${totals.financing >= 0 ? 'text-success' : 'text-destructive'}`}>{totals.financing >= 0 ? '+' : ''}{fmtEur(Math.round(totals.financing))}</span></div>
+                {financingCats.length === 0 && <div className="text-muted-foreground">{t('noFinancingMovements')}</div>}
+                <div className="flex justify-between border-t border-border pt-1.5"><span className="font-semibold">{t('netFinancingFlow')}</span><span className={`font-mono font-bold ${totals.financing >= 0 ? 'text-success' : 'text-destructive'}`}>{totals.financing >= 0 ? '+' : ''}{fmtEur(Math.round(totals.financing))}</span></div>
               </div>
             </div>
 
@@ -328,7 +335,7 @@ export default function CashFlowPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Banknote size={18} className={totals.net >= 0 ? 'text-success' : 'text-destructive'} />
-                  <span className="font-semibold text-sm">Variación Neta de Efectivo</span>
+                  <span className="font-semibold text-sm">{t('netCashVariation')}</span>
                 </div>
                 <span className={`font-mono text-xl font-bold ${totals.net >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {totals.net >= 0 ? '+' : ''}{fmtEur(Math.round(totals.net))}
@@ -348,9 +355,9 @@ export default function CashFlowPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between w-full">
-                <CardTitle>Movimientos Recientes</CardTitle>
+                <CardTitle>{t('recentMovements')}</CardTitle>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{movPage * pageSize + 1}–{Math.min((movPage + 1) * pageSize, recentMovements.length)} de {recentMovements.length}</span>
+                  <span className="text-xs text-muted-foreground">{t('paginationOf', { from: movPage * pageSize + 1, to: Math.min((movPage + 1) * pageSize, recentMovements.length), total: recentMovements.length })}</span>
                   <div className="flex gap-1">
                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={movPage === 0} onClick={() => setMovPage(p => p - 1)}>←</Button>
                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={movPage >= totalPages - 1} onClick={() => setMovPage(p => p + 1)}>→</Button>
@@ -362,7 +369,7 @@ export default function CashFlowPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    {['Fecha', 'Concepto', 'Contraparte', 'Cuenta', 'Categoría', 'Tipo Flujo', 'Importe'].map(h => (
+                    {[t('colDate'), t('colConcept'), t('colCounterparty'), t('colAccount'), t('colCategory'), t('colFlowType'), t('colAmount')].map(h => (
                       <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
@@ -376,7 +383,7 @@ export default function CashFlowPage() {
                         <td className="p-3 text-xs max-w-[200px] truncate">{m.concept}</td>
                         <td className="p-3 text-xs text-muted-foreground">{m.counterparty || '—'}</td>
                         <td className="p-3 text-xs text-muted-foreground">{m.account}</td>
-                        <td className="p-3"><Badge variant="secondary">{CATEGORY_LABELS[m.category] || m.category || 'Otro'}</Badge></td>
+                        <td className="p-3"><Badge variant="secondary">{CATEGORY_LABELS[m.category] || m.category || t('categoryOther')}</Badge></td>
                         <td className="p-3"><Badge variant="outline" className="text-[10px]">{flowCfg?.label || m.flowType}</Badge></td>
                         <td className={`p-3 font-mono text-xs font-semibold ${m.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
                           {m.amount >= 0 ? '+' : ''}{fmtEur(Math.round(m.amount))}

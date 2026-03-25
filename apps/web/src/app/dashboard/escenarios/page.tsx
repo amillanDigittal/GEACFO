@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmt, fmtEur, exportCSV } from '@/lib/utils'
@@ -10,14 +11,10 @@ import { Download, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Siren 
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonEscenarios } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
-
-const scenarioMeta: Record<string, { label: string; color: string; desc: string }> = {
-  BASE: { label: 'Base', color: 'hsl(var(--primary))', desc: 'Proyección con supuestos actuales' },
-  CONSERVADOR: { label: 'Conservador', color: 'hsl(var(--warning))', desc: 'Cobros −15%, pagos +10%' },
-  AGRESIVO: { label: 'Agresivo', color: 'hsl(var(--success))', desc: 'Cobros +15%, pagos −5%' },
-}
+import { useTranslations } from 'next-intl'
 
 export default function EscenariosPage() {
+  const t = useTranslations('escenarios')
   const [scenarios, setScenarios] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [simResult, setSimResult] = useState<any>(null)
@@ -26,6 +23,12 @@ export default function EscenariosPage() {
   const [revenueChange, setRevenueChange] = useState(0)
   const [activeTab, setActiveTab] = useState<'comparativa' | 'simulador'>('comparativa')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const scenarioMeta: Record<string, { label: string; color: string; desc: string }> = {
+    BASE: { label: t('scenarioBase'), color: 'hsl(var(--primary))', desc: t('scenarioBaseDesc') },
+    CONSERVADOR: { label: t('scenarioConservative'), color: 'hsl(var(--warning))', desc: t('scenarioConservativeDesc') },
+    AGRESIVO: { label: t('scenarioAggressive'), color: 'hsl(var(--success))', desc: t('scenarioAggressiveDesc') },
+  }
 
   function fetchData() {
     setLoading(true)
@@ -49,7 +52,9 @@ export default function EscenariosPage() {
       .finally(() => setSimLoading(false))
   }
 
-  if (loading) return <SkeletonEscenarios />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonEscenarios />
 
   const base = scenarios.find((s: any) => s.scenario === 'BASE')
   const gapWeeks = base?.weeks?.filter((w: any) => w.isGap) || []
@@ -80,8 +85,8 @@ export default function EscenariosPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Supuestos & Escenarios"
-        subtitle="Análisis de sensibilidad · 13 semanas · Grupo Ibérico SA"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
@@ -93,11 +98,11 @@ export default function EscenariosPage() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {tab === 'comparativa' ? 'Comparativa' : 'Simulador'}
+                  {tab === 'comparativa' ? t('tabComparison') : t('tabSimulator')}
                 </button>
               ))}
             </div>
-            <Button variant="outline" size="sm" onClick={() => exportCSV('escenarios_comparativa', ['Semana', ...scenarios.map((s: any) => `Cobros_${s.scenario}`), ...scenarios.map((s: any) => `Pagos_${s.scenario}`), ...scenarios.map((s: any) => `Saldo_${s.scenario}`)], chartData.map((row: any) => [row.week, ...scenarios.map((s: any) => row[`cobros_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`pagos_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`saldo_${s.scenario}`] ?? '')]))}><Download size={14} className="mr-1" />Exportar</Button>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('escenarios_comparativa', [t('colWeek'), ...scenarios.map((s: any) => `${t('colCollections')}_${s.scenario}`), ...scenarios.map((s: any) => `${t('colPayments')}_${s.scenario}`), ...scenarios.map((s: any) => `${t('colBalance')}_${s.scenario}`)], chartData.map((row: any) => [row.week, ...scenarios.map((s: any) => row[`cobros_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`pagos_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`saldo_${s.scenario}`] ?? '')]))}><Download size={14} className="mr-1" />{t('export')}</Button>
           </>
         }
       />
@@ -107,7 +112,7 @@ export default function EscenariosPage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-warning/30 bg-warning/10 text-warning">
           <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <div className="font-semibold text-sm">{gapWeeks.length} semana{gapWeeks.length > 1 ? 's' : ''} con déficit en escenario Base</div>
+            <div className="font-semibold text-sm">{t('gapAlert', { count: gapWeeks.length })}</div>
             <div className="text-xs opacity-80 mt-0.5">
               {gapWeeks.map((w: any) => `S${w.weekNumber} (${fmtEur(Math.abs(Number(w.netCash)) * 1000)})`).join(' · ')}
             </div>
@@ -128,33 +133,33 @@ export default function EscenariosPage() {
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: meta.color }} />
                     <span className="text-sm font-semibold">{meta.label}</span>
                   </div>
-                  {!hasData && <Badge variant="secondary">Sin datos</Badge>}
-                  {hasData && s.scenario === 'BASE' && <Badge variant="default">Activo</Badge>}
+                  {!hasData && <Badge variant="secondary">{t('noData')}</Badge>}
+                  {hasData && s.scenario === 'BASE' && <Badge variant="default">{t('active')}</Badge>}
                 </div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-3">{meta.desc}</p>
                 {hasData ? (
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">Caja Final (S13)</span>
+                      <span className="text-xs text-muted-foreground">{t('finalCash')}</span>
                       <span className="font-mono text-sm font-bold">{fmtEur(s.finalCash * 1000)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">Total Cobros</span>
+                      <span className="text-xs text-muted-foreground">{t('totalCollections')}</span>
                       <span className="font-mono text-xs text-success">{fmtEur(s.totalInflows * 1000)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-xs text-muted-foreground">Total Pagos</span>
+                      <span className="text-xs text-muted-foreground">{t('totalPayments')}</span>
                       <span className="font-mono text-xs text-destructive">{fmtEur(s.totalOutflows * 1000)}</span>
                     </div>
                     <div className="flex justify-between border-t border-border pt-2 mt-2">
-                      <span className="text-xs text-muted-foreground">Cash Flow Neto</span>
+                      <span className="text-xs text-muted-foreground">{t('netCashFlow')}</span>
                       <span className={`font-mono text-xs font-bold ${s.totalInflows - s.totalOutflows >= 0 ? 'text-success' : 'text-destructive'}`}>
                         {s.totalInflows - s.totalOutflows >= 0 ? '+' : ''}{fmtEur((s.totalInflows - s.totalOutflows) * 1000)}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-muted-foreground text-center py-4">Configurar supuestos para generar proyección</div>
+                  <div className="text-xs text-muted-foreground text-center py-4">{t('configureToGenerate')}</div>
                 )}
               </CardContent>
             </Card>
@@ -166,7 +171,7 @@ export default function EscenariosPage() {
         <>
           {/* Gráfico de saldo acumulado */}
           <Card>
-            <CardHeader><CardTitle>Evolución Saldo Acumulado por Escenario</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('cumulativeBalanceChart')}</CardTitle></CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -175,8 +180,9 @@ export default function EscenariosPage() {
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtEur(Number(v) * 1000), name.replace('saldo_', '')]}
-                    labelStyle={{ color: 'hsl(var(--foreground))' }}
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                   />
                   <Legend formatter={(value: string) => scenarioMeta[value.replace('saldo_', '')]?.label || value} />
                   {scenarios.filter((s: any) => s.weeks.length > 0).map((s: any) => (
@@ -199,7 +205,7 @@ export default function EscenariosPage() {
           {/* Gráfico cobros vs pagos + tabla */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle>Cobros vs Pagos — Base</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('collectionsVsPaymentsBase')}</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -208,19 +214,20 @@ export default function EscenariosPage() {
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
                     <Tooltip
                       formatter={(v: any) => fmtEur(Number(v) * 1000)}
-                      labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                     />
                     <Legend />
-                    <Bar dataKey="cobros_BASE" name="Cobros" fill="hsl(var(--success))" fillOpacity={0.75} radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="pagos_BASE" name="Pagos" fill="hsl(var(--destructive))" fillOpacity={0.65} radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="cobros_BASE" name={t('colCollections')} fill="hsl(var(--success))" fillOpacity={0.75} radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="pagos_BASE" name={t('colPayments')} fill="hsl(var(--destructive))" fillOpacity={0.65} radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle>Confianza del Modelo</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('modelConfidence')}</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={260}>
                   <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -228,11 +235,12 @@ export default function EscenariosPage() {
                     <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis domain={[50, 100]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
                     <Tooltip
-                      formatter={(v: any) => [`${Number(v).toFixed(1)}%`, 'Confianza']}
-                      labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                      formatter={(v: any) => [`${Number(v).toFixed(1)}%`, t('confidence')]}
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                     />
-                    <Line type="monotone" dataKey="confidence_BASE" name="Confianza" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="confidence_BASE" name={t('confidence')} stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -241,12 +249,12 @@ export default function EscenariosPage() {
 
           {/* Tabla detallada */}
           <Card>
-            <CardHeader><CardTitle>Detalle Semanal — Escenario Base</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('weeklyDetailBase')}</CardTitle></CardHeader>
             <ScrollableTable>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border">
-                    {['Semana', 'Período', 'Cobros', 'Pagos', 'Neto', 'Saldo Acum.', 'Confianza', 'Estado'].map(h => (
+                    {[t('colWeek'), t('colPeriod'), t('colCollections'), t('colPayments'), t('colNet'), t('colCumBalance'), t('colConfidence'), t('colStatus')].map(h => (
                       <th key={h} className="text-left p-2.5 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">{h}</th>
                     ))}
                   </tr>
@@ -280,7 +288,7 @@ export default function EscenariosPage() {
                         </td>
                         <td className="p-2.5">
                           <Badge variant={w.isGap ? 'destructive' : net < 0 ? 'warning' : 'success'}>
-                            {w.isGap ? 'Gap' : net < 0 ? 'Déficit' : 'OK'}
+                            {w.isGap ? t('statusGap') : net < 0 ? t('statusDeficit') : t('statusOk')}
                           </Badge>
                         </td>
                       </tr>
@@ -298,16 +306,16 @@ export default function EscenariosPage() {
           {/* Simulador de sensibilidad */}
           <Card>
             <CardHeader>
-              <CardTitle>Simulador de Sensibilidad</CardTitle>
-              <p className="text-xs text-muted-foreground">Ajusta los parámetros para proyectar el impacto en tesorería</p>
+              <CardTitle>{t('simulatorTitle')}</CardTitle>
+              <p className="text-xs text-muted-foreground">{t('simulatorDescription')}</p>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* DSO slider */}
                 <div>
                   <div className="flex justify-between mb-2">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">DSO (Días de cobro)</label>
-                    <span className="font-mono text-sm font-bold text-primary">{dso} días</span>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('dsoLabel')}</label>
+                    <span className="font-mono text-sm font-bold text-primary">{t('dsoDays', { days: dso })}</span>
                   </div>
                   <input
                     type="range" min={15} max={90} value={dso}
@@ -315,16 +323,16 @@ export default function EscenariosPage() {
                     className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>15d (óptimo)</span>
-                    <span>42d (actual)</span>
-                    <span>90d (riesgo)</span>
+                    <span>{t('dsoOptimal')}</span>
+                    <span>{t('dsoCurrent')}</span>
+                    <span>{t('dsoRisk')}</span>
                   </div>
                 </div>
 
                 {/* Revenue change slider */}
                 <div>
                   <div className="flex justify-between mb-2">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Variación Revenue</label>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('revenueVariation')}</label>
                     <span className={`font-mono text-sm font-bold ${revenueChange >= 0 ? 'text-success' : 'text-destructive'}`}>{revenueChange > 0 ? '+' : ''}{revenueChange}%</span>
                   </div>
                   <input
@@ -333,19 +341,19 @@ export default function EscenariosPage() {
                     className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>−30% (pesimista)</span>
-                    <span>0% (base)</span>
-                    <span>+30% (optimista)</span>
+                    <span>{t('revPessimistic')}</span>
+                    <span>{t('revBase')}</span>
+                    <span>{t('revOptimistic')}</span>
                   </div>
                 </div>
               </div>
 
               <div className="mt-6 flex items-center gap-3">
                 <Button onClick={runSimulation} disabled={simLoading}>
-                  {simLoading ? 'Calculando...' : 'Ejecutar Simulación'}
+                  {simLoading ? t('calculating') : t('runSimulation')}
                 </Button>
                 <Button variant="outline" onClick={() => { setDso(42); setRevenueChange(0); setSimResult(null) }}>
-                  Resetear
+                  {t('reset')}
                 </Button>
               </div>
             </CardContent>
@@ -355,27 +363,27 @@ export default function EscenariosPage() {
           {simResult && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Caja Proyectada</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('projectedCash')}</div>
                 <div className={`font-mono text-xl font-bold ${simResult.projectedCash >= 0 ? 'text-foreground' : 'text-destructive'}`}>
                   {fmtEur(Math.round(simResult.projectedCash))}
                 </div>
               </div>
               <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Impacto DSO</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('dsoImpact')}</div>
                 <div className={`font-mono text-xl font-bold ${simResult.dsoImpact >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {simResult.dsoImpact >= 0 ? '+' : ''}{fmtEur(Math.round(simResult.dsoImpact))}
                 </div>
               </div>
               <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Impacto Revenue</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('revenueImpact')}</div>
                 <div className={`font-mono text-xl font-bold ${simResult.revenueImpact >= 0 ? 'text-success' : 'text-destructive'}`}>
                   {simResult.revenueImpact >= 0 ? '+' : ''}{fmtEur(Math.round(simResult.revenueImpact))}
                 </div>
               </div>
               <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Riesgo Covenant</div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('covenantRisk')}</div>
                 <div className={`font-mono text-xl font-bold ${simResult.covenantRisk ? 'text-destructive' : 'text-success'}`}>
-                  {simResult.covenantRisk ? 'EN RIESGO' : 'OK'}
+                  {simResult.covenantRisk ? t('atRisk') : t('ok')}
                 </div>
               </div>
             </div>
@@ -383,15 +391,15 @@ export default function EscenariosPage() {
 
           {simResult && (
             <Card>
-              <CardHeader><CardTitle>Interpretación</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('interpretation')}</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {dso !== 42 && (
                     <div className="flex items-start gap-3 text-sm">
                       <span className="flex-shrink-0">{dso < 42 ? <CheckCircle2 size={16} className="text-success" /> : <AlertTriangle size={16} className="text-warning" />}</span>
                       <div>
-                        <span className="font-medium">{dso < 42 ? 'Mejora' : 'Deterioro'} del DSO:</span>
-                        <span className="text-muted-foreground"> Pasar de 42 a {dso} días {dso < 42 ? 'libera' : 'consume'} {fmtEur(Math.abs(Math.round(simResult.dsoImpact)))} en circulante.</span>
+                        <span className="font-medium">{dso < 42 ? t('dsoImprovement') : t('dsoDeteriorationLabel')}:</span>
+                        <span className="text-muted-foreground"> {t('dsoInterpretation', { from: 42, to: dso, action: dso < 42 ? t('releases') : t('consumes'), amount: fmtEur(Math.abs(Math.round(simResult.dsoImpact))) })}</span>
                       </div>
                     </div>
                   )}
@@ -400,7 +408,7 @@ export default function EscenariosPage() {
                       <span className="flex-shrink-0">{revenueChange > 0 ? <TrendingUp size={16} className="text-success" /> : <TrendingDown size={16} className="text-destructive" />}</span>
                       <div>
                         <span className="font-medium">Revenue {revenueChange > 0 ? '+' : ''}{revenueChange}%:</span>
-                        <span className="text-muted-foreground"> Impacto adicional de {fmtEur(Math.abs(Math.round(simResult.revenueImpact)))} sobre la posición de caja.</span>
+                        <span className="text-muted-foreground"> {t('revenueInterpretation', { amount: fmtEur(Math.abs(Math.round(simResult.revenueImpact))) })}</span>
                       </div>
                     </div>
                   )}
@@ -408,7 +416,7 @@ export default function EscenariosPage() {
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
                       <Siren size={16} className="flex-shrink-0" />
                       <div>
-                        <span className="font-semibold">Alerta de covenant:</span> Con estos supuestos la caja proyectada cae por debajo de 500.000 €, activando riesgo de incumplimiento.
+                        <span className="font-semibold">{t('covenantAlertLabel')}:</span> {t('covenantAlertMessage')}
                       </div>
                     </div>
                   )}

@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, fmtM, fmt, fmtPct, exportCSV } from '@/lib/utils'
@@ -10,6 +11,7 @@ import { Download, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonVariance } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
+import { useTranslations } from 'next-intl'
 
 function varianceAbs(actual: number, ref: number) { return actual - ref }
 function variancePct(actual: number, ref: number) { return ref !== 0 ? ((actual - ref) / Math.abs(ref)) * 100 : 0 }
@@ -21,6 +23,7 @@ function isGood(category: string, diff: number) {
 }
 
 export default function VariancePage() {
+  const t = useTranslations('variance')
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [compareMode, setCompareMode] = useState<'budget' | 'yoy'>('budget')
@@ -40,8 +43,10 @@ export default function VariancePage() {
     await fetchData()
   }
 
-  if (loading) return <SkeletonVariance />
-  if (!data) return <div className="text-center text-muted-foreground py-20">Error cargando datos</div>
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonVariance />
+  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}</div>
 
   const { categories, actual, budget, prevYear } = data
   const ref = compareMode === 'budget' ? budget : prevYear
@@ -90,8 +95,8 @@ export default function VariancePage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Variance Analysis"
-        subtitle={`Real vs ${compareMode === 'budget' ? 'Presupuesto' : 'Año Anterior'} · Grupo Ibérico SA · Q1 2026`}
+        title={t('title')}
+        subtitle={t('subtitle', { mode: compareMode === 'budget' ? t('modeBudget') : t('modePrevYear') })}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
@@ -103,11 +108,11 @@ export default function VariancePage() {
                   onClick={() => setCompareMode(mode)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${compareMode === mode ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {mode === 'budget' ? 'vs Budget' : 'vs YoY'}
+                  {mode === 'budget' ? t('vsBudget') : t('vsYoy')}
                 </button>
               ))}
             </div>
-            <Button variant="outline" size="sm" onClick={() => exportCSV('variance_analysis', ['Concepto', 'Real 2026', 'Budget 2026', 'Var. Budget', '% Budget', 'Real 2025', 'Var. YoY', '% YoY'], rows.map((r: any) => [r.category, r.actual, r.budget, r.diffBudget, `${r.pctBudget.toFixed(1)}%`, r.prevYear, r.diffYoy, `${r.pctYoy.toFixed(1)}%`]))}><Download size={14} className="mr-1" />Exportar</Button>
+            <Button variant="outline" size="sm" onClick={() => exportCSV('variance_analysis', [t('colConcept'), t('colActual2026'), t('colBudget2026'), t('colVarBudget'), t('colPctBudget'), t('colActual2025'), t('colVarYoy'), t('colPctYoy')], rows.map((r: any) => [r.category, r.actual, r.budget, r.diffBudget, `${r.pctBudget.toFixed(1)}%`, r.prevYear, r.diffYoy, `${r.pctYoy.toFixed(1)}%`]))}><Download size={14} className="mr-1" />{t('export')}</Button>
           </>
         }
       />
@@ -116,22 +121,22 @@ export default function VariancePage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
-            label: `Revenue vs ${refLabel}`,
+            label: t('revenueVs', { ref: refLabel }),
             value: `${revenueRow.pctBudget > 0 && compareMode === 'budget' ? '+' : ''}${fmtPct(compareMode === 'budget' ? revenueRow.pctBudget : revenueRow.pctYoy)}`,
             good: isGood('Revenue', compareMode === 'budget' ? revenueRow.diffBudget : revenueRow.diffYoy),
           },
           {
-            label: `EBITDA vs ${refLabel}`,
+            label: t('ebitdaVs', { ref: refLabel }),
             value: `${(compareMode === 'budget' ? ebitdaRow.pctBudget : ebitdaRow.pctYoy) > 0 ? '+' : ''}${fmtPct(compareMode === 'budget' ? ebitdaRow.pctBudget : ebitdaRow.pctYoy)}`,
             good: isGood('EBITDA', compareMode === 'budget' ? ebitdaRow.diffBudget : ebitdaRow.diffYoy),
           },
           {
-            label: `Tesorería vs ${refLabel}`,
+            label: t('treasuryVs', { ref: refLabel }),
             value: `${(compareMode === 'budget' ? cashRow.pctBudget : cashRow.pctYoy) > 0 ? '+' : ''}${fmtPct(compareMode === 'budget' ? cashRow.pctBudget : cashRow.pctYoy)}`,
             good: isGood('Tesorería', compareMode === 'budget' ? cashRow.diffBudget : cashRow.diffYoy),
           },
           {
-            label: 'Líneas Favorables',
+            label: t('favorableLines'),
             value: `${totalFavorable}/${categories.length}`,
             good: totalFavorable >= categories.length / 2,
           },
@@ -147,7 +152,7 @@ export default function VariancePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Grouped bar chart */}
         <Card>
-          <CardHeader><CardTitle>Actual vs {refLabel} (miles €)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('chartActualVsRef', { ref: refLabel })}</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -156,8 +161,9 @@ export default function VariancePage() {
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
                 <Tooltip
                   formatter={(v: any) => fmtEur(Number(v) * 1000)}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                 />
                 <Legend />
                 <Bar dataKey="Actual" fill="hsl(var(--primary))" fillOpacity={0.85} radius={[3, 3, 0, 0]} />
@@ -169,7 +175,7 @@ export default function VariancePage() {
 
         {/* Variance bars */}
         <Card>
-          <CardHeader><CardTitle>Varianza vs {refLabel} (miles €)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('chartVarianceVsRef', { ref: refLabel })}</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={waterfallData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -177,9 +183,10 @@ export default function VariancePage() {
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
                 <Tooltip
-                  formatter={(v: any) => [`${Number(v) > 0 ? '+' : ''}${fmtEur(Number(v) * 1000)}`, 'Varianza']}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                  formatter={(v: any) => [`${Number(v) > 0 ? '+' : ''}${fmtEur(Number(v) * 1000)}`, t('varianceLabel')]}
+                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                 />
                 <Bar dataKey="varianza" radius={[3, 3, 0, 0]}>
                   {waterfallData.map((entry: any, index: number) => (
@@ -194,12 +201,12 @@ export default function VariancePage() {
 
       {/* Detailed table */}
       <Card>
-        <CardHeader><CardTitle>Detalle de Varianzas</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('varianceDetail')}</CardTitle></CardHeader>
         <ScrollableTable>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {['Concepto', 'Real 2026', 'Budget 2026', 'Var. Budget', '% Budget', 'Real 2025', 'Var. YoY', '% YoY'].map(h => (
+                {[t('colConcept'), t('colActual2026'), t('colBudget2026'), t('colVarBudget'), t('colPctBudget'), t('colActual2025'), t('colVarYoy'), t('colPctYoy')].map(h => (
                   <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -247,7 +254,7 @@ export default function VariancePage() {
 
       {/* Insights */}
       <Card>
-        <CardHeader><CardTitle>Análisis de Desviaciones</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('deviationAnalysis')}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {rows.map((r: any) => {
             const diff = compareMode === 'budget' ? r.diffBudget : r.diffYoy
@@ -260,13 +267,13 @@ export default function VariancePage() {
                 <div>
                   <span className="font-medium">{r.category}:</span>
                   <span className="text-muted-foreground">
-                    {' '}{good ? 'Favorable' : 'Desfavorable'} en {fmtEur(Math.abs(diff))} ({pct > 0 ? '+' : ''}{fmtPct(pct)}) vs {refLabel}.
-                    {r.category === 'Revenue' && good && ' Crecimiento orgánico por encima de objetivo.'}
-                    {r.category === 'COGS' && !good && ' Costes por encima de presupuesto — revisar cadena de suministro.'}
-                    {r.category === 'COGS' && good && ' Mejora en eficiencia de costes directos.'}
-                    {r.category === 'Gastos Personal' && !good && ' Desviación en masa salarial — verificar nuevas incorporaciones.'}
-                    {r.category === 'EBITDA' && good && ' Mejora operativa sostenida.'}
-                    {r.category === 'Tesorería' && good && ' Posición de caja por encima de objetivo.'}
+                    {' '}{good ? t('favorable') : t('unfavorable')} {t('insightBy', { amount: fmtEur(Math.abs(diff)), pct: `${pct > 0 ? '+' : ''}${fmtPct(pct)}`, ref: refLabel })}
+                    {r.category === 'Revenue' && good && ` ${t('insightRevenueGood')}`}
+                    {r.category === 'COGS' && !good && ` ${t('insightCogsBad')}`}
+                    {r.category === 'COGS' && good && ` ${t('insightCogsGood')}`}
+                    {r.category === 'Gastos Personal' && !good && ` ${t('insightPersonnelBad')}`}
+                    {r.category === 'EBITDA' && good && ` ${t('insightEbitdaGood')}`}
+                    {r.category === 'Tesorería' && good && ` ${t('insightTreasuryGood')}`}
                   </span>
                 </div>
               </div>

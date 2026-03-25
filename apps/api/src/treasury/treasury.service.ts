@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaClient } from '@prisma/client'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NOTIFICATION_EVENTS, NotificationEvent } from '../notifications/notification-events'
 const prisma = new PrismaClient()
 
 @Injectable()
 export class TreasuryService {
+  constructor(private eventEmitter: EventEmitter2) {}
   async getCockpitKPIs(tenantId: string) {
     const [accounts, invoicesAR, invoicesAP, forecast, movements, customers, covenants] = await Promise.all([
       prisma.bankAccount.findMany({ where: { tenantId } }),
@@ -640,26 +643,62 @@ export class TreasuryService {
   }
 
   async approveInvoiceAP(id: string, userId: string) {
-    return prisma.invoiceAP.update({
+    const result = await prisma.invoiceAP.update({
       where: { id },
       data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
+      include: { supplier: true },
     })
+    this.eventEmitter.emit(NOTIFICATION_EVENTS.PAYMENT_APPROVED, {
+      tenantId: result.tenantId,
+      type: 'payment_approved',
+      severity: 'info',
+      title: `Pago ${result.number} aprobado`,
+      description: `${result.supplier?.name || 'Proveedor'} — ${Number(result.totalAmount).toLocaleString('es-ES')} EUR`,
+      link: '/dashboard/pagos',
+      timestamp: new Date().toISOString(),
+    } as NotificationEvent)
+    return result
   }
 
   async approveInvoicesAPBatch(ids: string[], userId: string) {
-    return prisma.invoiceAP.updateMany({
+    // Get tenantId before batch update
+    const first = ids.length > 0 ? await prisma.invoiceAP.findFirst({ where: { id: ids[0] } }) : null
+    const result = await prisma.invoiceAP.updateMany({
       where: { id: { in: ids }, status: 'IN_REVIEW' },
       data: { status: 'APPROVED', approvedBy: userId, approvedAt: new Date() },
     })
+    if (first) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.PAYMENT_APPROVED, {
+        tenantId: first.tenantId,
+        type: 'payment_approved',
+        severity: 'info',
+        title: `${result.count} pago${result.count > 1 ? 's' : ''} aprobado${result.count > 1 ? 's' : ''} en lote`,
+        description: `${result.count} factura${result.count > 1 ? 's' : ''} aprobada${result.count > 1 ? 's' : ''} simultáneamente`,
+        link: '/dashboard/pagos',
+        timestamp: new Date().toISOString(),
+      } as NotificationEvent)
+    }
+    return result
   }
 
   async rejectInvoiceAP(id: string, userId: string, reason?: string) {
     const invoice = await prisma.invoiceAP.findFirst({ where: { id } })
     if (!invoice) throw new Error('Invoice not found')
-    return prisma.invoiceAP.update({
+    const result = await prisma.invoiceAP.update({
       where: { id },
       data: { status: 'REJECTED', notes: reason ? `[RECHAZADA] ${reason}` : '[RECHAZADA] Marcada como duplicado o fraudulenta' },
+      include: { supplier: true },
     })
+    this.eventEmitter.emit(NOTIFICATION_EVENTS.PAYMENT_REJECTED, {
+      tenantId: result.tenantId,
+      type: 'payment_rejected',
+      severity: 'warning',
+      title: `Pago ${result.number} rechazado`,
+      description: `${result.supplier?.name || 'Proveedor'} — ${reason || 'Duplicado o fraudulenta'}`,
+      link: '/dashboard/pagos',
+      timestamp: new Date().toISOString(),
+    } as NotificationEvent)
+    return result
   }
 
   async reconcileMovement(id: string, tenantId: string) {

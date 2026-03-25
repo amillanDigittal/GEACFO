@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Printer } from 'lucide-react'
 
 interface PageHeaderProps {
   title: string
@@ -47,8 +47,11 @@ export function PageHeader({ title, subtitle, lastUpdated, onRefresh, actions }:
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 print-hide">
         {actions}
+        <Button variant="outline" size="sm" onClick={() => window.print()} title="Imprimir página">
+          <Printer size={14} />
+        </Button>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw size={14} className={`mr-1 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Actualizando…' : 'Actualizar'}

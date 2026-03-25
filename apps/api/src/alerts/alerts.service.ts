@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaClient } from '@prisma/client'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NOTIFICATION_EVENTS, NotificationEvent } from '../notifications/notification-events'
 const prisma = new PrismaClient()
 
 @Injectable()
 export class AlertsService {
+  constructor(private eventEmitter: EventEmitter2) {}
   async getCounts(tenantId: string) {
     const [customers, invoicesAR, invoicesAP, covenants, inventory, dataSources, forecast] = await Promise.all([
       prisma.customer.findMany({ where: { tenantId }, include: { invoices: { where: { status: { not: 'PAID' } } } } }),
@@ -443,7 +446,7 @@ export class AlertsService {
 
   async updateResolution(tenantId: string, email: string, alertId: string, status: string, notes?: string) {
     const isResolved = status === 'RESOLVED' || status === 'FALSE_POSITIVE'
-    return prisma.alertResolution.upsert({
+    const result = await prisma.alertResolution.upsert({
       where: { tenantId_alertId: { tenantId, alertId } },
       update: {
         status: status as any,
@@ -460,5 +463,15 @@ export class AlertsService {
         resolvedAt: isResolved ? new Date() : null,
       },
     })
+    this.eventEmitter.emit(NOTIFICATION_EVENTS.ALERT_RESOLVED, {
+      tenantId,
+      type: 'alert_resolved',
+      severity: 'info',
+      title: `Alerta ${alertId} — ${status === 'RESOLVED' ? 'resuelta' : status === 'FALSE_POSITIVE' ? 'falso positivo' : 'actualizada'}`,
+      description: notes || `Estado cambiado a ${status}`,
+      link: '/dashboard/notificaciones',
+      timestamp: new Date().toISOString(),
+    } as NotificationEvent)
+    return result
   }
 }

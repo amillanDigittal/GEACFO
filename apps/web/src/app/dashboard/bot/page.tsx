@@ -1,25 +1,17 @@
 'use client'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { api } from '@/lib/api'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
+import { useBotHistory, useBotSessions } from '@/hooks/use-api'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MessageSquarePlus, History, Trash2 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import { useTranslations } from 'next-intl'
 
 const STORAGE_KEY = 'geacfo_bot_session'
-const SUGGESTED = [
-  '¿Cómo soluciono el gap de semana 8?',
-  '¿Cuál es mi posición de caja hoy?',
-  '¿Cuándo rompo el covenant de liquidez?',
-  '¿Qué clientes tienen mayor riesgo?',
-  'Genera un resumen para el board pack',
-]
 const CONTEXTS = ['tesoreria', 'riesgo', 'inventario', 'deuda']
-
-const GREETING: Message = {
-  role: 'assistant',
-  content: 'Hola, soy el **Bot CFO** de GEACFO. Tengo acceso en tiempo real a todos los datos financieros de tu empresa: caja, forecast, riesgo, covenants e inventario.\n\n¿En qué puedo ayudarte hoy?'
-}
 
 interface Message { role: 'user' | 'assistant'; content: string }
 interface Session { sessionId: string; firstMessage: string; context: string | null; messageCount: number; lastActivity: string }
@@ -29,16 +21,32 @@ function generateSessionId() {
 }
 
 export default function BotPage() {
+  const t = useTranslations('bot')
+
+  const SUGGESTED = [
+    t('suggested1'),
+    t('suggested2'),
+    t('suggested3'),
+    t('suggested4'),
+    t('suggested5'),
+  ]
+
+  const GREETING: Message = {
+    role: 'assistant',
+    content: t('greeting'),
+  }
+
   const [sessionId, setSessionId] = useState<string>('')
   const [messages, setMessages] = useState<Message[]>([GREETING])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [context, setContext] = useState('tesoreria')
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(true)
-  const [loadingHistory, setLoadingHistory] = useState(false)
   const [showSessions, setShowSessions] = useState(false)
   const messagesRef = useRef<HTMLDivElement>(null)
+
+  // SWR hooks for data fetching
+  const { data: historyData, isLoading: loadingHistory, mutate: mutateHistory } = useBotHistory(sessionId || null)
+  const { data: sessions = [], isLoading: loadingSessions, mutate: mutateSessions } = useBotSessions()
 
   // Initialize sessionId from localStorage
   useEffect(() => {
@@ -52,39 +60,22 @@ export default function BotPage() {
     }
   }, [])
 
-  // Load history when sessionId is set
+  // Sync local messages state from SWR history data
   useEffect(() => {
-    if (!sessionId) return
-    setLoadingHistory(true)
-    api.bot.history(sessionId)
-      .then((history: any[]) => {
-        if (history.length > 0) {
-          const restored: Message[] = history.map(m => ({
-            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-            content: m.content,
-          }))
-          setMessages([GREETING, ...restored])
-          // Restore context from last message
-          const lastWithContext = [...history].reverse().find(m => m.context)
-          if (lastWithContext?.context) setContext(lastWithContext.context)
-        } else {
-          setMessages([GREETING])
-        }
-      })
-      .catch(() => setMessages([GREETING]))
-      .finally(() => setLoadingHistory(false))
-  }, [sessionId])
-
-  // Load sessions list
-  const loadSessions = useCallback(() => {
-    setLoadingSessions(true)
-    api.bot.sessions()
-      .then(setSessions)
-      .catch(() => setSessions([]))
-      .finally(() => setLoadingSessions(false))
-  }, [])
-
-  useEffect(() => { loadSessions() }, [loadSessions])
+    if (!historyData) return
+    if (historyData.length > 0) {
+      const restored: Message[] = historyData.map((m: any) => ({
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      }))
+      setMessages([GREETING, ...restored])
+      // Restore context from last message
+      const lastWithContext = [...historyData].reverse().find((m: any) => m.context)
+      if (lastWithContext?.context) setContext(lastWithContext.context)
+    } else {
+      setMessages([GREETING])
+    }
+  }, [historyData])
 
   useEffect(() => {
     if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight
@@ -96,8 +87,12 @@ export default function BotPage() {
     setSessionId(newId)
     setMessages([GREETING])
     setShowSessions(false)
-    loadSessions()
+    mutateSessions()
   }
+
+  useKeyboardShortcuts([
+    { key: 'n', label: t('newConversation'), action: startNewSession },
+  ])
 
   function switchSession(sid: string) {
     localStorage.setItem(STORAGE_KEY, sid)
@@ -114,21 +109,31 @@ export default function BotPage() {
     try {
       const res = await api.bot.chat(msg, sessionId, context)
       setMessages(prev => [...prev, { role: 'assistant', content: res.message }])
-      loadSessions()
+      mutateHistory()
+      mutateSessions()
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error de conexión con el servidor. Verifica que la API esté activa.' }])
+      setMessages(prev => [...prev, { role: 'assistant', content: t('connectionError') }])
     } finally {
       setLoading(false)
     }
   }
 
   function renderContent(text: string) {
-    return text.split('\n').map((line, i) => {
-      if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-bold text-foreground mb-1">{line.slice(2,-2)}</p>
-      if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{line.slice(2)}</li>
-      if (line.match(/\*\*/)) return <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
-      return line ? <p key={i} className="mb-1">{line}</p> : <br key={i} />
-    })
+    return (
+      <ReactMarkdown
+        components={{
+          p: ({ children }) => <p className="mb-1">{children}</p>,
+          strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+          ul: ({ children }) => <ul className="ml-4 list-disc space-y-0.5">{children}</ul>,
+          ol: ({ children }) => <ol className="ml-4 list-decimal space-y-0.5">{children}</ol>,
+          li: ({ children }) => <li>{children}</li>,
+          code: ({ children }) => <code className="px-1 py-0.5 rounded bg-background text-xs font-mono">{children}</code>,
+          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    )
   }
 
   function fmtDate(d: string) {
@@ -136,23 +141,23 @@ export default function BotPage() {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMin = Math.floor(diffMs / 60000)
-    if (diffMin < 1) return 'Ahora'
-    if (diffMin < 60) return `Hace ${diffMin} min`
+    if (diffMin < 1) return t('timeNow')
+    if (diffMin < 60) return t('timeMinutesAgo', { minutes: diffMin })
     const diffH = Math.floor(diffMin / 60)
-    if (diffH < 24) return `Hace ${diffH}h`
+    if (diffH < 24) return t('timeHoursAgo', { hours: diffH })
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
   }
 
   return (
     <div className="space-y-4 h-[calc(100vh-160px)] md:h-[calc(100vh-120px)] flex flex-col">
       <div className="flex items-start justify-between">
-        <div><h1 className="page-title">Bot CFO — Asistente IA</h1><p className="page-subtitle">Análisis conversacional con acceso a datos financieros en tiempo real · Claude API</p></div>
+        <div><h1 className="page-title">{t('pageTitle')}</h1><p className="page-subtitle">{t('pageSubtitle')}</p></div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowSessions(!showSessions)}>
-            <History size={14} className="mr-1" />{showSessions ? 'Ocultar' : 'Historial'}
+            <History size={14} className="mr-1" />{showSessions ? t('hide') : t('history')}
           </Button>
           <Button size="sm" onClick={startNewSession}>
-            <MessageSquarePlus size={14} className="mr-1" />Nueva
+            <MessageSquarePlus size={14} className="mr-1" />{t('new')}
           </Button>
         </div>
       </div>
@@ -171,7 +176,7 @@ export default function BotPage() {
           {/* Messages */}
           <div ref={messagesRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
             {loadingHistory ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">Cargando conversación...</div>
+              <div className="text-center py-10 text-sm text-muted-foreground">{t('loadingConversation')}</div>
             ) : (
               messages.map((m, i) => (
                 <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
@@ -196,8 +201,8 @@ export default function BotPage() {
 
           {/* Input */}
           <div className="p-3 border-t border-border flex gap-2">
-            <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !loading && sendMessage()} placeholder="Pregunta sobre tesorería, riesgo, covenants…" className="flex-1" disabled={loading} />
-            <Button onClick={() => sendMessage()} disabled={loading || !input.trim()}>Enviar</Button>
+            <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !loading && sendMessage()} placeholder={t('inputPlaceholder')} className="flex-1" disabled={loading} />
+            <Button onClick={() => sendMessage()} disabled={loading || !input.trim()}>{t('send')}</Button>
           </div>
         </Card>
 
@@ -205,13 +210,13 @@ export default function BotPage() {
         {showSessions && (
           <Card className="flex flex-col min-h-0">
             <CardHeader>
-              <CardTitle>Conversaciones</CardTitle>
+              <CardTitle>{t('conversations')}</CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0 space-y-0">
               {loadingSessions ? (
-                <div className="text-center py-6 text-sm text-muted-foreground">Cargando...</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">{t('loading')}</div>
               ) : sessions.length === 0 ? (
-                <div className="text-center py-6 text-sm text-muted-foreground">Sin conversaciones previas</div>
+                <div className="text-center py-6 text-sm text-muted-foreground">{t('noConversations')}</div>
               ) : (
                 sessions.map(s => (
                   <button
@@ -219,11 +224,11 @@ export default function BotPage() {
                     onClick={() => switchSession(s.sessionId)}
                     className={`w-full text-left px-4 py-3 border-b border-border transition-colors hover:bg-muted/50 ${s.sessionId === sessionId ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
                   >
-                    <div className="text-sm font-medium truncate">{s.firstMessage || 'Conversación'}</div>
+                    <div className="text-sm font-medium truncate">{s.firstMessage || t('conversationDefault')}</div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[10px] text-muted-foreground">{fmtDate(s.lastActivity)}</span>
                       <span className="text-[10px] text-muted-foreground">·</span>
-                      <span className="text-[10px] text-muted-foreground">{s.messageCount} msgs</span>
+                      <span className="text-[10px] text-muted-foreground">{t('messageCount', { count: s.messageCount })}</span>
                       {s.context && (
                         <>
                           <span className="text-[10px] text-muted-foreground">·</span>
@@ -242,7 +247,7 @@ export default function BotPage() {
         {!showSessions && (
           <div className="space-y-4">
             <Card>
-              <CardHeader><CardTitle>Preguntas Sugeridas</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('suggestedQuestions')}</CardTitle></CardHeader>
               <CardContent className="space-y-2 p-3">
                 {SUGGESTED.map(q => (
                   <button key={q} onClick={() => sendMessage(q)} className="w-full text-left text-xs p-2.5 bg-muted hover:bg-muted/80 border border-border rounded-lg text-foreground transition-colors">{q}</button>
@@ -250,13 +255,13 @@ export default function BotPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle>Contexto Activo</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('activeContext')}</CardTitle></CardHeader>
               <CardContent>
                 {[
-                  { label: 'Módulo', value: context.charAt(0).toUpperCase() + context.slice(1) },
-                  { label: 'Datos a', value: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
-                  { label: 'Fuentes', value: '6 activas' },
-                  { label: 'Modelo', value: 'Claude Sonnet' },
+                  { label: t('contextModule'), value: context.charAt(0).toUpperCase() + context.slice(1) },
+                  { label: t('contextDataAt'), value: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+                  { label: t('contextSources'), value: t('contextSourcesValue') },
+                  { label: t('contextModel'), value: 'Claude Sonnet' },
                 ].map(r => (
                   <div key={r.label} className="stat-row"><span className="stat-label">{r.label}</span><span className="stat-value text-xs">{r.value}</span></div>
                 ))}

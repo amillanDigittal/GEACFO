@@ -29,6 +29,13 @@ export class AuthService {
     }
   }
 
+  async refresh(userId: string, tenantId: string, email: string, role: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) throw new UnauthorizedException('Usuario no encontrado')
+    const payload = { sub: userId, tenantId, email, role }
+    return { access_token: this.jwt.sign(payload) }
+  }
+
   async getProfile(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },

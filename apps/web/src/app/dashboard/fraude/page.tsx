@@ -1,57 +1,25 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { fmtEur, riskLabel, riskVariant, exportCSV } from '@/lib/utils'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Download, Siren, CheckCircle2, Search, ClipboardList, ShieldCheck, ShieldX, Eye } from 'lucide-react'
-import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { Download, Siren, CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonFraude } from '@/components/ui/skeleton-page'
+import dynamic from 'next/dynamic'
+import { FraudAlert, Anomaly, TabKey, severityConfig, alertTypeLabels, daysDiff } from './_components/types'
 
-type TabKey = 'alertas' | 'anomalias' | 'audit'
-
-const severityConfig: Record<string, { label: string; variant: 'destructive' | 'warning' | 'secondary' }> = {
-  CRITICAL: { label: 'Crítica', variant: 'destructive' },
-  HIGH: { label: 'Alta', variant: 'destructive' },
-  MEDIUM: { label: 'Media', variant: 'warning' },
-  LOW: { label: 'Baja', variant: 'secondary' },
-}
-
-function daysDiff(dateStr: string) {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
-}
-
-interface FraudAlert {
-  id: string
-  type: 'CUSTOMER_RISK' | 'OVERDUE_CONCENTRATION' | 'CREDIT_EXCEEDED' | 'PAYMENT_ANOMALY' | 'DUPLICATE_INVOICE'
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
-  title: string
-  description: string
-  entity: string
-  entityId: string
-  amount?: number
-  detectedAt: string
-  status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED'
-}
-
-interface Anomaly {
-  id: string
-  type: string
-  description: string
-  invoiceNumber: string
-  entity: string
-  amount: number
-  severity: 'HIGH' | 'MEDIUM' | 'LOW'
-  detectedAt: string
-  invoiceIds?: string[]
-  actionable?: boolean
-}
+const AlertasTab = dynamic(() => import('./_components/alertas-tab').then(m => ({ default: m.AlertasTab })), { ssr: false })
+const AnomaliasTab = dynamic(() => import('./_components/anomalias-tab').then(m => ({ default: m.AnomaliasTab })), { ssr: false })
+const AuditoriaTab = dynamic(() => import('./_components/auditoria-tab').then(m => ({ default: m.AuditoriaTab })), { ssr: false })
 
 export default function FraudePage() {
+  const t = useTranslations('fraude')
   const [customers, setCustomers] = useState<any[]>([])
   const [invoicesAR, setInvoicesAR] = useState<any[]>([])
   const [invoicesAP, setInvoicesAP] = useState<any[]>([])
@@ -106,17 +74,19 @@ export default function FraudePage() {
     try {
       const res = await api.alerts.updateResolution(alertId, status, actionNotes || undefined)
       setResolutions(prev => ({ ...prev, [alertId]: res }))
-      toast({ title: 'Alerta actualizada', description: status === 'RESOLVED' ? 'Marcada como resuelta' : status === 'FALSE_POSITIVE' ? 'Marcada como falso positivo' : status === 'INVESTIGATING' ? 'En investigación' : 'Reabierta' })
+      toast({ title: t('toastAlertUpdated'), description: status === 'RESOLVED' ? t('toastMarkedResolved') : status === 'FALSE_POSITIVE' ? t('toastMarkedFalsePositive') : status === 'INVESTIGATING' ? t('toastInvestigating') : t('toastReopened') })
       setActionAlert(null)
       setActionNotes('')
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast({ title: t('toastError'), description: err.message, variant: 'destructive' })
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <SkeletonFraude />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonFraude />
 
   // ── Generate fraud alerts from real data ──
   const alerts: FraudAlert[] = []
@@ -128,8 +98,8 @@ export default function FraudePage() {
         id: `risk-${c.id}`,
         type: 'CUSTOMER_RISK',
         severity: c.riskLevel === 'CRITICAL' ? 'CRITICAL' : 'HIGH',
-        title: `Cliente en riesgo ${c.riskLevel === 'CRITICAL' ? 'crítico' : 'alto'}: ${c.name}`,
-        description: `Score crediticio: ${c.creditScore || 'N/A'} · Estado: ${c.status} · DSO: ${c.dso || 0}d`,
+        title: t('alertCustomerRisk', { level: c.riskLevel === 'CRITICAL' ? t('riskCritical') : t('riskHigh'), name: c.name }),
+        description: t('alertCustomerRiskDesc', { score: c.creditScore || 'N/A', status: c.status, dso: c.dso || 0 }),
         entity: c.name,
         entityId: c.id,
         amount: c.invoices?.reduce((s: number, i: any) => s + Number(i.totalAmount) - Number(i.paidAmount), 0) || 0,
@@ -148,8 +118,8 @@ export default function FraudePage() {
         id: `credit-${c.id}`,
         type: 'CREDIT_EXCEEDED',
         severity: exposure > limit * 1.5 ? 'CRITICAL' : 'HIGH',
-        title: `Límite de crédito superado: ${c.name}`,
-        description: `Exposición: ${fmtEur(exposure)} vs Límite: ${fmtEur(limit)} (${((exposure / limit) * 100).toFixed(0)}%)`,
+        title: t('alertCreditExceeded', { name: c.name }),
+        description: t('alertCreditExceededDesc', { exposure: fmtEur(exposure), limit: fmtEur(limit), pct: ((exposure / limit) * 100).toFixed(0) }),
         entity: c.name,
         entityId: c.id,
         amount: exposure - limit,
@@ -168,9 +138,9 @@ export default function FraudePage() {
       id: 'overdue-concentration',
       type: 'OVERDUE_CONCENTRATION',
       severity: overdueAmount / totalAR > 0.5 ? 'CRITICAL' : 'HIGH',
-      title: `Alta concentración de impagos`,
-      description: `${overdueAR.length} facturas vencidas representan el ${((overdueAmount / totalAR) * 100).toFixed(1)}% de la cartera total`,
-      entity: 'Cartera AR',
+      title: t('alertOverdueConcentration'),
+      description: t('alertOverdueConcentrationDesc', { count: overdueAR.length, pct: ((overdueAmount / totalAR) * 100).toFixed(1) }),
+      entity: t('arPortfolio'),
       entityId: '',
       amount: overdueAmount,
       detectedAt: new Date().toISOString(),
@@ -185,9 +155,9 @@ export default function FraudePage() {
       id: 'high-priority-ap',
       type: 'PAYMENT_ANOMALY',
       severity: 'MEDIUM',
-      title: `${highPriorityUnapproved.length} pago(s) de alta prioridad sin aprobar`,
+      title: t('alertHighPriorityUnapproved', { count: highPriorityUnapproved.length }),
       description: highPriorityUnapproved.map((i: any) => `${i.number} (${i.supplier?.name})`).join(', '),
-      entity: 'Cuentas por Pagar',
+      entity: t('accountsPayable'),
       entityId: '',
       amount: highPriorityUnapproved.reduce((s: number, i: any) => s + Number(i.totalAmount), 0),
       detectedAt: new Date().toISOString(),
@@ -204,8 +174,8 @@ export default function FraudePage() {
     if (days > 60) {
       anomalies.push({
         id: `overdue-${i.id}`,
-        type: 'Impago prolongado',
-        description: `${days} días vencida · Cliente: ${i.customer?.name}`,
+        type: t('anomalyProlongedDefault'),
+        description: t('anomalyProlongedDefaultDesc', { days, name: i.customer?.name }),
         invoiceNumber: i.number,
         entity: i.customer?.name || '',
         amount: Number(i.totalAmount) - Number(i.paidAmount),
@@ -230,8 +200,8 @@ export default function FraudePage() {
         if (amtA === amtB && Math.abs(daysDiff(group[i].issueDate) - daysDiff(group[j].issueDate)) < 7) {
           anomalies.push({
             id: `dup-${group[i].id}-${group[j].id}`,
-            type: 'Posible duplicado',
-            description: `Mismo proveedor (${group[i].supplier?.name}), mismo importe, emitidas en <7 días`,
+            type: t('anomalyPossibleDuplicate'),
+            description: t('anomalyPossibleDuplicateDesc', { supplier: group[i].supplier?.name }),
             invoiceNumber: `${group[i].number} / ${group[j].number}`,
             entity: group[i].supplier?.name || '',
             amount: amtA,
@@ -251,8 +221,8 @@ export default function FraudePage() {
     if (amt > 50000 && !i.approvedBy) {
       anomalies.push({
         id: `large-ap-${i.id}`,
-        type: 'Pago grande sin aprobación',
-        description: `Factura ${i.number} de ${i.supplier?.name} por ${fmtEur(amt)} sin aprobación`,
+        type: t('anomalyLargeUnapproved'),
+        description: t('anomalyLargeUnapprovedDesc', { number: i.number, supplier: i.supplier?.name, amount: fmtEur(amt) }),
         invoiceNumber: i.number,
         entity: i.supplier?.name || '',
         amount: amt,
@@ -293,30 +263,22 @@ export default function FraudePage() {
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const fmtDateTime = (d: string) => new Date(d).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  const alertTypeLabels: Record<string, string> = {
-    CUSTOMER_RISK: 'Riesgo Cliente',
-    OVERDUE_CONCENTRATION: 'Concentración Impagos',
-    CREDIT_EXCEEDED: 'Crédito Excedido',
-    PAYMENT_ANOMALY: 'Anomalía Pagos',
-    DUPLICATE_INVOICE: 'Factura Duplicada',
-  }
-
   const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: 'alertas', label: 'Alertas', count: alerts.length },
-    { key: 'anomalias', label: 'Anomalías', count: anomalies.length },
-    { key: 'audit', label: 'Auditoría', count: auditLog.length },
+    { key: 'alertas', label: t('tabAlerts'), count: alerts.length },
+    { key: 'anomalias', label: t('tabAnomalies'), count: anomalies.length },
+    { key: 'audit', label: t('tabAudit'), count: auditLog.length },
   ]
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Fraude & Compliance"
-        subtitle="Grupo Ibérico SA · Marzo 2026"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={handleRefresh}
         actions={
-          <Button variant="outline" size="sm" onClick={() => exportCSV('fraude_alertas', ['Severidad', 'Tipo', 'Título', 'Descripción', 'Entidad', 'Importe', 'Estado', 'Fecha'], alerts.map(a => [a.severity, alertTypeLabels[a.type] || a.type, a.title, a.description, a.entity, a.amount || '', a.status, a.detectedAt?.slice(0, 10)]))}><Download size={14} className="mr-1" />Exportar</Button>
+          <Button variant="outline" size="sm" onClick={() => exportCSV('fraude_alertas', [t('csvSeverity'), t('csvType'), t('csvTitle'), t('csvDescription'), t('csvEntity'), t('csvAmount'), t('csvStatus'), t('csvDate')], alerts.map(a => [a.severity, alertTypeLabels[a.type] || a.type, a.title, a.description, a.entity, a.amount || '', a.status, a.detectedAt?.slice(0, 10)]))}><Download size={14} className="mr-1" />{t('export')}</Button>
         }
       />
 
@@ -325,7 +287,7 @@ export default function FraudePage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
           <Siren size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <div className="font-semibold text-sm">{criticalAlerts} alerta{criticalAlerts > 1 ? 's' : ''} crítica{criticalAlerts > 1 ? 's' : ''} requiere{criticalAlerts > 1 ? 'n' : ''} atención inmediata</div>
+            <div className="font-semibold text-sm">{t('criticalBanner', { count: criticalAlerts })}</div>
             <div className="text-xs opacity-80 mt-0.5">
               {alerts.filter(a => a.severity === 'CRITICAL').map(a => a.title).join(' · ')}
             </div>
@@ -336,10 +298,10 @@ export default function FraudePage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Alertas Abiertas', value: `${openAlerts}`, color: openAlerts > 0 ? 'text-destructive' : 'text-success' },
-          { label: 'Exposición en Riesgo', value: fmtEur(totalExposure), color: totalExposure > 0 ? 'text-warning' : 'text-foreground' },
-          { label: 'Clientes en Riesgo', value: `${riskCustomers.length}/${customers.length}`, color: riskCustomers.length > 0 ? 'text-destructive' : 'text-success' },
-          { label: 'Score Compliance', value: `${complianceScore}%`, color: complianceScore >= 80 ? 'text-success' : complianceScore >= 60 ? 'text-warning' : 'text-destructive' },
+          { label: t('kpiOpenAlerts'), value: `${openAlerts}`, color: openAlerts > 0 ? 'text-destructive' : 'text-success' },
+          { label: t('kpiExposureAtRisk'), value: fmtEur(totalExposure), color: totalExposure > 0 ? 'text-warning' : 'text-foreground' },
+          { label: t('kpiRiskCustomers'), value: `${riskCustomers.length}/${customers.length}`, color: riskCustomers.length > 0 ? 'text-destructive' : 'text-success' },
+          { label: t('kpiComplianceScore'), value: `${complianceScore}%`, color: complianceScore >= 80 ? 'text-success' : complianceScore >= 60 ? 'text-warning' : 'text-destructive' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -352,7 +314,7 @@ export default function FraudePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Alert distribution by type */}
         <Card>
-          <CardHeader><CardTitle>Distribución de Alertas</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('alertDistribution')}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {Object.entries(
               alerts.reduce((acc, a) => {
@@ -367,7 +329,7 @@ export default function FraudePage() {
                   <div key={type}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="font-medium">{alertTypeLabels[type] || type}</span>
-                      <span className="text-muted-foreground">{count} alerta{count > 1 ? 's' : ''}</span>
+                      <span className="text-muted-foreground">{t('alertCount', { count })}</span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all bg-destructive" style={{ width: `${pct}%` }} />
@@ -378,7 +340,7 @@ export default function FraudePage() {
             {alerts.length === 0 && (
               <div className="text-center py-8">
                 <div className="mb-3 opacity-30"><CheckCircle2 size={28} className="mx-auto text-muted-foreground" /></div>
-                <div className="text-sm text-muted-foreground">Sin alertas activas</div>
+                <div className="text-sm text-muted-foreground">{t('noActiveAlerts')}</div>
               </div>
             )}
           </CardContent>
@@ -386,27 +348,27 @@ export default function FraudePage() {
 
         {/* Compliance factors */}
         <Card>
-          <CardHeader><CardTitle>Factores de Compliance</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('complianceFactors')}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {[
               {
-                label: 'Cobertura de Scoring',
-                description: `${customers.filter(c => c.creditScore !== null).length}/${customers.length} clientes evaluados`,
+                label: t('complianceScoringCoverage'),
+                description: t('complianceScoringCoverageDesc', { evaluated: customers.filter(c => c.creditScore !== null).length, total: customers.length }),
                 value: complianceFactors[0],
               },
               {
-                label: 'Salud de Cobro',
-                description: `${overdueAR.length} facturas vencidas de ${invoicesAR.length} total`,
+                label: t('complianceCollectionHealth'),
+                description: t('complianceCollectionHealthDesc', { overdue: overdueAR.length, total: invoicesAR.length }),
                 value: complianceFactors[1],
               },
               {
-                label: 'Aprobaciones AP',
-                description: `${invoicesAP.filter((i: any) => i.approvedBy).length}/${invoicesAP.length} facturas con aprobación`,
+                label: t('complianceApApprovals'),
+                description: t('complianceApApprovalsDesc', { approved: invoicesAP.filter((i: any) => i.approvedBy).length, total: invoicesAP.length }),
                 value: complianceFactors[2],
               },
               {
-                label: 'Trazabilidad',
-                description: auditLog.length > 0 ? `${auditLog.length} registros de auditoría` : 'Sin registros',
+                label: t('complianceTraceability'),
+                description: auditLog.length > 0 ? t('complianceTraceabilityDesc', { count: auditLog.length }) : t('complianceNoRecords'),
                 value: complianceFactors[3],
               },
             ].map(f => {
@@ -434,8 +396,8 @@ export default function FraudePage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between w-full">
-              <CardTitle>Clientes en Vigilancia</CardTitle>
-              <Badge variant="destructive">{riskCustomers.length} cliente{riskCustomers.length > 1 ? 's' : ''}</Badge>
+              <CardTitle>{t('watchlistCustomers')}</CardTitle>
+              <Badge variant="destructive">{t('customerCount', { count: riskCustomers.length })}</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -458,21 +420,21 @@ export default function FraudePage() {
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Score crediticio</span>
+                          <span className="text-muted-foreground">{t('creditScore')}</span>
                           <span className={`font-mono font-bold ${(c.creditScore || 0) < 40 ? 'text-destructive' : 'text-warning'}`}>{c.creditScore || 'N/A'}</span>
                         </div>
                         <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Exposición</span>
+                          <span className="text-muted-foreground">{t('exposure')}</span>
                           <span className="font-mono font-semibold">{fmtEur(exposure)}</span>
                         </div>
                         <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Facturas vencidas</span>
+                          <span className="text-muted-foreground">{t('overdueInvoices')}</span>
                           <span className={`font-mono font-semibold ${overdueCount > 0 ? 'text-destructive' : 'text-success'}`}>{overdueCount}</span>
                         </div>
                         {limit > 0 && (
                           <div>
                             <div className="flex justify-between text-xs mb-1">
-                              <span className="text-muted-foreground">Uso de crédito</span>
+                              <span className="text-muted-foreground">{t('creditUsage')}</span>
                               <span className={`font-mono text-[11px] ${utilization > 100 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>{utilization.toFixed(0)}%</span>
                             </div>
                             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -497,15 +459,15 @@ export default function FraudePage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between w-full">
-            <CardTitle>Detalle</CardTitle>
+            <CardTitle>{t('detail')}</CardTitle>
             <div className="flex gap-1.5">
-              {tabs.map(t => (
+              {tabs.map(t2 => (
                 <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${tab === t.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                  key={t2.key}
+                  onClick={() => setTab(t2.key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${tab === t2.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
-                  {t.label} ({t.count})
+                  {t2.label} ({t2.count})
                 </button>
               ))}
             </div>
@@ -514,313 +476,51 @@ export default function FraudePage() {
         <CardContent>
           {/* Alertas tab */}
           {tab === 'alertas' && (
-            alerts.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="mb-3 opacity-30"><CheckCircle2 size={28} className="mx-auto text-muted-foreground" /></div>
-                <div className="text-sm text-muted-foreground">No se han detectado alertas de fraude</div>
-                <div className="text-xs text-muted-foreground mt-1">El sistema analiza clientes, facturas y pagos en busca de anomalías</div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {alerts.slice(alertPage * 10, (alertPage + 1) * 10).map(a => {
-                  const sev = severityConfig[a.severity] || severityConfig.LOW
-                  const res = resolutions[a.id]
-                  const isResolved = a.status === 'RESOLVED' || a.status === 'FALSE_POSITIVE'
-                  const isShowingAction = actionAlert === a.id
-                  return (
-                    <div key={a.id} className={`p-4 rounded-lg border ${isResolved ? 'border-border bg-card opacity-60' : a.severity === 'CRITICAL' ? 'border-destructive/30 bg-destructive/5' : a.severity === 'HIGH' ? 'border-destructive/20 bg-destructive/5' : 'border-border bg-card'}`}>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={sev.variant}>{sev.label}</Badge>
-                          <Badge variant="secondary">{alertTypeLabels[a.type] || a.type}</Badge>
-                        </div>
-                        <Badge variant={a.status === 'OPEN' ? 'destructive' : a.status === 'INVESTIGATING' ? 'warning' : 'success'}>
-                          {a.status === 'OPEN' ? 'Abierta' : a.status === 'INVESTIGATING' ? 'Investigando' : a.status === 'FALSE_POSITIVE' ? 'Falso positivo' : 'Resuelta'}
-                        </Badge>
-                      </div>
-                      <div className="font-semibold text-sm mb-1">{a.title}</div>
-                      <div className="text-xs text-muted-foreground mb-2">{a.description}</div>
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          {a.amount !== undefined && a.amount > 0 && (
-                            <span>Importe: <span className="font-mono font-semibold text-foreground">{fmtEur(a.amount)}</span></span>
-                          )}
-                          <span>Detectada: {fmtDate(a.detectedAt)}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {!isResolved && (
-                            <>
-                              {a.status !== 'INVESTIGATING' && (
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleResolve(a.id, 'INVESTIGATING')} disabled={saving}>
-                                  <Eye size={12} className="mr-1" />Investigar
-                                </Button>
-                              )}
-                              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setActionAlert(isShowingAction ? null : a.id)} disabled={saving}>
-                                <ShieldCheck size={12} className="mr-1" />Resolver
-                              </Button>
-                            </>
-                          )}
-                          {isResolved && (
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleResolve(a.id, 'OPEN')} disabled={saving}>
-                              Reabrir
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      {/* Resolution panel */}
-                      {isShowingAction && (
-                        <div className="mt-3 pt-3 border-t border-border space-y-2">
-                          <Input
-                            placeholder="Notas de resolución (opcional)..."
-                            value={actionNotes}
-                            onChange={e => setActionNotes(e.target.value)}
-                            className="h-8 text-xs bg-muted border-border"
-                          />
-                          <div className="flex gap-2">
-                            <Button size="sm" className="h-7 text-xs" onClick={() => handleResolve(a.id, 'RESOLVED')} disabled={saving}>
-                              <ShieldCheck size={12} className="mr-1" />{saving ? 'Guardando...' : 'Marcar como resuelta'}
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleResolve(a.id, 'FALSE_POSITIVE')} disabled={saving}>
-                              <ShieldX size={12} className="mr-1" />Falso positivo
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setActionAlert(null); setActionNotes('') }}>
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                      {/* Resolution info */}
-                      {res && isResolved && (
-                        <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted-foreground">
-                          {a.status === 'FALSE_POSITIVE' ? 'Falso positivo' : 'Resuelta'} por <span className="font-medium text-foreground">{res.resolvedBy}</span> el {fmtDateTime(res.resolvedAt)}
-                          {res.notes && <span> — {res.notes}</span>}
-                        </div>
-                      )}
-                      {res && a.status === 'INVESTIGATING' && (
-                        <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted-foreground">
-                          En investigación desde {fmtDateTime(res.updatedAt)}
-                          {res.notes && <span> — {res.notes}</span>}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {alerts.length > 10 && (
-                  <div className="flex items-center justify-center gap-2 pt-3">
-                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={alertPage === 0} onClick={() => setAlertPage(p => p - 1)}>←</Button>
-                    {Array.from({ length: Math.ceil(alerts.length / 10) }, (_, i) => (
-                      <button key={i} onClick={() => setAlertPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${alertPage === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
-                    ))}
-                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={alertPage >= Math.ceil(alerts.length / 10) - 1} onClick={() => setAlertPage(p => p + 1)}>→</Button>
-                    <span className="text-xs text-muted-foreground ml-2">{alertPage * 10 + 1}–{Math.min((alertPage + 1) * 10, alerts.length)} de {alerts.length}</span>
-                  </div>
-                )}
-              </div>
-            )
+            <AlertasTab
+              alerts={alerts}
+              resolutions={resolutions}
+              alertPage={alertPage}
+              setAlertPage={setAlertPage}
+              actionAlert={actionAlert}
+              setActionAlert={setActionAlert}
+              actionNotes={actionNotes}
+              setActionNotes={setActionNotes}
+              saving={saving}
+              handleResolve={handleResolve}
+              fmtDate={fmtDate}
+              fmtDateTime={fmtDateTime}
+              fmtEur={fmtEur}
+            />
           )}
 
           {/* Anomalías tab */}
-          {tab === 'anomalias' && (() => {
-            const visibleAnomalies = anomalies.filter(a => !dismissedAnoms.has(a.id))
-            async function handleRejectDuplicate(anom: Anomaly) {
-              if (!anom.invoiceIds || anom.invoiceIds.length < 2) return
-              setAnomActing(true)
-              try {
-                // Reject the second invoice (the suspected duplicate)
-                await api.treasury.rejectAP(anom.invoiceIds[1], 'Duplicado confirmado desde Fraude & Compliance')
-                toast({ title: 'Duplicado confirmado', description: `Factura rechazada. La primera factura se mantiene activa.` })
-                setAnomAction(null)
-                await fetchData()
-              } catch (err: any) {
-                toast({ title: 'Error', description: err.message, variant: 'destructive' })
-              } finally { setAnomActing(false) }
-            }
-            async function handleApproveFromAnomaly(anom: Anomaly) {
-              if (!anom.invoiceIds?.length) return
-              setAnomActing(true)
-              try {
-                for (const id of anom.invoiceIds) {
-                  await api.treasury.approveAP(id)
-                }
-                toast({ title: 'Factura(s) aprobada(s)', description: 'Las facturas han sido aprobadas correctamente.' })
-                setAnomAction(null)
-                await fetchData()
-              } catch (err: any) {
-                toast({ title: 'Error', description: err.message, variant: 'destructive' })
-              } finally { setAnomActing(false) }
-            }
-            function handleDismiss(anomId: string) {
-              setDismissedAnoms(prev => new Set(prev).add(anomId))
-              setAnomAction(null)
-              toast({ title: 'Descartada', description: 'Anomalía marcada como falso positivo.' })
-            }
-            return visibleAnomalies.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="mb-3 opacity-30"><Search size={28} className="mx-auto text-muted-foreground" /></div>
-                <div className="text-sm text-muted-foreground">No se han detectado anomalías</div>
-                <div className="text-xs text-muted-foreground mt-1">Se analizan duplicados, pagos sin aprobación e impagos prolongados</div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {visibleAnomalies.slice(anomPage * 10, (anomPage + 1) * 10).map(a => {
-                  const sev = severityConfig[a.severity] || severityConfig.LOW
-                  const isExpanded = anomAction === a.id
-                  const isDuplicate = a.type === 'Posible duplicado'
-                  const isLargeAP = a.type === 'Pago grande sin aprobación'
-                  return (
-                    <div key={a.id} className={`p-4 rounded-lg border transition-colors ${a.severity === 'HIGH' ? 'border-destructive/20 bg-destructive/5' : 'border-border bg-card'}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <Badge variant={sev.variant}>{sev.label}</Badge>
-                            <Badge variant={isDuplicate ? 'destructive' : 'secondary'}>{a.type}</Badge>
-                            <span className="font-mono text-xs text-muted-foreground">{a.invoiceNumber}</span>
-                          </div>
-                          <div className="text-sm font-medium">{a.entity}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">{a.description}</div>
-                          <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
-                            <span>Importe: <span className="font-mono font-semibold text-foreground">{fmtEur(a.amount)}</span></span>
-                            <span>Detectada: {fmtDate(a.detectedAt)}</span>
-                          </div>
-                        </div>
-                        {a.actionable && (
-                          <div className="flex-shrink-0">
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAnomAction(isExpanded ? null : a.id)}>
-                              {isExpanded ? 'Cerrar' : 'Acciones'}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {isExpanded && (
-                        <div className="mt-3 pt-3 border-t border-border">
-                          {isDuplicate && (
-                            <div className="space-y-3">
-                              <div className="text-xs text-muted-foreground">
-                                Se han detectado 2 facturas del mismo proveedor con el mismo importe emitidas en menos de 7 días.
-                                Selecciona la acción a tomar:
-                              </div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => handleRejectDuplicate(a)} disabled={anomActing}>
-                                  <ShieldX size={12} className="mr-1" />
-                                  {anomActing ? 'Procesando…' : 'Confirmar Duplicado (rechazar 2ª factura)'}
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDismiss(a.id)}>
-                                  <CheckCircle2 size={12} className="mr-1" />No es duplicado (descartar)
-                                </Button>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-[10px]">
-                                {a.invoiceIds?.map((id, idx) => {
-                                  const inv = invoicesAP.find((i: any) => i.id === id)
-                                  return inv ? (
-                                    <div key={id} className={`p-2 rounded border ${idx === 1 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-muted/30'}`}>
-                                      <div className="font-semibold">{idx === 0 ? 'Factura Original' : 'Posible Duplicado'}</div>
-                                      <div className="text-muted-foreground mt-1">
-                                        <div>Nº: <span className="font-mono">{inv.number}</span></div>
-                                        <div>Fecha: {fmtDate(inv.issueDate)}</div>
-                                        <div>Importe: <span className="font-mono">{fmtEur(Number(inv.totalAmount))}</span></div>
-                                        <div>Estado: <span className="font-semibold">{inv.status}</span></div>
-                                      </div>
-                                    </div>
-                                  ) : null
-                                })}
-                              </div>
-                            </div>
-                          )}
-                          {isLargeAP && (
-                            <div className="space-y-2">
-                              <div className="text-xs text-muted-foreground">Factura de importe alto sin aprobación registrada.</div>
-                              <div className="flex items-center gap-2">
-                                <Button size="sm" className="h-7 text-xs" onClick={() => handleApproveFromAnomaly(a)} disabled={anomActing}>
-                                  <ShieldCheck size={12} className="mr-1" />
-                                  {anomActing ? 'Procesando…' : 'Aprobar Factura'}
-                                </Button>
-                                <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => { if (a.invoiceIds?.[0]) { api.treasury.rejectAP(a.invoiceIds[0], 'Rechazada desde Fraude & Compliance').then(() => { toast({ title: 'Factura rechazada' }); fetchData() }) } }} disabled={anomActing}>
-                                  <ShieldX size={12} className="mr-1" />Rechazar
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDismiss(a.id)}>
-                                  Descartar
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                          {!isDuplicate && !isLargeAP && (
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleDismiss(a.id)}>
-                                <CheckCircle2 size={12} className="mr-1" />Descartar
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-                {visibleAnomalies.length > 10 && (
-                  <div className="flex items-center justify-center gap-2 p-3">
-                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={anomPage === 0} onClick={() => setAnomPage(p => p - 1)}>&#8592;</Button>
-                    {Array.from({ length: Math.ceil(visibleAnomalies.length / 10) }, (_, i) => (
-                      <button key={i} onClick={() => setAnomPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${anomPage === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
-                    ))}
-                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={anomPage >= Math.ceil(visibleAnomalies.length / 10) - 1} onClick={() => setAnomPage(p => p + 1)}>&#8594;</Button>
-                    <span className="text-xs text-muted-foreground ml-2">{anomPage * 10 + 1}–{Math.min((anomPage + 1) * 10, visibleAnomalies.length)} de {visibleAnomalies.length}</span>
-                  </div>
-                )}
-              </div>
-            )
-          })()}
+          {tab === 'anomalias' && (
+            <AnomaliasTab
+              anomalies={anomalies}
+              invoicesAP={invoicesAP}
+              anomPage={anomPage}
+              setAnomPage={setAnomPage}
+              anomAction={anomAction}
+              setAnomAction={setAnomAction}
+              anomActing={anomActing}
+              setAnomActing={setAnomActing}
+              dismissedAnoms={dismissedAnoms}
+              setDismissedAnoms={setDismissedAnoms}
+              fetchData={fetchData}
+              fmtDate={fmtDate}
+              fmtEur={fmtEur}
+              toast={toast}
+            />
+          )}
 
           {/* Auditoría tab */}
           {tab === 'audit' && (
-            auditLog.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
-                <div className="text-sm text-muted-foreground">No hay registros de auditoría</div>
-                <div className="text-xs text-muted-foreground mt-1">Las acciones del sistema se registrarán aquí automáticamente</div>
-              </div>
-            ) : (
-              <>
-              <ScrollableTable>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {['Fecha', 'Usuario', 'Acción', 'Entidad', 'IP', 'Detalles'].map(h => (
-                        <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLog.slice(auditPage * 10, (auditPage + 1) * 10).map((log: any) => (
-                      <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                        <td className="p-3 text-xs text-muted-foreground">{fmtDateTime(log.createdAt)}</td>
-                        <td className="p-3 text-xs">{log.user?.email || '—'}</td>
-                        <td className="p-3">
-                          <Badge variant={log.action?.includes('DELETE') ? 'destructive' : log.action?.includes('CREATE') ? 'success' : 'secondary'}>
-                            {log.action}
-                          </Badge>
-                        </td>
-                        <td className="p-3 text-xs">{log.entity} {log.entityId ? `(${log.entityId.slice(0, 8)}...)` : ''}</td>
-                        <td className="p-3 font-mono text-xs text-muted-foreground">{log.ipAddress || '—'}</td>
-                        <td className="p-3 text-xs text-muted-foreground">
-                          {log.oldValue || log.newValue ? 'Ver cambios' : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-</ScrollableTable>
-              {auditLog.length > 10 && (
-                <div className="flex items-center justify-center gap-2 p-3">
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={auditPage === 0} onClick={() => setAuditPage(p => p - 1)}>←</Button>
-                  {Array.from({ length: Math.ceil(auditLog.length / 10) }, (_, i) => (
-                    <button key={i} onClick={() => setAuditPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${auditPage === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
-                  ))}
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={auditPage >= Math.ceil(auditLog.length / 10) - 1} onClick={() => setAuditPage(p => p + 1)}>→</Button>
-                  <span className="text-xs text-muted-foreground ml-2">{auditPage * 10 + 1}–{Math.min((auditPage + 1) * 10, auditLog.length)} de {auditLog.length}</span>
-                </div>
-              )}
-              </>
-            )
+            <AuditoriaTab
+              auditLog={auditLog}
+              auditPage={auditPage}
+              setAuditPage={setAuditPage}
+              fmtDateTime={fmtDateTime}
+            />
           )}
         </CardContent>
       </Card>

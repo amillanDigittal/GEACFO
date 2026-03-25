@@ -1,4 +1,5 @@
 'use client'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmt, exportCSV } from '@/lib/utils'
@@ -9,22 +10,7 @@ import { CheckCircle2, RefreshCw, AlertTriangle, XCircle, Ban, Building2, Landma
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
-
-const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary'; icon: React.ReactNode }> = {
-  SYNCED: { label: 'Sincronizado', variant: 'success', icon: <CheckCircle2 size={14} /> },
-  SYNCING: { label: 'Sincronizando', variant: 'default' as any, icon: <RefreshCw size={14} /> },
-  WARNING: { label: 'Advertencia', variant: 'warning', icon: <AlertTriangle size={14} /> },
-  ERROR: { label: 'Error', variant: 'destructive', icon: <XCircle size={14} /> },
-  DISCONNECTED: { label: 'Desconectado', variant: 'secondary', icon: <Ban size={14} /> },
-}
-
-const typeConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  ERP: { label: 'ERP', icon: <Building2 size={18} />, color: 'hsl(var(--primary))' },
-  BANKING: { label: 'Banca', icon: <Landmark size={18} />, color: 'hsl(var(--success))' },
-  CRM: { label: 'CRM', icon: <Users size={18} />, color: 'hsl(var(--warning))' },
-  WMS: { label: 'Almacén', icon: <Package size={18} />, color: 'hsl(210 60% 55%)' },
-  OTHER: { label: 'Otro', icon: <Link2 size={18} />, color: 'hsl(var(--muted-foreground))' },
-}
+import { useTranslations } from 'next-intl'
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -36,11 +22,28 @@ function timeAgo(dateStr: string) {
 }
 
 export default function GobiernoPage() {
+  const t = useTranslations('gobierno')
   const [sources, setSources] = useState<any[]>([])
   const [auditLog, setAuditLog] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'fuentes' | 'auditoria'>('fuentes')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary'; icon: React.ReactNode }> = {
+    SYNCED: { label: t('statusSynced'), variant: 'success', icon: <CheckCircle2 size={14} /> },
+    SYNCING: { label: t('statusSyncing'), variant: 'default' as any, icon: <RefreshCw size={14} /> },
+    WARNING: { label: t('statusWarning'), variant: 'warning', icon: <AlertTriangle size={14} /> },
+    ERROR: { label: t('statusError'), variant: 'destructive', icon: <XCircle size={14} /> },
+    DISCONNECTED: { label: t('statusDisconnected'), variant: 'secondary', icon: <Ban size={14} /> },
+  }
+
+  const typeConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+    ERP: { label: 'ERP', icon: <Building2 size={18} />, color: 'hsl(var(--primary))' },
+    BANKING: { label: t('typeBanking'), icon: <Landmark size={18} />, color: 'hsl(var(--success))' },
+    CRM: { label: 'CRM', icon: <Users size={18} />, color: 'hsl(var(--warning))' },
+    WMS: { label: t('typeWarehouse'), icon: <Package size={18} />, color: 'hsl(var(--chart-blue))' },
+    OTHER: { label: t('typeOther'), icon: <Link2 size={18} />, color: 'hsl(var(--muted-foreground))' },
+  }
 
   function fetchData() {
     setLoading(true)
@@ -59,19 +62,44 @@ export default function GobiernoPage() {
     await fetchData()
   }
 
-  if (loading) return <SkeletonKPIsAndTable cols={6} rows={5} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonKPIsAndTable cols={6} rows={5} />
 
   const totalRecords = sources.reduce((s, src) => s + src.recordCount, 0)
   const syncedCount = sources.filter(s => s.status === 'SYNCED').length
   const warningCount = sources.filter(s => s.status === 'WARNING' || s.status === 'ERROR').length
   const typeGroups = sources.reduce((acc: Record<string, number>, s) => { acc[s.type] = (acc[s.type] || 0) + 1; return acc }, {})
 
+  const ACTION_LABELS: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary' }> = {
+    CREATE: { label: t('actionCreate'), variant: 'success' },
+    UPDATE: { label: t('actionUpdate'), variant: 'warning' },
+    DELETE: { label: t('actionDelete'), variant: 'destructive' },
+    APPROVE: { label: t('actionApprove'), variant: 'success' },
+    APPROVE_BATCH: { label: t('actionApproveBatch'), variant: 'success' },
+    RECONCILE: { label: t('actionReconcile'), variant: 'success' },
+    RECONCILE_BATCH: { label: t('actionReconcileBatch'), variant: 'success' },
+    LOGIN: { label: 'Login', variant: 'secondary' },
+    RECALCULATE_SCORE: { label: t('actionRecalculate'), variant: 'warning' },
+    RECALCULATE_ALL: { label: t('actionRecalculateAll'), variant: 'warning' },
+    INIT: { label: t('actionInit'), variant: 'success' },
+    CREATE_SNAPSHOT: { label: 'Snapshot', variant: 'success' },
+    SEND: { label: t('actionSend'), variant: 'success' },
+    RESOLVE: { label: t('actionResolve'), variant: 'success' },
+  }
+
+  const ENTITY_LABELS: Record<string, string> = {
+    User: t('entityUser'), Tenant: t('entityTenant'), TenantConfig: t('entityConfig'), InvoiceAP: t('entityInvoiceAP'),
+    BankMovement: t('entityMovement'), Supplier: t('entitySupplier'), Customer: t('entityCustomer'), BudgetLine: t('entityBudget'),
+    ProvisionSnapshot: t('entityProvision'), ReportSchedule: t('entityReport'), AlertResolution: t('entityAlert'), Session: t('entitySession'),
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Gobierno del Dato"
-        subtitle="Trazabilidad y calidad de datos · Grupo Ibérico SA"
+        title={t('title')}
+        subtitle={t('subtitle')}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
@@ -83,11 +111,11 @@ export default function GobiernoPage() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {tab === 'fuentes' ? 'Fuentes de Datos' : 'Auditoría'}
+                  {tab === 'fuentes' ? t('tabSources') : t('tabAudit')}
                 </button>
               ))}
             </div>
-            <Button variant="outline" size="sm" onClick={() => { if (activeTab === 'fuentes') { exportCSV('gobierno_fuentes', ['Fuente', 'Tipo', 'Estado', 'Registros', 'Última Sync'], sources.map(s => [s.name, s.type, s.status, s.recordCount, s.lastSync || ''])) } else { exportCSV('gobierno_auditoria', ['Fecha', 'Usuario', 'Acción', 'Entidad', 'ID Entidad', 'IP'], auditLog.map((l: any) => [l.createdAt, l.user?.name || l.userId || '', l.action, l.entity, l.entityId || '', l.ipAddress || ''])) } }}><Download size={14} className="mr-1" />Exportar</Button>
+            <Button variant="outline" size="sm" onClick={() => { if (activeTab === 'fuentes') { exportCSV('gobierno_fuentes', [t('colSource'), t('colType'), t('colStatus'), t('colRecords'), t('colLastSync')], sources.map(s => [s.name, s.type, s.status, s.recordCount, s.lastSync || ''])) } else { exportCSV('gobierno_auditoria', [t('colDate'), t('colUser'), t('colAction'), t('colEntity'), t('colEntityId'), 'IP'], auditLog.map((l: any) => [l.createdAt, l.user?.name || l.userId || '', l.action, l.entity, l.entityId || '', l.ipAddress || ''])) } }}><Download size={14} className="mr-1" />{t('export')}</Button>
           </>
         }
       />
@@ -97,9 +125,9 @@ export default function GobiernoPage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-warning/30 bg-warning/10 text-warning">
           <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <div className="font-semibold text-sm">{warningCount} fuente{warningCount > 1 ? 's' : ''} con incidencias</div>
+            <div className="font-semibold text-sm">{t('sourcesWithIssues', { count: warningCount })}</div>
             <div className="text-xs opacity-80 mt-0.5">
-              {sources.filter(s => s.status === 'WARNING' || s.status === 'ERROR').map(s => s.name).join(', ')} — revisar conectividad y permisos
+              {sources.filter(s => s.status === 'WARNING' || s.status === 'ERROR').map(s => s.name).join(', ')} — {t('reviewConnectivity')}
             </div>
           </div>
         </div>
@@ -108,10 +136,10 @@ export default function GobiernoPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Fuentes Conectadas', value: `${sources.length}`, color: 'text-foreground' },
-          { label: 'Estado Global', value: warningCount === 0 ? 'OK' : `${warningCount} alerta${warningCount > 1 ? 's' : ''}`, color: warningCount === 0 ? 'text-success' : 'text-warning' },
-          { label: 'Registros Totales', value: fmt(totalRecords), color: 'text-foreground' },
-          { label: 'Sincronizadas', value: `${syncedCount}/${sources.length}`, color: syncedCount === sources.length ? 'text-success' : 'text-warning' },
+          { label: t('kpiConnectedSources'), value: `${sources.length}`, color: 'text-foreground' },
+          { label: t('kpiGlobalStatus'), value: warningCount === 0 ? 'OK' : t('kpiAlertCount', { count: warningCount }), color: warningCount === 0 ? 'text-success' : 'text-warning' },
+          { label: t('kpiTotalRecords'), value: fmt(totalRecords), color: 'text-foreground' },
+          { label: t('kpiSynced'), value: `${syncedCount}/${sources.length}`, color: syncedCount === sources.length ? 'text-success' : 'text-warning' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -126,7 +154,7 @@ export default function GobiernoPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
               <Card>
-                <CardHeader><CardTitle>Fuentes de Datos</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{t('tabSources')}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {sources.map(src => {
                     const status = statusConfig[src.status] || statusConfig.SYNCED
@@ -145,9 +173,9 @@ export default function GobiernoPage() {
                           <div className="flex items-center gap-3 text-xs text-muted-foreground">
                             <span>{type.label}</span>
                             <span>·</span>
-                            <span>{fmt(src.recordCount)} registros</span>
+                            <span>{fmt(src.recordCount)} {t('records')}</span>
                             <span>·</span>
-                            <span>{src.lastSync ? timeAgo(src.lastSync) : 'Sin sync'}</span>
+                            <span>{src.lastSync ? timeAgo(src.lastSync) : t('noSync')}</span>
                           </div>
                           <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
                             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: type.color }} />
@@ -155,7 +183,7 @@ export default function GobiernoPage() {
                         </div>
                         <div className="text-right flex-shrink-0">
                           <div className="font-mono text-xs font-semibold">{pct.toFixed(1)}%</div>
-                          <div className="text-[10px] text-muted-foreground">del total</div>
+                          <div className="text-[10px] text-muted-foreground">{t('ofTotal')}</div>
                         </div>
                       </div>
                     )
@@ -167,7 +195,7 @@ export default function GobiernoPage() {
             <div className="space-y-4">
               {/* Por tipo */}
               <Card>
-                <CardHeader><CardTitle>Por Tipo</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{t('byType')}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {Object.entries(typeGroups).map(([type, count]) => {
                     const cfg = typeConfig[type] || typeConfig.OTHER
@@ -188,7 +216,7 @@ export default function GobiernoPage() {
 
               {/* Estado de sincronización */}
               <Card>
-                <CardHeader><CardTitle>Estado Sync</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{t('syncStatus')}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {['SYNCED', 'WARNING', 'ERROR', 'DISCONNECTED'].map(status => {
                     const count = sources.filter(s => s.status === status).length
@@ -209,13 +237,13 @@ export default function GobiernoPage() {
 
               {/* Calidad de datos */}
               <Card>
-                <CardHeader><CardTitle>Calidad de Datos</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{t('dataQuality')}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {[
-                    { label: 'Completitud', value: 94.2, good: true },
-                    { label: 'Consistencia', value: 98.5, good: true },
-                    { label: 'Puntualidad', value: warningCount > 0 ? 83.1 : 97.0, good: warningCount === 0 },
-                    { label: 'Unicidad', value: 99.8, good: true },
+                    { label: t('qualityCompleteness'), value: 94.2, good: true },
+                    { label: t('qualityConsistency'), value: 98.5, good: true },
+                    { label: t('qualityTimeliness'), value: warningCount > 0 ? 83.1 : 97.0, good: warningCount === 0 },
+                    { label: t('qualityUniqueness'), value: 99.8, good: true },
                   ].map(m => (
                     <div key={m.label}>
                       <div className="flex justify-between text-xs mb-1">
@@ -234,12 +262,12 @@ export default function GobiernoPage() {
 
           {/* Tabla detallada */}
           <Card>
-            <CardHeader><CardTitle>Detalle de Fuentes</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t('sourceDetail')}</CardTitle></CardHeader>
             <ScrollableTable>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    {['Fuente', 'Tipo', 'Estado', 'Registros', '% Total', 'Última Sync', 'Latencia'].map(h => (
+                    {[t('colSource'), t('colType'), t('colStatus'), t('colRecords'), t('colPercentTotal'), t('colLastSync'), t('colLatency')].map(h => (
                       <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -295,27 +323,6 @@ export default function GobiernoPage() {
       )}
 
       {activeTab === 'auditoria' && (() => {
-        const ACTION_LABELS: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary' }> = {
-          CREATE: { label: 'Crear', variant: 'success' },
-          UPDATE: { label: 'Modificar', variant: 'warning' },
-          DELETE: { label: 'Eliminar', variant: 'destructive' },
-          APPROVE: { label: 'Aprobar', variant: 'success' },
-          APPROVE_BATCH: { label: 'Aprobar Lote', variant: 'success' },
-          RECONCILE: { label: 'Conciliar', variant: 'success' },
-          RECONCILE_BATCH: { label: 'Conciliar Lote', variant: 'success' },
-          LOGIN: { label: 'Login', variant: 'secondary' },
-          RECALCULATE_SCORE: { label: 'Recalcular', variant: 'warning' },
-          RECALCULATE_ALL: { label: 'Recalcular Todos', variant: 'warning' },
-          INIT: { label: 'Inicializar', variant: 'success' },
-          CREATE_SNAPSHOT: { label: 'Snapshot', variant: 'success' },
-          SEND: { label: 'Enviar', variant: 'success' },
-          RESOLVE: { label: 'Resolver', variant: 'success' },
-        }
-        const ENTITY_LABELS: Record<string, string> = {
-          User: 'Usuario', Tenant: 'Empresa', TenantConfig: 'Configuración', InvoiceAP: 'Factura AP',
-          BankMovement: 'Movimiento', Supplier: 'Proveedor', Customer: 'Cliente', BudgetLine: 'Presupuesto',
-          ProvisionSnapshot: 'Provisión', ReportSchedule: 'Reporte', AlertResolution: 'Alerta', Session: 'Sesión',
-        }
         const pageSize = 20
         const actionFilter = '' // could be state-driven in future
         const filtered = auditLog
@@ -329,10 +336,10 @@ export default function GobiernoPage() {
             {/* Activity summary */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'Total Registros', value: String(filtered.length) },
-                { label: 'Hoy', value: String(todayCount), color: todayCount > 0 ? 'text-primary' : '' },
-                { label: 'Acción más frecuente', value: Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—' },
-                { label: 'Usuarios Activos', value: String(new Set(filtered.map((l: any) => l.userId).filter(Boolean)).size) },
+                { label: t('auditTotalRecords'), value: String(filtered.length) },
+                { label: t('auditToday'), value: String(todayCount), color: todayCount > 0 ? 'text-primary' : '' },
+                { label: t('auditMostFrequentAction'), value: Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—' },
+                { label: t('auditActiveUsers'), value: String(new Set(filtered.map((l: any) => l.userId).filter(Boolean)).size) },
               ].map(m => (
                 <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -342,13 +349,13 @@ export default function GobiernoPage() {
             </div>
 
             <Card>
-              <CardHeader><CardTitle>Registro de Auditoría</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('auditLog')}</CardTitle></CardHeader>
               {filtered.length === 0 ? (
                 <CardContent>
                   <div className="text-center py-12">
                     <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
-                    <div className="text-sm text-muted-foreground">No hay registros de auditoría</div>
-                    <div className="text-xs text-muted-foreground mt-1">Las acciones del sistema se registrarán aquí automáticamente</div>
+                    <div className="text-sm text-muted-foreground">{t('noAuditRecords')}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{t('auditAutoRecord')}</div>
                   </div>
                 </CardContent>
               ) : (
@@ -357,7 +364,7 @@ export default function GobiernoPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border">
-                          {['Fecha', 'Usuario', 'Acción', 'Entidad', 'ID', 'Detalle', 'IP'].map(h => (
+                          {[t('colDate'), t('colUser'), t('colAction'), t('colEntity'), 'ID', t('colDetail'), 'IP'].map(h => (
                             <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
@@ -391,7 +398,7 @@ export default function GobiernoPage() {
                   </ScrollableTable>
                   {filtered.length > pageSize && (
                     <div className="p-3 border-t border-border text-center text-xs text-muted-foreground">
-                      Mostrando {Math.min(pageSize, filtered.length)} de {filtered.length} registros
+                      {t('showingOfTotal', { showing: Math.min(pageSize, filtered.length), total: filtered.length })}
                     </div>
                   )}
                 </>

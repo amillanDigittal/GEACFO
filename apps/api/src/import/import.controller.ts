@@ -1,8 +1,11 @@
 import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import { ImportService } from './import.service'
 import { JwtAuthGuard } from '../auth/jwt.guard'
 
+// Strict limit on imports: 10 per minute per user (bulk DB operations)
+@Throttle({ default: { ttl: 60_000, limit: 10 }, short: { ttl: 10_000, limit: 3 } })
 @ApiTags('Import')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)

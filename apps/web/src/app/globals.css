@@ -12,24 +12,37 @@
     --card-foreground: 222 47% 11%;
     --border: 214 32% 85%;
     --input: 214 32% 91%;
-    --primary: 211 100% 44%;
+    --primary: 211 100% 43%;
     --primary-foreground: 0 0% 100%;
     --secondary: 214 32% 91%;
     --secondary-foreground: 222 47% 30%;
     --muted: 214 32% 91%;
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 215 16% 44%;
     --accent: 211 100% 44%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 100%;
-    --success: 160 64% 40%;
+    --success: 160 64% 32%;
     --success-foreground: 0 0% 100%;
-    --warning: 32 95% 45%;
+    --warning: 32 90% 36%;
     --warning-foreground: 0 0% 100%;
     --gold: 40 80% 58%;
-    --ring: 211 100% 44%;
+    --ring: 211 100% 43%;
     --radius: 0.5rem;
     --sidebar-w: 260px;
+    /* Badge text — darker in light mode to meet WCAG AA on tinted bg */
+    --badge-success-text: 160 64% 26%;
+    --badge-warning-text: 32 90% 30%;
+    --badge-destructive-text: 0 84% 40%;
+    /* Chart palette — additional colors beyond primary/success/warning/destructive */
+    --chart-blue: 210 60% 55%;
+    --chart-purple: 280 50% 55%;
+    --chart-teal: 200 60% 45%;
+    /* Bank brand colors */
+    --bank-bbva: 210 80% 50%;
+    --bank-santander: 0 70% 50%;
+    --bank-caixabank: 200 60% 45%;
+    --bank-sabadell: 220 50% 55%;
   }
 
   .dark {
@@ -55,6 +68,16 @@
     --warning-foreground: 0 0% 100%;
     --gold: 40 80% 58%;
     --ring: 211 100% 64%;
+    --badge-success-text: 160 78% 52%;
+    --badge-warning-text: 32 95% 55%;
+    --badge-destructive-text: 0 84% 60%;
+    --chart-blue: 210 60% 65%;
+    --chart-purple: 280 50% 65%;
+    --chart-teal: 200 60% 55%;
+    --bank-bbva: 210 80% 60%;
+    --bank-santander: 0 70% 60%;
+    --bank-caixabank: 200 60% 55%;
+    --bank-sabadell: 220 50% 65%;
   }
 
   * { @apply border-border; }
@@ -75,8 +98,253 @@
   }
 }
 
+/* ── Print styles ─────────────────────────────────────────────── */
+@media print {
+  /* Force light theme for printing */
+  :root {
+    --background: 0 0% 100% !important;
+    --foreground: 222 47% 11% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 222 47% 11% !important;
+    --border: 214 32% 85% !important;
+    --muted: 214 32% 96% !important;
+    --muted-foreground: 215 16% 47% !important;
+  }
+  .dark {
+    --background: 0 0% 100% !important;
+    --foreground: 222 47% 11% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 222 47% 11% !important;
+    --border: 214 32% 85% !important;
+    --muted: 214 32% 96% !important;
+    --muted-foreground: 215 16% 47% !important;
+  }
+
+  /* Hide navigation chrome */
+  [data-print-hide],
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Reset layout: remove sidebar spacing, overflow constraints */
+  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  main { overflow: visible !important; padding: 0 !important; height: auto !important; }
+  .flex.h-screen { display: block !important; height: auto !important; overflow: visible !important; }
+
+  /* Cards: remove shadows, keep borders for structure */
+  [class*="rounded-xl"], [class*="rounded-2xl"] {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* Tables: avoid page breaks mid-row */
+  tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+
+  /* Charts: ensure they render (SVG) */
+  .recharts-wrapper { break-inside: avoid; }
+
+  /* Buttons, tooltips, scrollbars: hide interactive elements */
+  button:not(.print-keep), [role="dialog"], [class*="toast"], [class*="scrollbar"] { display: none !important; }
+
+  /* Page setup */
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+}
+
+@keyframes kpi-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes skeleton-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Sparkline animations ───────────────────────────────────────── */
+@keyframes sparkline-draw {
+  from { stroke-dashoffset: var(--spark-len, 200); }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes sparkline-fill-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sparkline-pulse {
+  0%, 100% { r: 4; opacity: 0.15; }
+  50%      { r: 6; opacity: 0.3; }
+}
+
+.sparkline-line {
+  stroke-dasharray: var(--spark-len, 200);
+  animation: sparkline-draw 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.sparkline-fill {
+  opacity: 0;
+  animation: sparkline-fill-in 0.6s 0.3s ease-out forwards;
+}
+.sparkline-pulse {
+  animation: sparkline-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card { animation: none !important; }
+  .skeleton-wrapper { animation: none !important; }
+  .sparkline-line { animation: none !important; stroke-dasharray: none !important; }
+  .sparkline-fill { animation: none !important; opacity: 1 !important; }
+  .sparkline-pulse { animation: none !important; }
+}
+
+/* ── Sidebar glassmorphism ──────────────────────────────────────── */
+.sidebar-glass {
+  background:
+    linear-gradient(180deg, hsl(var(--primary) / 0.04) 0%, transparent 40%),
+    hsl(var(--card) / 0.85);
+  border-right: 1px solid hsl(var(--border) / 0.5);
+  box-shadow:
+    1px 0 24px hsl(var(--background) / 0.4),
+    inset -1px 0 0 hsl(var(--primary) / 0.06);
+}
+.dark .sidebar-glass {
+  background:
+    linear-gradient(180deg, hsl(var(--primary) / 0.08) 0%, transparent 35%),
+    hsl(var(--card) / 0.55);
+  border-right: 1px solid hsl(var(--primary) / 0.12);
+  box-shadow:
+    1px 0 40px hsl(0 0% 0% / 0.5),
+    inset -1px 0 0 hsl(var(--primary) / 0.1);
+}
+
+/* Logo glow + shine on hover (triggered by hovering the whole logo area) */
+.sidebar-logo {
+  box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  transition: box-shadow 0.35s ease, transform 0.35s ease;
+  overflow: hidden;
+}
+.sidebar-logo-area:hover .sidebar-logo {
+  box-shadow: 0 0 20px 4px hsl(var(--primary) / 0.5), 0 0 40px 8px hsl(var(--gold) / 0.2);
+  transform: scale(1.08);
+}
+
+/* Shine sweep */
+.sidebar-logo::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.5) 43%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 62%
+  );
+  transform: translateX(-180%);
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: inherit;
+  z-index: 20;
+}
+.sidebar-logo-area:hover .sidebar-logo::after {
+  transform: translateX(180%);
+}
+
+/* Area hover: subtle bg highlight */
+.sidebar-logo-area {
+  transition: background-color 0.3s ease;
+}
+.sidebar-logo-area:hover {
+  background-color: hsl(var(--primary) / 0.05);
+}
+
+/* Nav icon glow on hover */
+.sidebar-nav-icon {
+  transition: filter 0.25s ease, transform 0.25s ease;
+  display: inline-flex;
+}
+.group:hover .sidebar-nav-icon {
+  filter: drop-shadow(0 0 6px hsl(var(--primary) / 0.6));
+  transform: scale(1.12);
+}
+/* Active route: persistent glow */
+[aria-current="page"] .sidebar-nav-icon {
+  filter: drop-shadow(0 0 5px hsl(var(--primary) / 0.5));
+}
+
+/* ── Card depth & glow ─────────────────────────────────────────── */
+.card-base {
+  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.04), 0 4px 12px hsl(var(--foreground) / 0.02);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+.card-base:hover {
+  box-shadow: 0 2px 8px hsl(var(--foreground) / 0.06), 0 8px 24px hsl(var(--foreground) / 0.04);
+  transform: translateY(-1px);
+  border-color: hsl(var(--primary) / 0.2);
+}
+.dark .card-base {
+  box-shadow: 0 1px 3px hsl(0 0% 0% / 0.2), 0 4px 16px hsl(0 0% 0% / 0.15);
+}
+.dark .card-base:hover {
+  box-shadow: 0 2px 8px hsl(0 0% 0% / 0.3), 0 8px 28px hsl(0 0% 0% / 0.2), 0 0 1px hsl(var(--primary) / 0.3);
+}
+
+/* Semantic glow variants — use data-glow="success|warning|destructive|primary" */
+.card-base[data-glow="success"] {
+  border-color: hsl(var(--success) / 0.25);
+  box-shadow: 0 1px 3px hsl(var(--success) / 0.06), 0 4px 16px hsl(var(--success) / 0.04);
+}
+.card-base[data-glow="success"]:hover {
+  border-color: hsl(var(--success) / 0.4);
+  box-shadow: 0 2px 8px hsl(var(--success) / 0.1), 0 8px 28px hsl(var(--success) / 0.06);
+}
+.card-base[data-glow="warning"] {
+  border-color: hsl(var(--warning) / 0.25);
+  box-shadow: 0 1px 3px hsl(var(--warning) / 0.06), 0 4px 16px hsl(var(--warning) / 0.04);
+}
+.card-base[data-glow="warning"]:hover {
+  border-color: hsl(var(--warning) / 0.4);
+  box-shadow: 0 2px 8px hsl(var(--warning) / 0.1), 0 8px 28px hsl(var(--warning) / 0.06);
+}
+.card-base[data-glow="destructive"] {
+  border-color: hsl(var(--destructive) / 0.25);
+  box-shadow: 0 1px 3px hsl(var(--destructive) / 0.06), 0 4px 16px hsl(var(--destructive) / 0.04);
+}
+.card-base[data-glow="destructive"]:hover {
+  border-color: hsl(var(--destructive) / 0.4);
+  box-shadow: 0 2px 8px hsl(var(--destructive) / 0.1), 0 8px 28px hsl(var(--destructive) / 0.06);
+}
+.card-base[data-glow="primary"] {
+  border-color: hsl(var(--primary) / 0.2);
+  box-shadow: 0 1px 3px hsl(var(--primary) / 0.06), 0 4px 16px hsl(var(--primary) / 0.04);
+}
+.card-base[data-glow="primary"]:hover {
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 2px 8px hsl(var(--primary) / 0.1), 0 8px 28px hsl(var(--primary) / 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-base { transition: none !important; }
+  .card-base:hover { transform: none !important; }
+}
+
+/* ── Table row hover effect ─────────────────────────────────────── */
+table tbody tr {
+  transition: background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+table tbody tr:hover {
+  background-color: hsl(var(--muted) / 0.5);
+  box-shadow: inset 3px 0 0 hsl(var(--primary) / 0.4);
+}
+@media (prefers-reduced-motion: reduce) {
+  table tbody tr { transition: none !important; }
+}
+
 @layer components {
-  .kpi-card { @apply relative bg-card border border-border rounded-xl p-3 md:p-5 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-lg overflow-hidden; }
+  .kpi-card {
+    @apply relative bg-card border border-border rounded-xl p-3 md:p-5 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-lg overflow-hidden;
+    animation: kpi-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--stagger, 0ms);
+  }
   .kpi-label { @apply text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1 md:mb-2; }
   .kpi-value { @apply font-mono text-lg md:text-2xl font-semibold text-foreground leading-none; }
   .stat-row { @apply flex justify-between items-center py-2 md:py-2.5 border-b border-border last:border-b-0; }

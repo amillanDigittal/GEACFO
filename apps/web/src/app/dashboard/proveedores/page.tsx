@@ -1,6 +1,8 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '@/lib/api'
+import { useSuppliers, useSupplier } from '@/hooks/use-api'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { fmtEur, riskLabel, riskVariant } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +12,7 @@ import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
+import { useTranslations } from 'next-intl'
 
 const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Activo', ON_WATCH: 'En Observación', SUSPENDED: 'Suspendido', INACTIVE: 'Inactivo' }
 const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'destructive' | 'secondary'> = { ACTIVE: 'success', ON_WATCH: 'warning', SUSPENDED: 'destructive', INACTIVE: 'secondary' }
@@ -29,27 +32,21 @@ function ScoreBar({ value, label }: { value: number | null; label: string }) {
 }
 
 export default function ProveedoresPage() {
-  const [suppliers, setSuppliers] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const t = useTranslations('proveedores')
+  const { data: suppliers = [], isLoading, mutate } = useSuppliers()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ code: '', name: '', nif: '', email: '', phone: '', category: '', paymentTerms: 30, notes: '' })
   const [creating, setCreating] = useState(false)
   const [recalculating, setRecalculating] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<any>(null)
   const [page, setPage] = useState(0)
 
-  useEffect(() => {
-    api.suppliers.list()
-      .then(setSuppliers)
-      .catch(console.error)
-      .finally(() => { setLoading(false); setLastUpdated(new Date()) })
-  }, [])
+  const { data: detail } = useSupplier(expandedId)
 
   async function refresh() {
-    try { setSuppliers(await api.suppliers.list()) } catch (e) { console.error(e) }
-    finally { setLastUpdated(new Date()) }
+    await mutate()
+    setLastUpdated(new Date())
   }
 
   async function handleCreate() {
@@ -59,7 +56,7 @@ export default function ProveedoresPage() {
       await api.suppliers.create({ ...form, paymentTerms: Number(form.paymentTerms) || 30 })
       setShowForm(false)
       setForm({ code: '', name: '', nif: '', email: '', phone: '', category: '', paymentTerms: 30, notes: '' })
-      setSuppliers(await api.suppliers.list())
+      await mutate()
     } catch (e) { console.error(e) }
     finally { setCreating(false) }
   }
@@ -67,7 +64,7 @@ export default function ProveedoresPage() {
   async function handleDelete(id: string) {
     try {
       await api.suppliers.remove(id)
-      setSuppliers(await api.suppliers.list())
+      await mutate()
       if (expandedId === id) setExpandedId(null)
     } catch (e) { console.error(e) }
   }
@@ -76,7 +73,7 @@ export default function ProveedoresPage() {
     setRecalculating(prev => new Set(prev).add(id))
     try {
       await api.suppliers.recalculate(id)
-      setSuppliers(await api.suppliers.list())
+      await mutate()
     } catch (e) { console.error(e) }
     finally { setRecalculating(prev => { const n = new Set(prev); n.delete(id); return n }) }
   }
@@ -85,18 +82,19 @@ export default function ProveedoresPage() {
     setRecalculating(new Set(['__all__']))
     try {
       await api.suppliers.recalculateAll()
-      setSuppliers(await api.suppliers.list())
+      await mutate()
     } catch (e) { console.error(e) }
     finally { setRecalculating(new Set()) }
   }
 
-  async function toggleExpand(id: string) {
+  function toggleExpand(id: string) {
     if (expandedId === id) { setExpandedId(null); return }
     setExpandedId(id)
-    try { setDetail(await api.suppliers.get(id)) } catch (e) { console.error(e) }
   }
 
-  if (loading) return <SkeletonKPIsAndTable cols={9} rows={6} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || isLoading) return <SkeletonKPIsAndTable cols={9} rows={6} />
 
   const totalVolume = suppliers.reduce((s, sup) => s + (sup.totalVolume || 0), 0)
   const avgScore = suppliers.filter(s => s.overallScore).length > 0
@@ -113,19 +111,19 @@ export default function ProveedoresPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Gestión de Proveedores"
-        subtitle={`${suppliers.length} proveedores · Scoring de fiabilidad`}
+        title={t('title')}
+        subtitle={t('subtitle', { count: suppliers.length })}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={recalculateAll} disabled={recalculating.has('__all__')}>
               <RefreshCw size={14} className={`mr-1 ${recalculating.has('__all__') ? 'animate-spin' : ''}`} />
-              Recalcular Todos
+              {t('recalculateAll')}
             </Button>
             <Button size="sm" onClick={() => setShowForm(!showForm)}>
               {showForm ? <X size={14} className="mr-1" /> : <Plus size={14} className="mr-1" />}
-              {showForm ? 'Cancelar' : 'Nuevo Proveedor'}
+              {showForm ? t('cancel') : t('newSupplier')}
             </Button>
           </div>
         }
@@ -134,10 +132,10 @@ export default function ProveedoresPage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Proveedores Activos', value: String(suppliers.filter(s => s.status === 'ACTIVE').length) },
-          { label: 'Volumen Total', value: fmtEur(totalVolume) },
-          { label: 'Score Medio', value: avgScore > 0 ? String(avgScore) : '—', color: avgScore >= 75 ? 'text-success' : avgScore >= 50 ? 'text-warning' : 'text-destructive' },
-          { label: 'En Riesgo', value: String(atRisk), color: atRisk > 0 ? 'text-destructive' : 'text-success' },
+          { label: t('activeSuppliers'), value: String(suppliers.filter(s => s.status === 'ACTIVE').length) },
+          { label: t('totalVolume'), value: fmtEur(totalVolume) },
+          { label: t('averageScore'), value: avgScore > 0 ? String(avgScore) : '—', color: avgScore >= 75 ? 'text-success' : avgScore >= 50 ? 'text-warning' : 'text-destructive' },
+          { label: t('atRisk'), value: String(atRisk), color: atRisk > 0 ? 'text-destructive' : 'text-success' },
         ].map(m => (
           <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
             <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -149,18 +147,18 @@ export default function ProveedoresPage() {
       {/* New supplier form */}
       {showForm && (
         <Card>
-          <CardHeader><CardTitle>Nuevo Proveedor</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('newSupplierTitle')}</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                { key: 'code', label: 'Código *', placeholder: 'PROV-001' },
-                { key: 'name', label: 'Nombre *', placeholder: 'Nombre del proveedor' },
-                { key: 'nif', label: 'NIF', placeholder: 'B12345678' },
-                { key: 'email', label: 'Email', placeholder: 'contacto@proveedor.es' },
-                { key: 'phone', label: 'Teléfono', placeholder: '+34 600 000 000' },
-                { key: 'category', label: 'Categoría', placeholder: 'Materias primas' },
-                { key: 'paymentTerms', label: 'Plazo pago (días)', placeholder: '30' },
-                { key: 'notes', label: 'Notas', placeholder: 'Observaciones' },
+                { key: 'code', label: t('fieldCode'), placeholder: 'PROV-001' },
+                { key: 'name', label: t('fieldName'), placeholder: t('fieldNamePlaceholder') },
+                { key: 'nif', label: t('fieldNif'), placeholder: 'B12345678' },
+                { key: 'email', label: t('fieldEmail'), placeholder: 'contacto@proveedor.es' },
+                { key: 'phone', label: t('fieldPhone'), placeholder: '+34 600 000 000' },
+                { key: 'category', label: t('fieldCategory'), placeholder: t('fieldCategoryPlaceholder') },
+                { key: 'paymentTerms', label: t('fieldPaymentTerms'), placeholder: '30' },
+                { key: 'notes', label: t('fieldNotes'), placeholder: t('fieldNotesPlaceholder') },
               ].map(f => (
                 <div key={f.key}>
                   <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{f.label}</label>
@@ -176,7 +174,7 @@ export default function ProveedoresPage() {
             </div>
             <div className="mt-4 flex justify-end">
               <Button onClick={handleCreate} disabled={creating || !form.code || !form.name}>
-                {creating ? 'Creando…' : 'Crear Proveedor'}
+                {creating ? t('creating') : t('createSupplier')}
               </Button>
             </div>
           </CardContent>
@@ -186,14 +184,14 @@ export default function ProveedoresPage() {
       {/* Charts */}
       {top10.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Top 10 Proveedores por Volumen</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('top10ByVolume')}</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} width={115} />
-                <Tooltip formatter={(v: any) => [fmtEur(v), 'Volumen']} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Tooltip formatter={(v: any) => [fmtEur(v), t('volumeLabel')]} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }} itemStyle={{ color: 'hsl(var(--card-foreground))' }} labelStyle={{ color: 'hsl(var(--card-foreground))' }} />
                 <Bar dataKey="volumen" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -203,12 +201,12 @@ export default function ProveedoresPage() {
 
       {/* Suppliers Table */}
       <Card>
-        <CardHeader><CardTitle>Directorio de Proveedores</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t('supplierDirectory')}</CardTitle></CardHeader>
         <ScrollableTable>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {['Proveedor', 'Categoría', 'Score', 'Riesgo', 'Volumen', 'Pendiente', 'Plazo', 'Estado', 'Acción'].map(h => (
+                {[t('colSupplier'), t('colCategory'), t('colScore'), t('colRisk'), t('colVolume'), t('colPending'), t('colTerm'), t('colStatus'), t('colAction')].map(h => (
                   <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -258,7 +256,7 @@ export default function ProveedoresPage() {
                 )
               })}
               {suppliers.length === 0 && (
-                <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">No hay proveedores registrados.</td></tr>
+                <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">{t('noSuppliers')}</td></tr>
               )}
             </tbody>
           </table>
@@ -270,40 +268,40 @@ export default function ProveedoresPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Scoring radar */}
               <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Scoring — {detail.name}</div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">{t('scoring')} — {detail.name}</div>
                 {detail.overallScore != null ? (
                   <div className="space-y-2">
-                    <ScoreBar value={detail.reliabilityScore} label="Fiabilidad" />
-                    <ScoreBar value={detail.deliveryScore} label="Entregas" />
-                    <ScoreBar value={detail.qualityScore} label="Calidad" />
+                    <ScoreBar value={detail.reliabilityScore} label={t('reliability')} />
+                    <ScoreBar value={detail.deliveryScore} label={t('deliveries')} />
+                    <ScoreBar value={detail.qualityScore} label={t('quality')} />
                     <div className="pt-2 mt-2 border-t border-border">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">Score Global</span>
+                        <span className="text-xs text-muted-foreground">{t('globalScore')}</span>
                         <span className="font-mono text-lg font-bold" style={{ color: detail.overallScore >= 75 ? 'hsl(var(--success))' : detail.overallScore >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))' }}>{detail.overallScore}</span>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">Sin scoring. Pulsa recalcular.</div>
+                  <div className="text-sm text-muted-foreground">{t('noScoring')}</div>
                 )}
               </div>
 
               {/* Info */}
               <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Información</div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">{t('information')}</div>
                 <div className="space-y-2 text-sm">
-                  {detail.email && <div><span className="text-muted-foreground">Email:</span> {detail.email}</div>}
-                  {detail.phone && <div><span className="text-muted-foreground">Tel:</span> {detail.phone}</div>}
-                  {detail.nif && <div><span className="text-muted-foreground">NIF:</span> {detail.nif}</div>}
-                  <div><span className="text-muted-foreground">Plazo pago:</span> {detail.paymentTerms} días</div>
-                  {detail.category && <div><span className="text-muted-foreground">Categoría:</span> {detail.category}</div>}
-                  {detail.notes && <div><span className="text-muted-foreground">Notas:</span> {detail.notes}</div>}
+                  {detail.email && <div><span className="text-muted-foreground">{t('infoEmail')}:</span> {detail.email}</div>}
+                  {detail.phone && <div><span className="text-muted-foreground">{t('infoPhone')}:</span> {detail.phone}</div>}
+                  {detail.nif && <div><span className="text-muted-foreground">{t('infoNif')}:</span> {detail.nif}</div>}
+                  <div><span className="text-muted-foreground">{t('infoPaymentTerm')}:</span> {t('infoDays', { days: detail.paymentTerms })}</div>
+                  {detail.category && <div><span className="text-muted-foreground">{t('infoCategory')}:</span> {detail.category}</div>}
+                  {detail.notes && <div><span className="text-muted-foreground">{t('infoNotes')}:</span> {detail.notes}</div>}
                 </div>
               </div>
 
               {/* Recent invoices */}
               <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Últimas Facturas</div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">{t('recentInvoices')}</div>
                 {detail.invoices?.length > 0 ? (
                   <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
                     {detail.invoices.slice(0, 8).map((inv: any) => (
@@ -322,7 +320,7 @@ export default function ProveedoresPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">Sin facturas registradas.</div>
+                  <div className="text-sm text-muted-foreground">{t('noInvoices')}</div>
                 )}
               </div>
             </div>
@@ -336,7 +334,7 @@ export default function ProveedoresPage() {
               <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
             ))}
             <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>&#8594;</Button>
-            <span className="text-xs text-muted-foreground ml-2">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, suppliers.length)} de {suppliers.length}</span>
+            <span className="text-xs text-muted-foreground ml-2">{t('pagination', { from: page * pageSize + 1, to: Math.min((page + 1) * pageSize, suppliers.length), total: suppliers.length })}</span>
           </div>
         )}
       </Card>

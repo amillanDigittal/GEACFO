@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
+import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { fmtEur, fmtPct } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,24 +10,18 @@ import { Button } from '@/components/ui/button'
 import { Save, PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
-import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { SkeletonPresupuesto } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { useTranslations } from 'next-intl'
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const CATEGORIES = ['Revenue', 'COGS', 'Gastos Personal', 'Marketing', 'Otros Gastos', 'Amortización']
-const CATEGORY_LABELS: Record<string, string> = {
-  'Revenue': 'Ingresos',
-  'COGS': 'Coste de Ventas',
-  'Gastos Personal': 'Gastos de Personal',
-  'Marketing': 'Marketing',
-  'Otros Gastos': 'Otros Gastos',
-  'Amortización': 'Amortización',
-}
 const COST_CATS = new Set(['COGS', 'Gastos Personal', 'Marketing', 'Otros Gastos', 'Amortización'])
 
 function round2(n: number) { return Math.round(n * 100) / 100 }
 
 export default function PresupuestoPage() {
+  const t = useTranslations('presupuesto')
   const [year, setYear] = useState(new Date().getFullYear())
   const [grid, setGrid] = useState<Record<string, Record<number, number>>>({})
   const [dirty, setDirty] = useState(false)
@@ -33,6 +29,22 @@ export default function PresupuestoPage() {
   const [saving, setSaving] = useState(false)
   const [variance, setVariance] = useState<any>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    'Revenue': t('catRevenue'),
+    'COGS': t('catCogs'),
+    'Gastos Personal': t('catPersonnel'),
+    'Marketing': t('catMarketing'),
+    'Otros Gastos': t('catOtherExpenses'),
+    'Amortización': t('catDepreciation'),
+  }
+
+  const { confirmLeave } = useUnsavedChanges(dirty)
+
+  function changeYear(delta: number) {
+    if (!confirmLeave()) return
+    setYear(y => y + delta)
+  }
 
   const loadBudget = useCallback(async () => {
     setLoading(true)
@@ -95,7 +107,9 @@ export default function PresupuestoPage() {
     finally { setSaving(false) }
   }
 
-  if (loading) return <SkeletonKPIsAndTable cols={14} rows={8} />
+  const hydrated = useHydrated()
+
+  if (!hydrated || loading) return <SkeletonPresupuesto />
 
   const hasData = Object.values(grid).some(months => Object.values(months).some(v => v > 0))
 
@@ -120,21 +134,21 @@ export default function PresupuestoPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Presupuesto Anual"
-        subtitle={`Budget ${year} · Grupo Ibérico SA`}
+        title={t('title')}
+        subtitle={t('subtitle', { year })}
         lastUpdated={lastUpdated}
         onRefresh={refresh}
         actions={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
-              <button onClick={() => setYear(y => y - 1)} className="p-1.5 rounded-md hover:bg-background transition-colors"><ChevronLeft size={14} /></button>
+              <button onClick={() => changeYear(-1)} className="p-1.5 rounded-md hover:bg-background transition-colors"><ChevronLeft size={14} /></button>
               <span className="px-2 text-sm font-mono font-semibold">{year}</span>
-              <button onClick={() => setYear(y => y + 1)} className="p-1.5 rounded-md hover:bg-background transition-colors"><ChevronRight size={14} /></button>
+              <button onClick={() => changeYear(1)} className="p-1.5 rounded-md hover:bg-background transition-colors"><ChevronRight size={14} /></button>
             </div>
             {dirty && (
               <Button variant="default" size="sm" onClick={save} disabled={saving}>
                 <Save size={14} className="mr-1" />
-                {saving ? 'Guardando…' : 'Guardar'}
+                {saving ? t('saving') : t('save')}
               </Button>
             )}
           </div>
@@ -144,10 +158,10 @@ export default function PresupuestoPage() {
       {!hasData ? (
         <Card>
           <CardContent className="py-16 text-center">
-            <div className="text-muted-foreground mb-4">No hay presupuesto definido para {year}.</div>
+            <div className="text-muted-foreground mb-4">{t('noBudget', { year })}</div>
             <Button onClick={initDefaults}>
               <PlayCircle size={14} className="mr-1" />
-              Crear Presupuesto Base
+              {t('createBaseBudget')}
             </Button>
           </CardContent>
         </Card>
@@ -156,10 +170,10 @@ export default function PresupuestoPage() {
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Ingresos Anuales', value: fmtEur(totalRevenue) },
-              { label: 'Costes Totales', value: fmtEur(totalCosts), color: 'text-destructive' },
-              { label: 'EBITDA Presupuestado', value: fmtEur(totalEBITDA), color: totalEBITDA > 0 ? 'text-success' : 'text-destructive' },
-              { label: 'Margen EBITDA', value: fmtPct(ebitdaMargin), color: ebitdaMargin > 20 ? 'text-success' : 'text-warning' },
+              { label: t('kpiAnnualRevenue'), value: fmtEur(totalRevenue) },
+              { label: t('kpiTotalCosts'), value: fmtEur(totalCosts), color: 'text-destructive' },
+              { label: t('kpiBudgetedEbitda'), value: fmtEur(totalEBITDA), color: totalEBITDA > 0 ? 'text-success' : 'text-destructive' },
+              { label: t('kpiEbitdaMargin'), value: fmtPct(ebitdaMargin), color: ebitdaMargin > 20 ? 'text-success' : 'text-warning' },
             ].map(m => (
               <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
@@ -172,9 +186,9 @@ export default function PresupuestoPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Presupuesto Mensual {year}</CardTitle>
+                <CardTitle>{t('monthlyBudget', { year })}</CardTitle>
                 <Badge variant="secondary" className="font-mono text-xs">
-                  {dirty ? 'Sin guardar' : 'Guardado'}
+                  {dirty ? t('unsaved') : t('saved')}
                 </Badge>
               </div>
             </CardHeader>
@@ -182,11 +196,11 @@ export default function PresupuestoPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider sticky left-0 bg-card z-10 min-w-[160px]">Concepto</th>
+                    <th className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider sticky left-0 bg-card z-10 min-w-[160px]">{t('colConcept')}</th>
                     {MONTH_NAMES.map(m => (
                       <th key={m} className="text-center p-2 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider min-w-[100px]">{m}</th>
                     ))}
-                    <th className="text-center p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider bg-muted/50 min-w-[120px]">Total Anual</th>
+                    <th className="text-center p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider bg-muted/50 min-w-[120px]">{t('colAnnualTotal')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -196,7 +210,7 @@ export default function PresupuestoPage() {
                       <tr key={cat} className="border-b border-border hover:bg-muted/30 transition-colors">
                         <td className="p-3 font-medium text-xs whitespace-nowrap sticky left-0 bg-card z-10">
                           {CATEGORY_LABELS[cat]}
-                          {isCost && <span className="text-muted-foreground ml-1 text-[10px]">(coste)</span>}
+                          {isCost && <span className="text-muted-foreground ml-1 text-[10px]">({t('costLabel')})</span>}
                         </td>
                         {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
                           <td key={m} className="p-1 text-center">
@@ -217,7 +231,7 @@ export default function PresupuestoPage() {
                   })}
                   {/* Computed rows */}
                   <tr className="border-t-2 border-border bg-muted/30 font-semibold">
-                    <td className="p-3 text-xs sticky left-0 bg-muted/30 z-10">Margen Bruto</td>
+                    <td className="p-3 text-xs sticky left-0 bg-muted/30 z-10">{t('grossMargin')}</td>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
                       const rev = grid['Revenue']?.[m] || 0
                       const cogs = grid['COGS']?.[m] || 0
@@ -250,7 +264,7 @@ export default function PresupuestoPage() {
           {/* Chart: Budget vs Real */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle>Ingresos: Budget vs Real {year}</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('revenueBudgetVsActual', { year })}</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={chartData}>
@@ -258,10 +272,12 @@ export default function PresupuestoPage() {
                     <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                     <Tooltip
-                      formatter={(v: any, name: string) => [v != null ? fmtEur(v) : '—', name === 'presupuesto' ? 'Budget' : 'Real']}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                      formatter={(v: any, name: string) => [v != null ? fmtEur(v) : '—', name === 'presupuesto' ? t('legendBudget') : t('legendActual')]}
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                     />
-                    <Legend formatter={(value: string) => value === 'presupuesto' ? 'Budget' : 'Real'} />
+                    <Legend formatter={(value: string) => value === 'presupuesto' ? t('legendBudget') : t('legendActual')} />
                     <Bar dataKey="presupuesto" fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="real" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -270,7 +286,7 @@ export default function PresupuestoPage() {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle>EBITDA Mensual Presupuestado</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('monthlyBudgetedEbitda')}</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={Array.from({ length: 12 }, (_, i) => {
@@ -284,7 +300,9 @@ export default function PresupuestoPage() {
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                     <Tooltip
                       formatter={(v: any) => [fmtEur(v), 'EBITDA']}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
+                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
                     />
                     <Bar dataKey="ebitda" radius={[4, 4, 0, 0]}>
                       {Array.from({ length: 12 }, (_, i) => {
@@ -306,9 +324,9 @@ export default function PresupuestoPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Varianza YTD: Real vs Budget</CardTitle>
+                  <CardTitle>{t('varianceTitle')}</CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => window.location.href = '/dashboard/variance'} className="text-xs">
-                    Ver Variance Analysis completo →
+                    {t('viewFullVariance')}
                   </Button>
                 </div>
               </CardHeader>
@@ -316,7 +334,7 @@ export default function PresupuestoPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
-                      {['Concepto', 'Real YTD', 'Budget YTD', 'Varianza', '%'].map(h => (
+                      {[t('varColConcept'), t('varColActualYtd'), t('varColBudgetYtd'), t('varColVariance'), '%'].map(h => (
                         <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>

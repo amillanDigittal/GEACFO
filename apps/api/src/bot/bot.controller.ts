@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, Query, Request, UseGuards } from '@nestjs/common'
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import { BotService } from './bot.service'
 import { JwtAuthGuard } from '../auth/jwt.guard'
 
@@ -10,6 +11,8 @@ import { JwtAuthGuard } from '../auth/jwt.guard'
 export class BotController {
   constructor(private svc: BotService) {}
 
+  // Strict limit: 15 chat messages per minute per user (Anthropic API cost control)
+  @Throttle({ default: { ttl: 60_000, limit: 15 }, short: { ttl: 10_000, limit: 5 } })
   @Post('chat')
   chat(
     @Request() req: any,

@@ -1,5 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { PrismaClient } from '@prisma/client'
+import { EventEmitter2 } from '@nestjs/event-emitter'
+import { NOTIFICATION_EVENTS, NotificationEvent } from '../notifications/notification-events'
 import { autoCategorize } from '../treasury/categorizer'
 const prisma = new PrismaClient()
 
@@ -24,6 +26,8 @@ function parseDate(v: any): Date {
 
 @Injectable()
 export class ImportService {
+  constructor(private eventEmitter: EventEmitter2) {}
+
   async importBankMovements(tenantId: string, data: { accountAlias: string; rows: any[] }) {
     const account = await prisma.bankAccount.findFirst({
       where: { tenantId, alias: { contains: data.accountAlias, mode: 'insensitive' } },
@@ -97,6 +101,17 @@ export class ImportService {
         results.skipped++
       }
     }
+    if (results.imported > 0) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.INVOICE_CREATED, {
+        tenantId,
+        type: 'invoice_created',
+        severity: 'info',
+        title: `${results.imported} factura${results.imported > 1 ? 's' : ''} de cobro importada${results.imported > 1 ? 's' : ''}`,
+        description: `Importación completada: ${results.imported} nueva${results.imported > 1 ? 's' : ''}, ${results.skipped} omitida${results.skipped > 1 ? 's' : ''}`,
+        link: '/dashboard/cobros',
+        timestamp: new Date().toISOString(),
+      } as NotificationEvent)
+    }
     return results
   }
 
@@ -135,6 +150,17 @@ export class ImportService {
         else results.errors.push(e.message?.slice(0, 100))
         results.skipped++
       }
+    }
+    if (results.imported > 0) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.INVOICE_CREATED, {
+        tenantId,
+        type: 'invoice_created',
+        severity: 'info',
+        title: `${results.imported} factura${results.imported > 1 ? 's' : ''} de pago importada${results.imported > 1 ? 's' : ''}`,
+        description: `Importación completada: ${results.imported} nueva${results.imported > 1 ? 's' : ''}, ${results.skipped} omitida${results.skipped > 1 ? 's' : ''}`,
+        link: '/dashboard/pagos',
+        timestamp: new Date().toISOString(),
+      } as NotificationEvent)
     }
     return results
   }
