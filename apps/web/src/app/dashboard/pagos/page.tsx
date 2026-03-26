@@ -458,8 +458,8 @@ export default function PagosPage() {
                 <td className="p-3">
                   <span className={`text-xs font-mono ${isOverdue ? 'text-destructive font-semibold' : isUrgent ? 'text-warning font-semibold' : 'text-muted-foreground'}`}>{fmtDate(inv.dueDate)}</span>
                 </td>
-                <td className="p-3 font-mono text-xs">{fmtEur(Number(inv.amount))}</td>
-                <td className="p-3 font-mono text-xs font-semibold">{fmtEur(Number(inv.totalAmount))}</td>
+                <td className="p-3 font-mono text-xs text-muted-foreground">{fmtEur(Number(inv.amount))}</td>
+                <td className={`p-3 font-mono text-xs font-semibold ${inv.status === 'PAID' ? 'text-success' : inv.status === 'REJECTED' ? 'text-muted-foreground' : 'text-destructive'}`}>{fmtEur(Number(inv.totalAmount))}</td>
                 <td className="p-3"><Badge variant={priCfg.variant}>{priCfg.label}</Badge></td>
                 <td className="p-3"><Badge variant={stCfg.variant}>{stCfg.label}</Badge></td>
                 <td className="p-3">

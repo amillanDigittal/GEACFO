@@ -1,8 +1,8 @@
 'use client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ClipboardList } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface AuditoriaTabProps {
   auditLog: any[]
@@ -19,11 +19,11 @@ export function AuditoriaTab({
 }: AuditoriaTabProps) {
   if (auditLog.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
-        <div className="text-sm text-muted-foreground">No hay registros de auditoría</div>
-        <div className="text-xs text-muted-foreground mt-1">Las acciones del sistema se registrarán aquí automáticamente</div>
-      </div>
+      <EmptyState
+        variant="audit"
+        title="No hay registros de auditoría"
+        description="Las acciones del sistema se registrarán aquí automáticamente"
+      />
     )
   }
 

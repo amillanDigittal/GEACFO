@@ -22,7 +22,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <SWRConfig value={{ onError: onApiError }}>
           <SocketProvider>
             {children}

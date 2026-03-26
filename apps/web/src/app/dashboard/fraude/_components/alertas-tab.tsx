@@ -2,7 +2,8 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CheckCircle2, Eye, ShieldCheck, ShieldX } from 'lucide-react'
+import { Eye, ShieldCheck, ShieldX } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { FraudAlert, severityConfig, alertTypeLabels } from './types'
 
 interface AlertasTabProps {
@@ -38,11 +39,11 @@ export function AlertasTab({
 }: AlertasTabProps) {
   if (alerts.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="mb-3 opacity-30"><CheckCircle2 size={28} className="mx-auto text-muted-foreground" /></div>
-        <div className="text-sm text-muted-foreground">No se han detectado alertas de fraude</div>
-        <div className="text-xs text-muted-foreground mt-1">El sistema analiza clientes, facturas y pagos en busca de anomalías</div>
-      </div>
+      <EmptyState
+        variant="alerts"
+        title="No se han detectado alertas de fraude"
+        description="El sistema analiza clientes, facturas y pagos en busca de anomalías"
+      />
     )
   }
 

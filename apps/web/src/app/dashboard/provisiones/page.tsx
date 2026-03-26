@@ -208,9 +208,7 @@ export default function ProvisionesPage() {
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                 <Tooltip
                   formatter={(v: any, name: string) => [fmtEur(v), name === 'exposicion' ? t('exposureLabel') : t('provisionLabel')]}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                 />
                 <Legend formatter={(value: string) => value === 'exposicion' ? t('exposureLabel') : t('provisionEclLabel')} />
                 <Bar dataKey="exposicion" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
@@ -231,9 +229,7 @@ export default function ProvisionesPage() {
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtEur(v), name === 'provision' ? t('provisionLabel') : t('exposureLabel')]}
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                   />
                   <Legend formatter={(value: string) => value === 'provision' ? t('provisionEclLabel') : t('exposureLabel')} />
                   <Line type="monotone" dataKey="provision" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />

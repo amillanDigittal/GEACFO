@@ -1621,6 +1621,7 @@
     "kpiToday": "Today",
     "kpiFrequentAction": "Frequent action",
     "kpiActiveUsers": "Active users",
+    "heatmapTitle": "Activity map — Last month",
     "filterAction": "Action",
     "filterEntity": "Entity",
     "filterUser": "User",

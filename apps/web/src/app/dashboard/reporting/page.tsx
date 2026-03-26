@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
@@ -211,10 +212,13 @@ export default function ReportingPage() {
       {/* Schedules list */}
       {schedules.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <Send size={32} className="mx-auto text-muted-foreground mb-3" />
-            <div className="text-sm text-muted-foreground mb-3">{t('emptyState')}</div>
-            <Button size="sm" onClick={openCreate}><Plus size={14} className="mr-1" />{t('createFirstSchedule')}</Button>
+          <CardContent>
+            <EmptyState
+              variant="schedule"
+              title={t('emptyState')}
+              description="Programa informes automáticos para recibirlos periódicamente"
+              action={{ label: t('createFirstSchedule'), onClick: openCreate }}
+            />
           </CardContent>
         </Card>
       ) : (

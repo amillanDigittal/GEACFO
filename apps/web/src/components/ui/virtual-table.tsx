@@ -63,7 +63,7 @@ export function VirtualTableBody<T>({
             </tbody>
           </table>
         </div>
-        <div className="px-3 py-2 border-t border-border text-xs text-muted-foreground">
+        <div className="px-3 py-2 border-t border-border gradient-sep text-xs text-muted-foreground">
           {data.length} registro{data.length !== 1 ? 's' : ''}
         </div>
       </>

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { useCockpit, useRecommendations } from '@/hooks/use-api'
 import { fmtEur, fmtM, fmt, fmtPct, exportCSV } from '@/lib/utils'
@@ -11,7 +11,7 @@ import { KpiCard } from '@/components/kpi-card'
 import { PageHeader } from '@/components/page-header'
 import { useRouter } from 'next/navigation'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, FileText, AlertTriangle, AlertCircle, CircleDot, ExternalLink, ArrowRight, Bot, Sparkles } from 'lucide-react'
+import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, FileText, AlertTriangle, AlertCircle, CircleDot, ExternalLink, ArrowRight, Bot, Sparkles, GripVertical, Presentation, X as XIcon, ArrowUp, ArrowDown } from 'lucide-react'
 import { SkeletonCockpit } from '@/components/ui/skeleton-page'
 import { LazyChart } from '@/components/ui/lazy-chart'
 import { useChartColors } from '@/hooks/use-chart-colors'
@@ -88,12 +88,7 @@ function SparklineChart({ data, label }: { data: number[]; label: string }) {
           </linearGradient>
         </defs>
         <YAxis hide domain={['dataMin', 'dataMax']} />
-        <Tooltip
-          formatter={(v: any) => [label.includes('d') || label.includes('x') ? v : fmtEur(Number(v)), label]}
-          contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
-        />
+        <Tooltip formatter={(v: any) => [label.includes('d') || label.includes('x') ? v : fmtEur(Number(v)), label]} />
         <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#drillGradient)" />
       </AreaChart>
     </ResponsiveContainer>
@@ -107,14 +102,28 @@ export default function CockpitPage() {
   const recommendations = recsData?.recommendations || []
   const [drilldown, setDrilldown] = useState<string | null>(null)
   const [lastUpdated] = useState(() => new Date())
+  const [presenting, setPresenting] = useState(false)
+  const [slideIdx, setSlideIdx] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
   const cc = useChartColors()
   const router = useRouter()
-  const { cockpitLayout, compareMode } = useAppStore()
+  const { cockpitLayout, compareMode, setCockpitSectionOrder } = useAppStore()
   const hydrated = useHydrated()
 
   const loading = !hydrated || isLoading
 
-  function refresh() { mutate() }
+  function refresh() { mutate(); setRefreshKey(k => k + 1) }
+
+  // Presentation mode: fullscreen + auto-rotate
+  function startPresentation() {
+    setPresenting(true)
+    setSlideIdx(0)
+    document.documentElement.requestFullscreen?.().catch(() => {})
+  }
+  function stopPresentation() {
+    setPresenting(false)
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+  }
 
   if (loading) return <SkeletonCockpit />
   if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}{error && <p className="mt-2 text-xs text-destructive">{error.message}</p>}</div>
@@ -276,9 +285,6 @@ export default function CockpitPage() {
                   <YAxis hide />
                   <Tooltip
                     formatter={(v: any) => [fmtEur(Number(v)), 'Revenue']}
-                    contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 11, color: cc.cardForeground }}
-                    itemStyle={{ color: cc.cardForeground }}
-                    labelStyle={{ color: cc.cardForeground }}
                   />
                   <Bar dataKey="value" fill={cc.primary} radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -360,6 +366,7 @@ export default function CockpitPage() {
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => exportCSV('cockpit_kpis', ['KPI', t('thValue'), t('thTrend')], kpis.map(k => [k.label, k.value, k.trend]))}><Download size={14} className="mr-1" />{t('exportBtn')}</Button>
+            <Button variant="outline" size="sm" onClick={startPresentation}><Presentation size={14} className="mr-1" />Presentación</Button>
             <Button size="sm" onClick={() => router.push('/dashboard/boardpack')}><FileText size={14} className="mr-1" />Board Pack</Button>
           </>
         }
@@ -387,7 +394,7 @@ export default function CockpitPage() {
           const raw = data[k.key as keyof typeof data] as any
           const currentVal = raw?.value ?? 0
           const delta = computeDelta(k.key, currentVal, compareMode)
-          return <KpiCard key={k.key} {...k} index={i} delta={delta} onClick={() => setDrilldown(k.key)} />
+          return <KpiCard key={`${k.key}-${refreshKey}`} {...k} index={i} delta={delta} onClick={() => setDrilldown(k.key)} />
         })}
       </div>
 
@@ -418,166 +425,342 @@ export default function CockpitPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cash Evolution Chart + Working Capital */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between w-full">
-                <CardTitle>{t('cashEvolutionTitle')}</CardTitle>
-                {cashEvolution.length > 0 && (
-                  <Badge variant="secondary">{t('cashEvolutionDays', { count: cashEvolution.length })}</Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {cashEvolution.length > 1 ? (
-                <LazyChart height={220}>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <AreaChart data={cashEvolution} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                      <defs>
-                        <linearGradient id="cashGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={cc.primary} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={cc.primary} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke={cc.border} />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: cc.mutedForeground }} />
-                      <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-                      <Tooltip
-                        formatter={(v: any) => [fmtEur(Number(v)), t('tooltipBalance')]}
-                        contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 12, color: cc.cardForeground }}
-                        itemStyle={{ color: cc.cardForeground }}
-                        labelStyle={{ color: cc.cardForeground }}
-                      />
-                      <Area type="monotone" dataKey="balance" stroke={cc.primary} strokeWidth={2} fill="url(#cashGradient)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </LazyChart>
-              ) : (
-                <div className="text-center py-10 text-sm text-muted-foreground">{t('cashEvolutionNoData')}</div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-        <Card data-glow="success">
-          <CardHeader><CardTitle>{t('covenantsTitle')}</CardTitle><Badge variant="success">{t('covenantsOk')}</Badge></CardHeader>
-          <CardContent className="space-y-3">
-            {['Net Debt/EBITDA','DSCR',t('covenantMinLiquidity'),t('covenantCoverageRatio')].map((name, i) => {
-              const margins = ['40%','21%','149%','40%']
-              return (
-                <div key={name}>
-                  <div className="flex justify-between text-xs mb-1"><span className="text-muted-foreground">{name}</span><span className="text-success font-semibold">+{margins[i]}</span></div>
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden"><div className="h-full bg-success rounded-full" style={{ width: `${[60,79,40,72][i]}%` }} /></div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-      </div>
+      {/* ── Draggable Sections ── */}
+      {(() => {
+        const DEFAULT_SECTION_ORDER = ['cashCovenants', 'workingCapital', 'botRecommendations', 'tasks']
+        const sectionOrder = cockpitLayout.sectionOrder || DEFAULT_SECTION_ORDER
 
-      {/* Working Capital */}
-      <Card>
-        <CardHeader><CardTitle>{t('workingCapitalTitle')}</CardTitle></CardHeader>
-        <CardContent>
-          {[
-            { label: t('wcClients'), value: fmtEur(data.workingCapital?.ar || 964850) },
-            { label: t('wcSuppliers'), value: `-${fmtEur(data.workingCapital?.ap || 146550)}` },
-            { label: t('wcInventory'), value: fmtEur(110450) },
-            { label: t('wcNofTotal'), value: fmtEur((data.workingCapital?.ar || 964850) - (data.workingCapital?.ap || 146550) + 110450), highlight: true },
-          ].map(r => (
-            <div key={r.label} className="stat-row">
-              <span className="stat-label">{r.label}</span>
-              <span className={`stat-value ${r.highlight ? 'text-primary' : ''}`}>{r.value}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Bot CFO Recommendations */}
-      <Card data-glow="primary" className="bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader>
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Sparkles size={16} className="text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-sm">{t('botRecommendsTitle')}</CardTitle>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{t('botRecommendsSub')}</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => router.push('/dashboard/bot')}>
-              <Bot size={14} /> {t('botOpen')}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {recsLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
-              ))}
-            </div>
-          ) : recommendations.length > 0 ? (
-            <div className="space-y-2">
-              {recommendations.map((rec: any, i: number) => {
-                const priorityStyles = {
-                  critical: { border: 'border-destructive/30', bg: 'bg-destructive/5', dot: 'bg-destructive', badge: 'destructive' as const },
-                  warning: { border: 'border-warning/30', bg: 'bg-warning/5', dot: 'bg-warning', badge: 'warning' as const },
-                  info: { border: 'border-primary/30', bg: 'bg-primary/5', dot: 'bg-primary', badge: 'secondary' as const },
-                }
-                const style = priorityStyles[rec.priority as keyof typeof priorityStyles] || priorityStyles.info
-                return (
-                  <div key={i} className={`flex items-start gap-3 p-3.5 rounded-lg border ${style.border} ${style.bg}`}>
-                    <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${style.dot}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">{rec.title}</span>
-                        {rec.metric && <Badge variant="outline" className="text-[9px] px-1.5 py-0">{rec.metric}</Badge>}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{rec.action}</p>
-                      {rec.impact && (
-                        <span className="inline-block mt-1 text-[10px] font-mono font-semibold text-primary">{rec.impact}</span>
+        const sectionRenderers: Record<string, () => React.ReactNode> = {
+          cashCovenants: () => (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between w-full">
+                      <CardTitle>{t('cashEvolutionTitle')}</CardTitle>
+                      {cashEvolution.length > 0 && (
+                        <Badge variant="secondary">{t('cashEvolutionDays', { count: cashEvolution.length })}</Badge>
                       )}
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-4 text-xs text-muted-foreground">{t('botNoRecommendations')}</div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Tasks */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between w-full">
-            <CardTitle>{t('tasksTitle')}</CardTitle>
-            {data.tasks && <Badge variant="secondary">{t('tasksActive', { count: data.tasks.length })}</Badge>}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {(data.tasks && data.tasks.length > 0) ? data.tasks.map((t_: any) => {
-            const icon = t_.type === 'critical'
-              ? <AlertCircle size={16} className="text-destructive" />
-              : t_.type === 'warning'
-              ? <CircleDot size={16} className="text-warning" />
-              : <CircleDot size={16} className="text-success" />
-            return (
-              <div key={t_.task} className="flex items-center gap-3 px-5 py-3 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(t_.page)}>
-                <span>{icon}</span>
-                <span className="flex-1 text-sm text-foreground">{t_.task}</span>
-                <span className={`font-mono text-xs font-semibold ${t_.positive ? 'text-success' : 'text-destructive'}`}>{t_.impact}</span>
+                  </CardHeader>
+                  <CardContent>
+                    {cashEvolution.length > 1 ? (
+                      <LazyChart height={220}>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <AreaChart data={cashEvolution} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                            <defs>
+                              <linearGradient id="cashGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor={cc.primary} stopOpacity={0.3} />
+                                <stop offset="95%" stopColor={cc.primary} stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke={cc.border} />
+                            <XAxis dataKey="date" tick={{ fontSize: 10, fill: cc.mutedForeground }} />
+                            <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
+                            <Tooltip formatter={(v: any) => [fmtEur(Number(v)), t('tooltipBalance')]} />
+                            <Area type="monotone" dataKey="balance" stroke={cc.primary} strokeWidth={2} fill="url(#cashGradient)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </LazyChart>
+                    ) : (
+                      <div className="text-center py-10 text-sm text-muted-foreground">{t('cashEvolutionNoData')}</div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-            )
-          }) : (
-            <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('tasksNone')}</div>
-          )}
-        </CardContent>
-      </Card>
+              <Card data-glow="success">
+                <CardHeader><CardTitle>{t('covenantsTitle')}</CardTitle><Badge variant="success">{t('covenantsOk')}</Badge></CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    {['Net Debt/EBITDA','DSCR',t('covenantMinLiquidity'),t('covenantCoverageRatio')].map((name, i) => {
+                      const margins = ['40%','21%','149%','40%']
+                      const values = [2.1, 1.45, 3.73, 2.1]
+                      const limits = [3.5, 1.2, 1.5, 1.5]
+                      const pcts = [60, 79, 40, 72]
+                      const pct = pcts[i]
+                      const R = 36, CX = 44, CY = 44, SW = 6
+                      const halfCirc = Math.PI * R
+                      const filled = halfCirc * (pct / 100)
+                      const gap = halfCirc - filled
+                      return (
+                        <div key={name} className="flex flex-col items-center text-center">
+                          <svg width={88} height={52} viewBox="0 0 88 52" className="overflow-visible">
+                            <path d={`M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`} fill="none" stroke="hsl(var(--muted))" strokeWidth={SW} strokeLinecap="round" />
+                            <path d={`M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${CX + R} ${CY}`} fill="none" stroke={pct >= 80 ? 'hsl(var(--destructive))' : pct >= 60 ? 'hsl(var(--warning))' : 'hsl(var(--success))'} strokeWidth={SW} strokeLinecap="round" strokeDasharray={`${filled} ${gap}`} className="covenant-ring" style={{ '--ring-fill': `${filled}` } as React.CSSProperties} />
+                            <text x={CX} y={CY - 6} textAnchor="middle" className="fill-foreground text-[13px] font-mono font-bold">{values[i]}</text>
+                            <text x={CX} y={CY + 6} textAnchor="middle" className="fill-muted-foreground text-[8px]">lím {limits[i]}</text>
+                          </svg>
+                          <span className="text-[10px] text-muted-foreground leading-tight mt-0.5">{name}</span>
+                          <span className="text-[10px] font-semibold text-success">+{margins[i]}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ),
+          workingCapital: () => (
+            <Card>
+              <CardHeader><CardTitle>{t('workingCapitalTitle')}</CardTitle></CardHeader>
+              <CardContent>
+                {[
+                  { label: t('wcClients'), value: fmtEur(data.workingCapital?.ar || 964850) },
+                  { label: t('wcSuppliers'), value: `-${fmtEur(data.workingCapital?.ap || 146550)}` },
+                  { label: t('wcInventory'), value: fmtEur(110450) },
+                  { label: t('wcNofTotal'), value: fmtEur((data.workingCapital?.ar || 964850) - (data.workingCapital?.ap || 146550) + 110450), highlight: true },
+                ].map(r => (
+                  <div key={r.label} className="stat-row">
+                    <span className="stat-label">{r.label}</span>
+                    <span className={`stat-value ${r.highlight ? 'text-primary' : ''}`}>{r.value}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ),
+          botRecommendations: () => (
+            <Card data-glow="primary" className="bg-gradient-to-br from-primary/5 to-transparent">
+              <CardHeader>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Sparkles size={16} className="text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm">{t('botRecommendsTitle')}</CardTitle>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{t('botRecommendsSub')}</p>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => router.push('/dashboard/bot')}>
+                    <Bot size={14} /> {t('botOpen')}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {recsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                ) : recommendations.length > 0 ? (
+                  <div className="space-y-2">
+                    {recommendations.map((rec: any, i: number) => {
+                      const priorityStyles = {
+                        critical: { border: 'border-destructive/30', bg: 'bg-destructive/5', dot: 'bg-destructive', badge: 'destructive' as const },
+                        warning: { border: 'border-warning/30', bg: 'bg-warning/5', dot: 'bg-warning', badge: 'warning' as const },
+                        info: { border: 'border-primary/30', bg: 'bg-primary/5', dot: 'bg-primary', badge: 'secondary' as const },
+                      }
+                      const style = priorityStyles[rec.priority as keyof typeof priorityStyles] || priorityStyles.info
+                      return (
+                        <div key={i} className={`flex items-start gap-3 p-3.5 rounded-lg border ${style.border} ${style.bg}`}>
+                          <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${style.dot}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-foreground">{rec.title}</span>
+                              {rec.metric && <Badge variant="outline" className="text-[9px] px-1.5 py-0">{rec.metric}</Badge>}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">{rec.action}</p>
+                            {rec.impact && (
+                              <span className="inline-block mt-1 text-[10px] font-mono font-semibold text-primary">{rec.impact}</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-xs text-muted-foreground">{t('botNoRecommendations')}</div>
+                )}
+              </CardContent>
+            </Card>
+          ),
+          tasks: () => (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between w-full">
+                  <CardTitle>{t('tasksTitle')}</CardTitle>
+                  {data.tasks && <Badge variant="secondary">{t('tasksActive', { count: data.tasks.length })}</Badge>}
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {(data.tasks && data.tasks.length > 0) ? data.tasks.map((t_: any) => {
+                  const icon = t_.type === 'critical'
+                    ? <AlertCircle size={16} className="text-destructive" />
+                    : t_.type === 'warning'
+                    ? <CircleDot size={16} className="text-warning" />
+                    : <CircleDot size={16} className="text-success" />
+                  return (
+                    <div key={t_.task} className="flex items-center gap-3 px-5 py-3 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => router.push(t_.page)}>
+                      <span>{icon}</span>
+                      <span className="flex-1 text-sm text-foreground">{t_.task}</span>
+                      <span className={`font-mono text-xs font-semibold ${t_.positive ? 'text-success' : 'text-destructive'}`}>{t_.impact}</span>
+                    </div>
+                  )
+                }) : (
+                  <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('tasksNone')}</div>
+                )}
+              </CardContent>
+            </Card>
+          ),
+        }
+
+        return sectionOrder.filter(k => k in sectionRenderers).map(key => (
+          <div
+            key={key}
+            draggable
+            onDragStart={e => { e.dataTransfer.setData('text/plain', key); e.dataTransfer.effectAllowed = 'move'; (e.currentTarget as HTMLElement).classList.add('dragging-section') }}
+            onDragEnd={e => { (e.currentTarget as HTMLElement).classList.remove('dragging-section') }}
+            onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; (e.currentTarget as HTMLElement).classList.add('drag-over-section') }}
+            onDragLeave={e => { (e.currentTarget as HTMLElement).classList.remove('drag-over-section') }}
+            onDrop={e => {
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).classList.remove('drag-over-section')
+              const from = e.dataTransfer.getData('text/plain')
+              const to = key
+              if (from === to) return
+              const order = [...sectionOrder]
+              const fi = order.indexOf(from)
+              const ti = order.indexOf(to)
+              if (fi < 0 || ti < 0) return
+              order.splice(fi, 1)
+              order.splice(ti, 0, from)
+              setCockpitSectionOrder(order)
+            }}
+            className="relative group/drag"
+          >
+            {/* Drag handle */}
+            <div className="absolute -left-2 top-3 z-10 opacity-0 group-hover/drag:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+              <div className="w-6 h-8 rounded-md bg-muted/80 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted">
+                <GripVertical size={14} />
+              </div>
+            </div>
+            {sectionRenderers[key]()}
+          </div>
+        ))
+      })()}
+
+      {/* ── Presentation Mode Overlay ── */}
+      {presenting && (
+        <PresentationOverlay
+          kpis={visibleKpis}
+          data={data}
+          compareMode={compareMode}
+          computeDelta={computeDelta}
+          slideIdx={slideIdx}
+          setSlideIdx={setSlideIdx}
+          onClose={stopPresentation}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ── Presentation fullscreen component ── */
+function PresentationOverlay({
+  kpis, data, compareMode, computeDelta, slideIdx, setSlideIdx, onClose,
+}: {
+  kpis: any[]; data: any; compareMode: any; computeDelta: any
+  slideIdx: number; setSlideIdx: (v: number | ((p: number) => number)) => void; onClose: () => void
+}) {
+  const [progress, setProgress] = useState(0)
+  const INTERVAL = 10000
+
+  // Auto-rotate slides
+  useEffect(() => {
+    const start = Date.now()
+    const tick = () => {
+      const elapsed = Date.now() - start
+      setProgress(Math.min((elapsed % INTERVAL) / INTERVAL * 100, 100))
+    }
+    const raf = setInterval(tick, 50)
+    const rotate = setInterval(() => {
+      setSlideIdx((prev: number) => (prev + 1) % kpis.length)
+    }, INTERVAL)
+    return () => { clearInterval(raf); clearInterval(rotate) }
+  }, [slideIdx, kpis.length, setSlideIdx])
+
+  // Keyboard: Escape to close, arrows to navigate
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setSlideIdx((slideIdx + 1) % kpis.length) }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setSlideIdx((slideIdx - 1 + kpis.length) % kpis.length) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [slideIdx, kpis.length, setSlideIdx, onClose])
+
+  // Listen for fullscreen exit
+  useEffect(() => {
+    function onFsChange() { if (!document.fullscreenElement) onClose() }
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [onClose])
+
+  const k = kpis[slideIdx]
+  if (!k) return null
+  const raw = data[k.key as keyof typeof data] as any
+  const currentVal = raw?.value ?? 0
+  const delta = computeDelta(k.key, currentVal, compareMode)
+
+  return (
+    <div className="fixed inset-0 z-[999] bg-background flex flex-col items-center justify-center presentation-enter">
+      {/* Top bar */}
+      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-8 py-5">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gradient-to-br from-primary to-[hsl(var(--gold))] rounded-lg flex items-center justify-center">
+            <BarChart3 size={16} className="text-white" />
+          </div>
+          <span className="font-display text-lg font-bold text-foreground">GEACFO</span>
+          <span className="text-xs text-muted-foreground font-mono ml-2">
+            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+          </span>
+        </div>
+        <button onClick={onClose} className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <XIcon size={20} />
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-muted/30">
+        <div className="h-full bg-primary transition-[width] duration-100 ease-linear" style={{ width: `${progress}%` }} />
+      </div>
+
+      {/* Main slide */}
+      <div key={slideIdx} className="flex flex-col items-center gap-6 presentation-slide">
+        <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+          <span className="scale-[2]">{k.icon}</span>
+        </div>
+        <div className="text-sm uppercase tracking-[0.2em] text-muted-foreground font-semibold">{k.label}</div>
+        <div className="font-mono text-7xl md:text-8xl font-bold text-foreground tracking-tight">{k.value}</div>
+        {k.trend && (
+          <div className={`flex items-center gap-2 text-2xl font-semibold ${k.up ? 'text-success' : 'text-destructive'}`}>
+            {k.up ? <ArrowUp size={24} /> : <ArrowDown size={24} />}
+            <span>{k.trend}</span>
+          </div>
+        )}
+        {delta && (
+          <div className={`text-lg font-mono ${delta.positive ? 'text-success' : 'text-destructive'}`}>{delta.text}</div>
+        )}
+        {k.sub && <div className="text-sm text-muted-foreground">{k.sub}</div>}
+      </div>
+
+      {/* Bottom dots */}
+      <div className="absolute bottom-8 flex items-center gap-2">
+        {kpis.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setSlideIdx(i)}
+            className={`rounded-full transition-all ${i === slideIdx ? 'w-8 h-2 bg-primary' : 'w-2 h-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'}`}
+          />
+        ))}
+      </div>
+
+      {/* Hint */}
+      <div className="absolute bottom-3 text-[10px] text-muted-foreground/50">
+        ← → para navegar · Esc para salir · Auto-rota cada 10s
+      </div>
     </div>
   )
 }

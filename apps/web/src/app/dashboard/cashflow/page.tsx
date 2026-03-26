@@ -208,9 +208,7 @@ export default function CashFlowPage() {
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
               <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : v <= -1000 ? `${Math.round(v / 1000)}k` : String(v)} />
               <Tooltip
-                contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                 formatter={(v: number, name: string) => [fmtEur(v), name]}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />

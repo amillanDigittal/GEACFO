@@ -5,9 +5,11 @@ interface ScrollableTableProps {
   children: React.ReactNode
   /** Accessible label describing the table contents (e.g. "Detalle de Facturas") */
   label?: string
+  /** Max height in px — enables vertical scroll with sticky thead */
+  maxHeight?: number
 }
 
-export function ScrollableTable({ children, label }: ScrollableTableProps) {
+export function ScrollableTable({ children, label, maxHeight }: ScrollableTableProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -55,7 +57,7 @@ export function ScrollableTable({ children, label }: ScrollableTableProps) {
           </span>
         </div>
       )}
-      <div ref={ref} className="overflow-x-auto scrollbar-table" role="region" aria-label={label} tabIndex={label ? 0 : undefined}>
+      <div ref={ref} className="overflow-x-auto scrollbar-table" role="region" aria-label={label} tabIndex={label ? 0 : undefined} style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
         {children}
       </div>
     </div>

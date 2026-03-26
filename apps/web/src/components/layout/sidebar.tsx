@@ -115,15 +115,15 @@ export function Sidebar() {
 
   return (
     <div data-print-hide>
-    {/* Mobile overlay backdrop */}
+    {/* Mobile overlay backdrop — hidden on mobile (bottom sheet replaces it) */}
     {!collapsed && (
-      <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarCollapsed(true)} />
+      <div className="fixed inset-0 bg-black/50 z-40 hidden md:hidden" onClick={() => setSidebarCollapsed(true)} />
     )}
     <nav aria-label="Navegación principal" className={cn(
       'flex flex-col backdrop-blur-xl transition-all duration-300 overflow-hidden flex-shrink-0 z-50 sidebar-glass',
-      // Mobile: hidden by default, overlay when open
-      'fixed md:relative h-full',
-      collapsed ? 'w-0 md:w-[60px]' : 'w-[260px]'
+      // Mobile: always hidden (bottom sheet handles navigation), Desktop: collapsible
+      'hidden md:flex md:relative h-full',
+      collapsed ? 'md:w-[60px]' : 'md:w-[260px]'
     )}>
       {/* Logo */}
       <div className="sidebar-logo-area flex items-center gap-3 px-4 h-[60px] border-b border-white/[0.06] flex-shrink-0 cursor-pointer">
@@ -161,11 +161,10 @@ export function Sidebar() {
                     collapsed && 'justify-center px-2',
                     active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}>
-                    {active && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary rounded-r-full" />}
-                    <span className="sidebar-nav-icon text-base flex-shrink-0">{item.icon}</span>
+                        <span className="sidebar-nav-icon text-base flex-shrink-0">{item.icon}</span>
                     {!collapsed && <span className="truncate">{'i18n' in item ? t(item.i18n as any) : ''}</span>}
                     {!collapsed && badgeCount !== undefined && badgeCount > 0 && (
-                      <span className="ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badgeCount}</span>
+                      <span key={badgeCount} className="ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full sidebar-badge">{badgeCount}</span>
                     )}
                   </Link>
                   {!collapsed && (
@@ -209,11 +208,10 @@ export function Sidebar() {
                 collapsed && 'justify-center px-2',
                 active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               )}>
-                {active && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary rounded-r-full" />}
                 <span className="sidebar-nav-icon text-base flex-shrink-0">{item.icon}</span>
                 {!collapsed && <span className="truncate">{'i18n' in item ? t(item.i18n as any) : ''}</span>}
                 {!collapsed && badgeCount !== undefined && badgeCount > 0 && (
-                  <span className={cn('ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full group-hover:mr-5', isFav && 'mr-5')}>
+                  <span key={badgeCount} className={cn('ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full sidebar-badge group-hover:mr-5', isFav && 'mr-5')}>
                     {badgeCount}
                   </span>
                 )}

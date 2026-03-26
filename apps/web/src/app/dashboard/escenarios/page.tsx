@@ -180,9 +180,7 @@ export default function EscenariosPage() {
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtEur(Number(v) * 1000), name.replace('saldo_', '')]}
-                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                   />
                   <Legend formatter={(value: string) => scenarioMeta[value.replace('saldo_', '')]?.label || value} />
                   {scenarios.filter((s: any) => s.weeks.length > 0).map((s: any) => (
@@ -214,9 +212,7 @@ export default function EscenariosPage() {
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
                     <Tooltip
                       formatter={(v: any) => fmtEur(Number(v) * 1000)}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                     />
                     <Legend />
                     <Bar dataKey="cobros_BASE" name={t('colCollections')} fill="hsl(var(--success))" fillOpacity={0.75} radius={[3, 3, 0, 0]} />
@@ -236,9 +232,7 @@ export default function EscenariosPage() {
                     <YAxis domain={[50, 100]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
                     <Tooltip
                       formatter={(v: any) => [`${Number(v).toFixed(1)}%`, t('confidence')]}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                     />
                     <Line type="monotone" dataKey="confidence_BASE" name={t('confidence')} stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>

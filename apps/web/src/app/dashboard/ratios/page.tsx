@@ -241,9 +241,7 @@ export default function RatiosPage() {
                     <XAxis dataKey="period" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} domain={['auto', 'auto']} />
                     <RTooltip
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                       formatter={(v: number) => [fmt(v, 2), hk.label]}
                     />
                     <Line type="monotone" dataKey={hk.key} stroke={hk.color} strokeWidth={2} dot={{ r: 4, fill: hk.color }} />

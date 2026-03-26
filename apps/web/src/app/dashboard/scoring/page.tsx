@@ -137,9 +137,7 @@ export default function ScoringPage() {
                                   <ReferenceLine y={60} stroke="hsl(var(--warning))" strokeDasharray="3 3" label={{ value: t('medium'), position: 'right', fontSize: 9, fill: 'hsl(var(--warning))' }} />
                                   <Tooltip
                                     formatter={(v: any) => [`${v} pts`, 'Score']}
-                                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
-                                    itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                                    labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                                   
                                   />
                                   <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4, fill: 'hsl(var(--primary))' }} />
                                 </LineChart>

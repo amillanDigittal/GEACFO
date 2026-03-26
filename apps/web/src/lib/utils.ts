@@ -12,6 +12,13 @@ export const fmtEur = (v: number, dec = 0) => `${fmt(v, dec)} €`
 export const fmtPct = (v: number, dec = 1) => `${fmt(v, dec)}%`
 export const fmtM = (v: number) => v >= 1000000 ? `€${fmt(v / 1000000, 2)}M` : v >= 1000 ? `€${fmt(v / 1000, 0)}k` : fmtEur(v)
 
+/** Contextual color class for monetary amounts: green positive, red negative, muted zero */
+export function amountColor(v: number) {
+  if (v > 0) return 'text-success'
+  if (v < 0) return 'text-destructive'
+  return 'text-muted-foreground'
+}
+
 export function scoreColor(score: number) {
   if (score >= 80) return 'text-success'
   if (score >= 60) return 'text-warning'

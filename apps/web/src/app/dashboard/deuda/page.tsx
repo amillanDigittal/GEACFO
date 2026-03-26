@@ -181,9 +181,7 @@ export default function DeudaPage() {
                   <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} interval={2} />
                   <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                     formatter={(value: number, name: string) => {
                       const inst = amort.instruments?.find((i: any) => i.id === name)
                       const label = inst ? `${DEBT_LABELS[inst.type] || inst.type} (${inst.bank})` : name
@@ -460,9 +458,7 @@ export default function DeudaPage() {
                     <XAxis dataKey="month" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} interval={3} />
                     <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
                     <Tooltip
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                       formatter={(v: number, name: string) => [fmtEur(v), name === 'original' ? t('simCurrent') : t('simRefinanced')]}
                     />
                     <Bar dataKey="original" fill="hsl(var(--muted-foreground))" opacity={0.4} radius={[2, 2, 0, 0]} name="original" />

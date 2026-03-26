@@ -159,12 +159,7 @@ export default function VariancePage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
-                <Tooltip
-                  formatter={(v: any) => fmtEur(Number(v) * 1000)}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
-                />
+                <Tooltip formatter={(v: any) => fmtEur(Number(v) * 1000)} />
                 <Legend />
                 <Bar dataKey="Actual" fill="hsl(var(--primary))" fillOpacity={0.85} radius={[3, 3, 0, 0]} />
                 <Bar dataKey={refLabel} fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[3, 3, 0, 0]} />
@@ -182,12 +177,7 @@ export default function VariancePage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
                 <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
-                <Tooltip
-                  formatter={(v: any) => [`${Number(v) > 0 ? '+' : ''}${fmtEur(Number(v) * 1000)}`, t('varianceLabel')]}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
-                />
+                <Tooltip formatter={(v: any) => [`${Number(v) > 0 ? '+' : ''}${fmtEur(Number(v) * 1000)}`, t('varianceLabel')]} />
                 <Bar dataKey="varianza" radius={[3, 3, 0, 0]}>
                   {waterfallData.map((entry: any, index: number) => (
                     <Cell key={index} fill={entry.fill} fillOpacity={0.75} />
@@ -221,7 +211,7 @@ export default function VariancePage() {
                     <td className="p-3">
                       <span className={isTotal ? 'font-semibold' : ''}>{r.category}</span>
                     </td>
-                    <td className="p-3 font-mono text-xs font-semibold">{fmtEur(r.actual)}</td>
+                    <td className={`p-3 font-mono text-xs font-semibold ${r.actual >= 0 ? 'text-success' : 'text-destructive'}`}>{fmtEur(r.actual)}</td>
                     <td className="p-3 font-mono text-xs text-muted-foreground">{fmtEur(r.budget)}</td>
                     <td className="p-3">
                       <span className={`font-mono text-xs font-semibold ${goodBudget ? 'text-success' : 'text-destructive'}`}>

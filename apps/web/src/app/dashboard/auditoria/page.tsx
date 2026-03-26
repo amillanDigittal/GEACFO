@@ -47,6 +47,118 @@ function FilterSelect({ label, value, onChange, options }: {
   )
 }
 
+/* ── Activity Heatmap (GitHub-style) ─────────────────────────────── */
+function ActivityHeatmap({ logs }: { logs: any[] }) {
+  const heatmap = useMemo(() => {
+    // Build 30 days × 24 hours grid
+    const now = new Date()
+    const days: { date: Date; label: string; short: string }[] = []
+    for (let d = 29; d >= 0; d--) {
+      const date = new Date(now)
+      date.setDate(date.getDate() - d)
+      date.setHours(0, 0, 0, 0)
+      days.push({
+        date,
+        label: date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
+        short: date.toLocaleDateString('es-ES', { weekday: 'narrow' }),
+      })
+    }
+
+    // Count per day×hour
+    const grid: number[][] = Array.from({ length: 24 }, () => Array(30).fill(0))
+    let max = 0
+    logs.forEach(l => {
+      const d = new Date(l.createdAt)
+      const dayIdx = days.findIndex(day =>
+        d.getFullYear() === day.date.getFullYear() &&
+        d.getMonth() === day.date.getMonth() &&
+        d.getDate() === day.date.getDate()
+      )
+      if (dayIdx >= 0) {
+        const h = d.getHours()
+        grid[h][dayIdx]++
+        if (grid[h][dayIdx] > max) max = grid[h][dayIdx]
+      }
+    })
+
+    // Collapse to business hours (6-22) for display
+    const hours = Array.from({ length: 17 }, (_, i) => i + 6)
+
+    return { days, grid, hours, max }
+  }, [logs])
+
+  const { days, grid, hours, max } = heatmap
+  const CELL = 14
+  const GAP = 2
+
+  function intensity(count: number): string {
+    if (count === 0) return 'hsl(var(--muted))'
+    const ratio = max > 0 ? count / max : 0
+    if (ratio > 0.75) return 'hsl(var(--success))'
+    if (ratio > 0.5) return 'hsl(var(--success) / 0.7)'
+    if (ratio > 0.25) return 'hsl(var(--success) / 0.4)'
+    return 'hsl(var(--success) / 0.2)'
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-flex gap-1">
+        {/* Hour labels */}
+        <div className="flex flex-col gap-[2px] mr-1 pt-[18px]">
+          {hours.map(h => (
+            <div key={h} className="text-[9px] text-muted-foreground font-mono leading-none" style={{ height: CELL }}>
+              {h % 3 === 0 ? `${String(h).padStart(2, '0')}h` : ''}
+            </div>
+          ))}
+        </div>
+
+        {/* Day columns */}
+        {days.map((day, di) => (
+          <div key={di} className="flex flex-col items-center gap-[2px]">
+            {/* Day label */}
+            <div className="text-[8px] text-muted-foreground font-mono leading-none h-[14px] flex items-end">
+              {di % 3 === 0 ? day.label : ''}
+            </div>
+            {/* Hour cells */}
+            {hours.map(h => {
+              const count = grid[h][di]
+              return (
+                <div
+                  key={h}
+                  className="rounded-[3px] transition-colors heatmap-cell"
+                  style={{
+                    width: CELL,
+                    height: CELL,
+                    backgroundColor: intensity(count),
+                  }}
+                  title={`${day.label} ${String(h).padStart(2, '0')}:00 — ${count} evento${count !== 1 ? 's' : ''}`}
+                />
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-2 mt-3">
+        <span className="text-[9px] text-muted-foreground">Menos</span>
+        {[0, 0.2, 0.4, 0.7, 1].map((r, i) => (
+          <div
+            key={i}
+            className="w-3 h-3 rounded-[2px]"
+            style={{
+              backgroundColor: r === 0
+                ? 'hsl(var(--muted))'
+                : `hsl(var(--success) / ${r === 1 ? '1' : r})`
+            }}
+          />
+        ))}
+        <span className="text-[9px] text-muted-foreground">Más</span>
+      </div>
+    </div>
+  )
+}
+
 export default function AuditoriaPage() {
   const t = useTranslations('auditoria')
   const [logs, setLogs] = useState<any[]>([])
@@ -210,6 +322,16 @@ export default function AuditoriaPage() {
           </div>
         ))}
       </div>
+
+      {/* Activity Heatmap */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('heatmapTitle')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ActivityHeatmap logs={logs} />
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>

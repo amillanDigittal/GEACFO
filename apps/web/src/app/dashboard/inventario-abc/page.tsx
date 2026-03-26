@@ -151,9 +151,7 @@ export default function AbcPage() {
                 <YAxis yAxisId="left" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
                 <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
                 <Tooltip
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                   formatter={(v: number, name: string) => [name === 'cumPct' ? `${v}%` : fmtEur(v), name === 'cumPct' ? t('tooltipCumPct') : t('tooltipValue')]}
                 />
                 <Bar yAxisId="left" dataKey="value" radius={[3, 3, 0, 0]}>
@@ -177,9 +175,7 @@ export default function AbcPage() {
                 <XAxis type="number" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => fmtEur(v)} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 14, fontWeight: 'bold', fill: 'hsl(var(--foreground))' }} width={30} />
                 <Tooltip
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 11, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                   formatter={(v: number) => [fmtEur(v), t('tooltipValue')]}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>

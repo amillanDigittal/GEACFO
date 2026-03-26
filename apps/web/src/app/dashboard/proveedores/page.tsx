@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Plus, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
@@ -191,7 +192,7 @@ export default function ProveedoresPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} width={115} />
-                <Tooltip formatter={(v: any) => [fmtEur(v), t('volumeLabel')]} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }} itemStyle={{ color: 'hsl(var(--card-foreground))' }} labelStyle={{ color: 'hsl(var(--card-foreground))' }} />
+                <Tooltip formatter={(v: any) => [fmtEur(v), t('volumeLabel')]} />
                 <Bar dataKey="volumen" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -256,7 +257,9 @@ export default function ProveedoresPage() {
                 )
               })}
               {suppliers.length === 0 && (
-                <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">{t('noSuppliers')}</td></tr>
+                <tr><td colSpan={9}>
+                  <EmptyState variant="suppliers" title={t('noSuppliers')} description="Importa proveedores para gestionar pagos y condiciones" compact />
+                </td></tr>
               )}
             </tbody>
           </table>

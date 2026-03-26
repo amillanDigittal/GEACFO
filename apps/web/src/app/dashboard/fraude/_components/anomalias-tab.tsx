@@ -1,8 +1,9 @@
 'use client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Search, ShieldCheck, ShieldX } from 'lucide-react'
+import { ShieldCheck, ShieldX } from 'lucide-react'
 import { api } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Anomaly, severityConfig } from './types'
 
 interface AnomaliasTabProps {
@@ -77,11 +78,11 @@ export function AnomaliasTab({
 
   if (visibleAnomalies.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="mb-3 opacity-30"><Search size={28} className="mx-auto text-muted-foreground" /></div>
-        <div className="text-sm text-muted-foreground">No se han detectado anomalías</div>
-        <div className="text-xs text-muted-foreground mt-1">Se analizan duplicados, pagos sin aprobación e impagos prolongados</div>
-      </div>
+      <EmptyState
+        variant="search"
+        title="No se han detectado anomalías"
+        description="Se analizan duplicados, pagos sin aprobación e impagos prolongados"
+      />
     )
   }
 

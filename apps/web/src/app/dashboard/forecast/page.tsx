@@ -181,9 +181,6 @@ export default function ForecastPage() {
                   <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtEur(Number(v)), name]}
-                    contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 12, color: cc.cardForeground }}
-                        itemStyle={{ color: cc.cardForeground }}
-                        labelStyle={{ color: cc.cardForeground }}
                   />
                   <Legend />
                   <ReferenceLine y={0} stroke={cc.destructive} strokeDasharray="4 4" strokeOpacity={0.5} />
@@ -206,9 +203,6 @@ export default function ForecastPage() {
                   <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtEur(Number(v)), name]}
-                    contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 12, color: cc.cardForeground }}
-                        itemStyle={{ color: cc.cardForeground }}
-                        labelStyle={{ color: cc.cardForeground }}
                   />
                   <Legend />
                   <Bar dataKey="cobrosBase" name={t('legendInflowsBase')} fill={cc.primary} fillOpacity={0.8} radius={[2,2,0,0]} />
@@ -232,9 +226,6 @@ export default function ForecastPage() {
                     <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${v}%`} />
                     <Tooltip
                       formatter={(v: any, name: string) => [`${v}%`, name]}
-                      contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 12, color: cc.cardForeground }}
-                      itemStyle={{ color: cc.cardForeground }}
-                      labelStyle={{ color: cc.cardForeground }}
                     />
                     <Legend />
                     <ReferenceLine y={70} stroke={cc.warning} strokeDasharray="4 4" label={{ value: t('confidenceThreshold'), fill: cc.warning, fontSize: 10 }} />
@@ -318,9 +309,6 @@ export default function ForecastPage() {
                   <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${v / 1000}k`} />
                   <Tooltip
                     formatter={(v: any) => fmtEur(v)}
-                    contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, color: cc.cardForeground }}
-                    itemStyle={{ color: cc.cardForeground }}
-                    labelStyle={{ color: cc.cardForeground }}
                   />
                   <Legend />
                   <Bar dataKey="cobros" name={t('legendInflows')} fill={cc.success} fillOpacity={0.75} radius={[3, 3, 0, 0]} />
@@ -347,9 +335,6 @@ export default function ForecastPage() {
                     <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
                     <Tooltip
                       formatter={(v: any) => [fmtEur(Number(v)), t('tooltipBalance')]}
-                      contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 12, color: cc.cardForeground }}
-                      itemStyle={{ color: cc.cardForeground }}
-                      labelStyle={{ color: cc.cardForeground }}
                     />
                     <ReferenceLine y={0} stroke={cc.destructive} strokeDasharray="4 4" />
                     <Area type="monotone" dataKey="saldo" stroke={cc.primary} strokeWidth={2.5} fill="url(#singleGrad)" />

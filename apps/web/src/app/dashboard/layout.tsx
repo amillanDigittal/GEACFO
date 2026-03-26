@@ -8,6 +8,9 @@ import { OnboardingTour } from '@/components/onboarding-tour'
 import { ConnectionBanner } from '@/components/connection-banner'
 import { ShortcutsHelp } from '@/components/shortcuts-help'
 import { PageTransition } from '@/components/page-transition'
+import { ScrollProgress } from '@/components/scroll-progress'
+import { MobileNav } from '@/components/layout/mobile-nav'
+import { DynamicFavicon } from '@/components/dynamic-favicon'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
@@ -23,15 +26,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </a>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Topbar session={session} />
         <ConnectionBanner />
-        <main id="main-content" className="flex-1 overflow-y-auto p-3 md:p-6">
-          <PageTransition>{children}</PageTransition>
+        <main id="main-content" className="flex-1 overflow-y-auto">
+          <Topbar session={session} />
+          <ScrollProgress />
+          <div className="p-3 md:p-6 pb-20 md:pb-6">
+            <PageTransition>{children}</PageTransition>
+          </div>
         </main>
       </div>
       <div data-print-hide><CommandPalette /></div>
       <div data-print-hide><OnboardingTour /></div>
       <div data-print-hide><ShortcutsHelp /></div>
+      <MobileNav />
+      <DynamicFavicon />
     </div>
   )
 }

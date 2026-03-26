@@ -8,6 +8,7 @@ import { useChartColors } from '@/hooks/use-chart-colors'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Download, Siren, ChevronDown, FileDown, TrendingUp, TrendingDown } from 'lucide-react'
 import { exportCobrosPDF } from '@/lib/export-pdf-modules'
 import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
@@ -308,9 +309,6 @@ export default function CobrosPage() {
                       <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: cc.mutedForeground }} />
                       <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
                       <Tooltip
-                        contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 12, color: cc.cardForeground }}
-                        itemStyle={{ color: cc.cardForeground }}
-                        labelStyle={{ color: cc.cardForeground }}
                         formatter={(v: number) => [fmtEur(v), t('tooltipAmount')]}
                         labelFormatter={l => `${t('tooltipBracket')}: ${l}`}
                       />
@@ -374,16 +372,13 @@ export default function CobrosPage() {
                           ))}
                         </Pie>
                         <Tooltip
-                          contentStyle={{ background: cc.card, border: `1px solid ${cc.border}`, borderRadius: 8, fontSize: 11, color: cc.cardForeground }}
-                          itemStyle={{ color: cc.cardForeground }}
-                          labelStyle={{ color: cc.cardForeground }}
                           formatter={(v: number) => [fmtEur(v), t('tooltipAmount')]}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                     </LazyChart>
                   ) : (
-                    <div className="h-[160px] flex items-center justify-center text-sm text-muted-foreground">{t('noData')}</div>
+                    <EmptyState variant="chart" title={t('noData')} compact className="h-[160px]" />
                   )}
                   {/* By customer */}
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-3 mb-2">{t('byClientTitle')}</div>
@@ -448,7 +443,7 @@ export default function CobrosPage() {
                                 {days > 0 ? t('daysOverdue', { days }) : days === 0 ? t('daysToday') : t('daysRemaining', { days: Math.abs(days) })}
                               </span>
                             </td>
-                            <td className="p-3 font-mono text-xs font-semibold">{fmtEur(pending)}</td>
+                            <td className={`p-3 font-mono text-xs font-semibold ${pending > 0 ? 'text-warning' : 'text-success'}`}>{fmtEur(pending)}</td>
                             <td className="p-3"><Badge variant={cfg.variant}>{cfg.label}</Badge></td>
                           </tr>
                         )
@@ -527,8 +522,8 @@ export default function CobrosPage() {
                 <td className="p-3">
                   <span className={`text-xs font-mono ${inv.status === 'OVERDUE' ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{fmtDate(inv.dueDate)}</span>
                 </td>
-                <td className="p-3 font-mono text-xs">{fmtEur(Number(inv.amount))}</td>
-                <td className="p-3 font-mono text-xs font-semibold">{fmtEur(Number(inv.totalAmount))}</td>
+                <td className="p-3 font-mono text-xs text-muted-foreground">{fmtEur(Number(inv.amount))}</td>
+                <td className={`p-3 font-mono text-xs font-semibold ${Number(inv.totalAmount) - Number(inv.paidAmount) > 0 ? 'text-warning' : 'text-success'}`}>{fmtEur(Number(inv.totalAmount))}</td>
                 <td className="p-3 font-mono text-xs">
                   {Number(inv.paidAmount) > 0 ? <span className="text-success">{fmtEur(Number(inv.paidAmount))}</span> : <span className="text-muted-foreground">—</span>}
                 </td>

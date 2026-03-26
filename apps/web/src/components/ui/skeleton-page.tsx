@@ -1,7 +1,7 @@
 'use client'
 
 function Bone({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-muted ${className}`} />
+  return <div className={`skeleton-shimmer rounded-md ${className}`} />
 }
 
 /** Wraps skeleton layouts with a subtle fade-in so they don't pop in abruptly */

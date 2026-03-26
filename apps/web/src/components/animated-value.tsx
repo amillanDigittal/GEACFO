@@ -1,130 +1,51 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-
-/**
- * Parse a formatted number string into its parts.
- * Handles Spanish (1.245.000), decimal comma (4,82), English decimal (1.85), plain (42).
- */
-function parse(value: string) {
-  const m = value.match(/^(.*?)(\d[\d.,]*\d|\d)(.*)$/)
-  if (!m) return null
-
-  const [, prefix, raw, suffix] = m
-  const dots = (raw.match(/\./g) || []).length
-  const commas = (raw.match(/,/g) || []).length
-  const lastDot = raw.lastIndexOf('.')
-  const lastComma = raw.lastIndexOf(',')
-
-  let num: number
-  let decimals: number
-  let locale: 'es' | 'en'
-
-  if (commas === 1 && lastComma > lastDot) {
-    // Spanish decimal: "4,82" or "1.245,30"
-    num = parseFloat(raw.replace(/\./g, '').replace(',', '.'))
-    decimals = raw.length - lastComma - 1
-    locale = 'es'
-  } else if (dots >= 2) {
-    // Multiple dots = thousand separators: "1.245.000"
-    num = parseFloat(raw.replace(/\./g, ''))
-    decimals = 0
-    locale = 'es'
-  } else if (dots === 1 && commas === 0) {
-    const afterDot = raw.split('.')[1]
-    if (afterDot.length >= 3 && !afterDot.includes(',')) {
-      // Likely thousand sep: "1.245"
-      num = parseFloat(raw.replace('.', ''))
-      decimals = 0
-      locale = 'es'
-    } else {
-      // English decimal: "1.85", "3.2"
-      num = parseFloat(raw)
-      decimals = afterDot.length
-      locale = 'en'
-    }
-  } else {
-    // Plain integer: "42"
-    num = parseInt(raw, 10)
-    decimals = 0
-    locale = 'es'
-  }
-
-  if (isNaN(num)) return null
-
-  const fmt = (n: number): string => {
-    if (locale === 'en') return n.toFixed(decimals)
-    return n.toLocaleString('es-ES', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    })
-  }
-
-  return { prefix, num, suffix, fmt }
-}
-
-function easeOutCubic(t: number) {
-  return 1 - Math.pow(1 - t, 3)
-}
+import { memo, useEffect, useState } from 'react'
 
 interface AnimatedValueProps {
   /** The fully formatted display string, e.g. "1.245.000 €" */
   value: string
-  /** Animation duration in ms */
-  duration?: number
   /** Delay before animation starts (syncs with card stagger) */
   delay?: number
 }
 
-export function AnimatedValue({ value, duration = 800, delay = 0 }: AnimatedValueProps) {
-  const [display, setDisplay] = useState(value)
-  const prevValue = useRef(value)
-  const rafRef = useRef(0)
+/** Single character that flips in on mount */
+const FlipDigit = memo(function FlipDigit({ char, stagger }: { char: string; stagger: number }) {
+  const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    // On value change, reset
-    const parsed = parse(value)
-    if (!parsed) {
-      setDisplay(value)
-      return
-    }
-
-    // Respect reduced motion
+    // Reduced motion
     if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(value)
+      setVisible(true)
       return
     }
+    const t = setTimeout(() => setVisible(true), stagger)
+    return () => clearTimeout(t)
+  }, [stagger])
 
-    const { prefix, num: target, suffix, fmt } = parsed
+  const isDigit = /[\d]/.test(char)
 
-    // Animate from 0 on first mount, or from previous number on updates
-    let from = 0
-    if (prevValue.current !== value) {
-      const prevParsed = parse(prevValue.current)
-      if (prevParsed) from = prevParsed.num
-    }
-    prevValue.current = value
+  if (!isDigit || visible) {
+    return (
+      <span
+        className={isDigit && visible ? 'flip-digit-enter' : undefined}
+        style={isDigit ? { display: 'inline-block', animationDelay: `${stagger}ms` } : undefined}
+      >
+        {char}
+      </span>
+    )
+  }
 
-    const startTime = performance.now() + delay
+  // Before visible: show placeholder to avoid layout shift
+  return <span className="invisible">{char}</span>
+})
 
-    function tick(now: number) {
-      const elapsed = now - startTime
-      if (elapsed < 0) {
-        setDisplay(`${prefix}${fmt(from)}${suffix}`)
-        rafRef.current = requestAnimationFrame(tick)
-        return
-      }
-      const t = Math.min(elapsed / duration, 1)
-      const current = from + (target - from) * easeOutCubic(t)
-      setDisplay(`${prefix}${fmt(current)}${suffix}`)
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(tick)
-      }
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [value, duration, delay])
-
-  return <>{display}</>
+export function AnimatedValue({ value, delay = 0 }: AnimatedValueProps) {
+  return (
+    <span className="inline-flex" aria-label={value}>
+      {value.split('').map((char, i) => (
+        <FlipDigit key={`${i}-${char}`} char={char} stagger={delay + i * 25} />
+      ))}
+    </span>
+  )
 }

@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/use-toast'
 import { useRouter } from 'next/navigation'
@@ -323,9 +324,12 @@ export default function NotificacionesPage() {
       <div className="space-y-2">
         {paged.length === 0 && (
           <Card>
-            <CardContent className="py-12 text-center">
-              <BellOff size={32} className="mx-auto text-muted-foreground mb-3" />
-              <div className="text-sm text-muted-foreground">{t('noAlertsFound')}</div>
+            <CardContent>
+              <EmptyState
+                variant="alerts"
+                title={t('noAlertsFound')}
+                description="No se encontraron alertas con los filtros seleccionados"
+              />
             </CardContent>
           </Card>
         )}

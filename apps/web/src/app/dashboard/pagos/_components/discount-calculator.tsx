@@ -4,6 +4,7 @@ import { fmtEur, fmt, fmtPct } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { ScrollableTable, Th } from '@/components/ui/scrollable-table'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Calculator, Clock, TrendingUp } from 'lucide-react'
 
 function daysUntil(dateStr: string) {
@@ -135,9 +136,7 @@ export function DiscountCalculator({ invoices }: DiscountCalculatorProps) {
             </table>
           </ScrollableTable>
         ) : (
-          <div className="text-center py-6 text-muted-foreground text-sm">
-            No hay facturas elegibles para descuento con los términos actuales
-          </div>
+          <EmptyState variant="invoices" title="No hay facturas elegibles para descuento con los términos actuales" compact />
         )}
 
         {eligible.length > 0 && (

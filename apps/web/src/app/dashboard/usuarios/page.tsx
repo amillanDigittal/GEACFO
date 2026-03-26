@@ -8,6 +8,7 @@ import { createUserSchema, editUserSchema, type CreateUserForm, type EditUserFor
 import { api } from '@/lib/api'
 import { useUsers } from '@/hooks/use-api'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -213,9 +214,11 @@ export default function UsuariosPage() {
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-sm text-muted-foreground">
-          {search ? t('noUsersFoundSearch') : t('noUsersRegistered')}
-        </div>
+        <EmptyState
+          variant={search ? 'search' : 'users'}
+          title={search ? t('noUsersFoundSearch') : t('noUsersRegistered')}
+          description={search ? 'Prueba con otros términos de búsqueda' : 'Añade usuarios para gestionar el acceso a la plataforma'}
+        />
       )}
 
       {/* Create/Edit Dialog */}

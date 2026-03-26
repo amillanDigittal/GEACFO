@@ -9,6 +9,7 @@ import { fmtEur, fmt, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Download, ClipboardList, Link2, CheckCircle2, Search, X, Zap, ArrowDownToLine, ArrowUpFromLine, Check, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
@@ -254,15 +255,16 @@ export default function ConciliacionPage() {
         </CardHeader>
         <CardContent>
           {!autoMatches ? (
-            <div className="text-center py-8 text-sm text-muted-foreground">{t('findMatchesPrompt')}</div>
+            <EmptyState variant="reconciliation" title={t('findMatchesPrompt')} compact />
           ) : autoMatches.matches?.filter((m: any) => !dismissedMatches.has(m.movementId) && !acceptedMatches.has(m.movementId)).length === 0 ? (
-            <div className="text-center py-8">
-              <CheckCircle2 size={24} className="mx-auto text-success mb-2 opacity-50" />
-              <div className="text-sm text-muted-foreground">
-                {acceptedMatches.size > 0 ? t('matchesAccepted', { count: acceptedMatches.size }) + ' ' : ''}
-                {autoMatches.unmatched > 0 ? t('unmatchedMovements', { count: autoMatches.unmatched }) : t('allMovementsMatched')}
-              </div>
-            </div>
+            <EmptyState
+              variant="reconciliation"
+              title={
+                (acceptedMatches.size > 0 ? t('matchesAccepted', { count: acceptedMatches.size }) + ' ' : '') +
+                (autoMatches.unmatched > 0 ? t('unmatchedMovements', { count: autoMatches.unmatched }) : t('allMovementsMatched'))
+              }
+              compact
+            />
           ) : (
             <div className="space-y-3">
               {autoMatches.matches

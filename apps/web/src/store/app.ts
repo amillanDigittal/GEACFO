@@ -6,6 +6,8 @@ interface CockpitLayout {
   order: string[] | null
   /** KPI keys that are hidden */
   hidden: string[]
+  /** Section keys in display order. null = use default order */
+  sectionOrder: string[] | null
 }
 
 export type CompareMode = 'mom' | 'yoy'
@@ -21,6 +23,7 @@ interface AppState {
   toggleFavorite: (href: string) => void
   cockpitLayout: CockpitLayout
   setCockpitOrder: (order: string[]) => void
+  setCockpitSectionOrder: (order: string[]) => void
   toggleCockpitKpi: (key: string) => void
   resetCockpitLayout: () => void
   compareMode: CompareMode
@@ -42,15 +45,16 @@ export const useAppStore = create<AppState>()(
         if (favorites.includes(href)) set({ favorites: favorites.filter(f => f !== href) })
         else set({ favorites: [...favorites, href] })
       },
-      cockpitLayout: { order: null, hidden: [] },
+      cockpitLayout: { order: null, hidden: [], sectionOrder: null },
       setCockpitOrder: (order) => set((s) => ({ cockpitLayout: { ...s.cockpitLayout, order } })),
+      setCockpitSectionOrder: (order) => set((s) => ({ cockpitLayout: { ...s.cockpitLayout, sectionOrder: order } })),
       toggleCockpitKpi: (key) => set((s) => {
         const hidden = s.cockpitLayout.hidden.includes(key)
           ? s.cockpitLayout.hidden.filter(k => k !== key)
           : [...s.cockpitLayout.hidden, key]
         return { cockpitLayout: { ...s.cockpitLayout, hidden } }
       }),
-      resetCockpitLayout: () => set({ cockpitLayout: { order: null, hidden: [] } }),
+      resetCockpitLayout: () => set({ cockpitLayout: { order: null, hidden: [], sectionOrder: null } }),
       compareMode: 'mom' as CompareMode,
       setCompareMode: (mode) => set({ compareMode: mode }),
     }),

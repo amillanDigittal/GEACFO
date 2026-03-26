@@ -273,9 +273,7 @@ export default function PresupuestoPage() {
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                     <Tooltip
                       formatter={(v: any, name: string) => [v != null ? fmtEur(v) : '—', name === 'presupuesto' ? t('legendBudget') : t('legendActual')]}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                     />
                     <Legend formatter={(value: string) => value === 'presupuesto' ? t('legendBudget') : t('legendActual')} />
                     <Bar dataKey="presupuesto" fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[4, 4, 0, 0]} />
@@ -300,9 +298,7 @@ export default function PresupuestoPage() {
                     <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                     <Tooltip
                       formatter={(v: any) => [fmtEur(v), 'EBITDA']}
-                      contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12, color: 'hsl(var(--card-foreground))' }}
-                        itemStyle={{ color: 'hsl(var(--card-foreground))' }}
-                        labelStyle={{ color: 'hsl(var(--card-foreground))' }}
+                       
                     />
                     <Bar dataKey="ebitda" radius={[4, 4, 0, 0]}>
                       {Array.from({ length: 12 }, (_, i) => {
