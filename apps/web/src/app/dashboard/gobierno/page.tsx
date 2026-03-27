@@ -104,12 +104,12 @@ export default function GobiernoPage() {
         onRefresh={refresh}
         actions={
           <>
-            <div className="flex bg-muted rounded-lg p-0.5">
+            <div className="pill-tabs">
               {(['fuentes', 'auditoria'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeTab === tab ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                  className={`${activeTab === tab ? 'pill-tab-active' : 'pill-tab'} pill-tab-xs`}
                 >
                   {tab === 'fuentes' ? t('tabSources') : t('tabAudit')}
                 </button>

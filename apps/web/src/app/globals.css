@@ -87,37 +87,64 @@
   ::-webkit-scrollbar-track { @apply bg-background; }
   ::-webkit-scrollbar-thumb { @apply bg-border rounded; }
 
-  .scrollbar-table { scrollbar-width: thin; scrollbar-color: hsl(var(--primary) / 0.4) transparent; }
-  .scrollbar-table::-webkit-scrollbar { height: 6px; }
-  .scrollbar-table::-webkit-scrollbar-track { @apply bg-muted/50 rounded-full mx-2; }
-  .scrollbar-table::-webkit-scrollbar-thumb { @apply bg-primary/40 rounded-full; }
-  .scrollbar-table::-webkit-scrollbar-thumb:hover { @apply bg-primary/60; }
+  .scrollbar-table {
+    overflow-x: auto;
+    scrollbar-width: none;                /* Firefox: hide native */
+    -webkit-overflow-scrolling: touch;
+  }
+  .scrollbar-table::-webkit-scrollbar { display: none; }  /* Chrome: hide native */
 
-  @media (max-width: 768px) {
-    .scrollbar-table::-webkit-scrollbar { height: 4px; }
-    .scrollbar-table { -webkit-overflow-scrolling: touch; }
+  /* Custom always-visible scrollbar */
+  .custom-scrollbar-track {
+    position: relative;
+    height: 10px;
+    margin: 6px 4px 2px;
+    border-radius: 5px;
+    background: hsl(var(--muted));
+    cursor: pointer;
+  }
+  .custom-scrollbar-thumb {
+    position: absolute;
+    top: 1px;
+    height: 8px;
+    border-radius: 4px;
+    background: hsl(var(--primary) / 0.45);
+    cursor: grab;
+    transition: background 0.15s ease;
+  }
+  .custom-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+  }
+  .custom-scrollbar-thumb:active {
+    background: hsl(var(--primary) / 0.85);
+    cursor: grabbing;
   }
 
   /* ── Gradient separators ────────────────────────────────────── */
   .gradient-sep {
     border-image: linear-gradient(to right, transparent, hsl(var(--border)), transparent) 1;
   }
+  .stat-row,
+  table tbody tr {
+    border-image: linear-gradient(to right, transparent, hsl(var(--border)), transparent) 1;
+  }
 
   /* ── Skeleton shimmer ───────────────────────────────────────── */
   .skeleton-shimmer {
     background: linear-gradient(
-      90deg,
+      105deg,
       hsl(var(--muted)) 0%,
-      hsl(var(--muted-foreground) / 0.08) 40%,
-      hsl(var(--muted-foreground) / 0.08) 60%,
+      hsl(var(--muted)) 35%,
+      hsl(var(--muted-foreground) / 0.12) 50%,
+      hsl(var(--muted)) 65%,
       hsl(var(--muted)) 100%
     );
-    background-size: 300% 100%;
-    animation: shimmer 1.8s ease-in-out infinite;
+    background-size: 400% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
   }
   @keyframes shimmer {
     0%   { background-position: 200% 0; }
-    100% { background-position: -100% 0; }
+    100% { background-position: -200% 0; }
   }
 
   /* ── Flip digit entrance ─────────────────────────────────────── */
@@ -271,6 +298,11 @@
   @keyframes refreshFlash {
     0%   { background: hsl(var(--success) / 0.15); }
     100% { background: transparent; }
+  }
+
+  /* ── Tabular numbers — perfect vertical alignment in tables ──── */
+  td, .kpi-value, .stat-value, .mono {
+    font-variant-numeric: tabular-nums;
   }
 
   /* ── Sticky table headers ─────────────────────────────────────── */
@@ -566,14 +598,38 @@
   filter: drop-shadow(0 0 6px hsl(var(--primary) / 0.6));
   transform: scale(1.12);
 }
-/* Active route: persistent glow */
+/* Active route: persistent glow + indicator bar */
 [aria-current="page"] .sidebar-nav-icon {
   filter: drop-shadow(0 0 5px hsl(var(--primary) / 0.5));
 }
+[aria-current="page"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(to bottom, hsl(var(--primary)), hsl(var(--gold)));
+}
 
-/* ── Sidebar badge bounce ─────────────────────────────────────── */
+/* ── Sidebar badge bounce + ping ──────────────────────────────── */
 .sidebar-badge {
+  position: relative;
   animation: badgeBounce 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sidebar-badge::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: hsl(var(--destructive));
+  animation: badgePing 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  z-index: -1;
+}
+@keyframes badgePing {
+  0%   { opacity: 0.5; transform: scale(1); }
+  75%, 100% { opacity: 0; transform: scale(1.8); }
 }
 @keyframes badgeBounce {
   0%   { transform: scale(0.4); opacity: 0; }
@@ -584,9 +640,27 @@
 
 /* ── Card depth, glow & entrance ──────────────────────────────── */
 .card-base {
+  position: relative;
   box-shadow: 0 1px 3px hsl(var(--foreground) / 0.04), 0 4px 12px hsl(var(--foreground) / 0.02);
   transition: box-shadow 0.3s ease, transform 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
-  animation: cardRise 0.5s ease-out both;
+  animation: cardRise 0.5s ease-out backwards;
+}
+/* L-shape accent corner */
+.card-base::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-top: 2px solid hsl(var(--primary) / 0.35);
+  border-left: 2px solid hsl(var(--primary) / 0.35);
+  border-radius: 10px 0 0 0;
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+.card-base:hover::after {
+  border-color: hsl(var(--primary) / 0.7);
 }
 /* Stagger cards in grids */
 .card-base:nth-child(2) { animation-delay: 60ms; }
@@ -599,12 +673,10 @@
   from {
     opacity: 0;
     transform: translateY(12px);
-    box-shadow: none;
   }
   to {
     opacity: 1;
     transform: translateY(0);
-    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.04), 0 4px 12px hsl(var(--foreground) / 0.02);
   }
 }
 
@@ -697,9 +769,27 @@
   box-shadow: 0 2px 8px hsl(var(--primary) / 0.12), 0 8px 28px hsl(var(--primary) / 0.06);
 }
 
+/* ── Scroll reveal — cards fade-in when entering viewport, fade-out when leaving ── */
+.card-base[data-scroll-observed],
+.kpi-card[data-scroll-observed] {
+  opacity: 0;
+  transform: translateY(18px) scale(0.97);
+  transition: opacity 0.5s ease-out, transform 0.5s ease-out, box-shadow 0.5s ease-out;
+}
+.card-base.in-view,
+.kpi-card.in-view {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .card-base { transition: none !important; }
   .card-base:hover { transform: none !important; }
+}
+
+/* ── Table zebra striping ──────────────────────────────────────── */
+table tbody tr:nth-child(even) {
+  background-color: hsl(var(--muted) / 0.2);
 }
 
 /* ── Table row hover effect ─────────────────────────────────────── */
@@ -735,16 +825,49 @@ table tbody tr:hover {
     background: radial-gradient(circle, var(--kpi-glow) 0%, transparent 70%);
   }
   .kpi-card:hover::after { opacity: 0.7; }
-  .kpi-card[data-trend="up"]    { --kpi-glow: hsl(var(--success) / 0.15); }
-  .kpi-card[data-trend="down"]  { --kpi-glow: hsl(var(--destructive) / 0.15); }
-  .kpi-card[data-trend="neutral"] { --kpi-glow: hsl(var(--primary) / 0.08); }
+  .kpi-card[data-trend="up"]    { --kpi-glow: hsl(var(--success) / 0.15); --notch-color: var(--success); }
+  .kpi-card[data-trend="down"]  { --kpi-glow: hsl(var(--destructive) / 0.15); --notch-color: var(--destructive); }
+  .kpi-card[data-trend="neutral"] { --kpi-glow: hsl(var(--primary) / 0.08); --notch-color: var(--border); }
+  /* Notch glow pulse */
+  .kpi-card > div:first-child {
+    box-shadow: 0 2px 8px hsl(var(--notch-color) / 0.4);
+    animation: notchPulse 3s ease-in-out infinite;
+  }
+  @keyframes notchPulse {
+    0%, 100% { box-shadow: 0 2px 8px hsl(var(--notch-color) / 0.3); }
+    50%      { box-shadow: 0 3px 14px hsl(var(--notch-color) / 0.6); }
+  }
   .kpi-label { @apply text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1 md:mb-2; }
   .kpi-value { @apply font-mono text-lg md:text-2xl font-semibold text-foreground leading-none; }
   .stat-row { @apply flex justify-between items-center py-2 md:py-2.5 border-b border-border last:border-b-0; }
   .stat-label { @apply text-xs md:text-sm text-muted-foreground; }
   .stat-value { @apply font-mono text-xs md:text-sm font-semibold text-foreground; }
-  .page-title { @apply font-display text-lg md:text-[22px] font-bold text-foreground; }
+  .page-title { @apply font-display text-lg md:text-[22px] font-bold text-foreground pb-2; }
+  .page-title::after {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 2px;
+    margin-top: 6px;
+    border-radius: 1px;
+    background: linear-gradient(to right, hsl(var(--primary)), hsl(var(--gold)));
+  }
   .page-subtitle { @apply text-xs md:text-sm text-muted-foreground mt-0.5 md:mt-1; }
-  .section-label { @apply text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3; }
+  .section-label { @apply text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5; }
+  .section-label::before { content: ''; @apply w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0; }
   .mono { @apply font-mono text-xs; }
+
+  /* ── Pill tabs ──────────────────────────────────────────────── */
+  .pill-tabs {
+    @apply flex gap-1 p-1 rounded-xl w-fit border border-border/50 bg-muted/50 backdrop-blur-sm;
+  }
+  .pill-tab {
+    @apply px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-muted;
+  }
+  .pill-tab-active {
+    @apply px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 bg-primary text-white shadow-[inset_0_1px_0_hsl(var(--primary-foreground)/0.15),0_1px_3px_hsl(var(--primary)/0.3)];
+  }
+  .pill-tab-xs {
+    @apply px-2.5 py-1 text-xs;
+  }
 }

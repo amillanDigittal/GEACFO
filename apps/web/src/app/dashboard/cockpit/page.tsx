@@ -500,24 +500,32 @@ export default function CockpitPage() {
               </Card>
             </div>
           ),
-          workingCapital: () => (
+          workingCapital: () => {
+            const arVal = data.workingCapital?.ar || 964850
+            const apVal = data.workingCapital?.ap || 146550
+            const invVal = 110450
+            const nofVal = arVal - apVal + invVal
+            const maxVal = Math.max(arVal, apVal, invVal, nofVal)
+            const rows = [
+              { label: t('wcClients'), value: fmtEur(arVal), raw: arVal },
+              { label: t('wcSuppliers'), value: `-${fmtEur(apVal)}`, raw: apVal },
+              { label: t('wcInventory'), value: fmtEur(invVal), raw: invVal },
+              { label: t('wcNofTotal'), value: fmtEur(nofVal), raw: nofVal, highlight: true },
+            ]
+            return (
             <Card>
               <CardHeader><CardTitle>{t('workingCapitalTitle')}</CardTitle></CardHeader>
               <CardContent>
-                {[
-                  { label: t('wcClients'), value: fmtEur(data.workingCapital?.ar || 964850) },
-                  { label: t('wcSuppliers'), value: `-${fmtEur(data.workingCapital?.ap || 146550)}` },
-                  { label: t('wcInventory'), value: fmtEur(110450) },
-                  { label: t('wcNofTotal'), value: fmtEur((data.workingCapital?.ar || 964850) - (data.workingCapital?.ap || 146550) + 110450), highlight: true },
-                ].map(r => (
-                  <div key={r.label} className="stat-row">
-                    <span className="stat-label">{r.label}</span>
-                    <span className={`stat-value ${r.highlight ? 'text-primary' : ''}`}>{r.value}</span>
+                {rows.map(r => (
+                  <div key={r.label} className="stat-row relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-[0.07] rounded" style={{ width: `${(r.raw / maxVal) * 100}%`, background: r.highlight ? 'hsl(var(--primary))' : 'hsl(var(--foreground))' }} />
+                    <span className="stat-label relative z-[1]">{r.label}</span>
+                    <span className={`stat-value relative z-[1] ${r.highlight ? 'text-primary' : ''}`}>{r.value}</span>
                   </div>
                 ))}
               </CardContent>
             </Card>
-          ),
+          )},
           botRecommendations: () => (
             <Card data-glow="primary" className="bg-gradient-to-br from-primary/5 to-transparent">
               <CardHeader>

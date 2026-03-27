@@ -139,17 +139,17 @@ export function Topbar({ session }: { session: any }) {
         </Link>
         {(() => {
           const crumb = BREADCRUMBS[pathname]
-          if (!crumb) return <><ChevronRight size={12} className="flex-shrink-0 opacity-40" /><span key={pathname} className="text-foreground font-medium truncate breadcrumb-enter">Dashboard</span></>
+          if (!crumb) return <><ChevronRight size={12} className="flex-shrink-0 opacity-40 breadcrumb-enter" /><span key={pathname} className="text-foreground font-medium truncate breadcrumb-enter">Dashboard</span></>
           return (
             <>
               {crumb.section && (
                 <>
-                  <ChevronRight size={12} className="flex-shrink-0 opacity-40" />
+                  <ChevronRight size={12} className="flex-shrink-0 opacity-40 breadcrumb-enter" />
                   <span key={`${pathname}-section`} className="hidden sm:inline truncate breadcrumb-enter">{crumb.section}</span>
                 </>
               )}
-              <ChevronRight size={12} className="flex-shrink-0 opacity-40" />
-              <span key={pathname} className="text-foreground font-medium truncate breadcrumb-enter">{crumb.label}</span>
+              <ChevronRight size={12} className="flex-shrink-0 opacity-40 breadcrumb-enter" style={{ animationDelay: '80ms' }} />
+              <span key={pathname} className="text-foreground font-medium truncate breadcrumb-enter" style={{ animationDelay: '120ms' }}>{crumb.label}</span>
             </>
           )
         })()}

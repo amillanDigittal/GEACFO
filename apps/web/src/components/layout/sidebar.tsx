@@ -192,7 +192,7 @@ export function Sidebar() {
             if (collapsed) return <div key={i} className="h-px bg-border mx-2 my-1.5" />
             return (
               <div key={i} className="px-4 pt-3 pb-1">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{t(item.section as any)}</span>
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />{t(item.section as any)}</span>
               </div>
             )
           }

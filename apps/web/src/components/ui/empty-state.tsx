@@ -221,21 +221,26 @@ export function EmptyState({ variant, title, description, action, className, com
   return (
     <div className={cn(
       'flex flex-col items-center justify-center text-center',
-      compact ? 'py-8' : 'py-12',
+      compact ? 'py-8' : 'py-16',
       'text-muted-foreground',
-      'animate-in fade-in duration-300',
+      'animate-in fade-in duration-500',
       className,
     )}>
-      <Illustration className={cn(iconSize, 'mb-4 text-muted-foreground')} />
-      <p className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>{title}</p>
+      <div className={cn(
+        'rounded-full bg-muted/40 flex items-center justify-center mb-5',
+        compact ? 'w-20 h-20' : 'w-28 h-28',
+      )}>
+        <Illustration className={cn(compact ? 'w-12 h-12' : 'w-16 h-16', 'text-muted-foreground')} />
+      </div>
+      <p className={cn('font-semibold', compact ? 'text-xs' : 'text-sm')}>{title}</p>
       {description && (
-        <p className={cn('mt-1 max-w-[280px]', compact ? 'text-[10px]' : 'text-xs', 'text-muted-foreground/70')}>{description}</p>
+        <p className={cn('mt-1.5 max-w-[300px] leading-relaxed', compact ? 'text-[10px]' : 'text-xs', 'text-muted-foreground/60')}>{description}</p>
       )}
       {action && (
         <Button
           size="sm"
           variant={action.variant ?? 'default'}
-          className="mt-4"
+          className="mt-5"
           onClick={action.onClick}
         >
           {action.label}

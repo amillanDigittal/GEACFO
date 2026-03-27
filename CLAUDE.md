@@ -100,6 +100,7 @@ PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `ten
 - State: Zustand store in `src/store/app.ts` (sidebar collapse state, persisted to localStorage)
 - UI: Shadcn/ui components in `src/components/ui/`, Tailwind CSS with custom semantic tokens, dark mode default
 - Charts: Recharts
+- i18n: `next-intl` with locale files in `apps/web/messages/` (`es.json`, `en.json`). Default locale is `es`. Config in `src/i18n/config.ts`.
 - Dashboard layout (`src/app/dashboard/layout.tsx`) is a server component that checks session and redirects to `/auth/login` if unauthenticated
 - Dashboard routes use **Spanish names** (e.g., `deuda`, `cobros`, `pagos`, `conciliacion`, `gobierno`) while API modules use English (`debt`, `treasury`, `customers`, `governance`)
 - Dashboard pages live under `src/app/dashboard/` — 28 routes total. Key route → API mapping: `cobros` → treasury/ar, `pagos` → treasury/ap, `deuda` → debt, `conciliacion` → treasury/reconciliation, `gobierno` → governance, `importar` → import, `proveedores` → suppliers, `notificaciones` → alerts, `usuarios` → users, `configuracion` → settings, `inventario`/`inventario-abc` → inventory, `presupuesto` → budget, `provisiones` → provisions, `proyeccion-diaria`/`vencimientos`/`ratios`/`cashflow` → treasury

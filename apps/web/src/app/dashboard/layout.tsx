@@ -9,8 +9,10 @@ import { ConnectionBanner } from '@/components/connection-banner'
 import { ShortcutsHelp } from '@/components/shortcuts-help'
 import { PageTransition } from '@/components/page-transition'
 import { ScrollProgress } from '@/components/scroll-progress'
+import { ScrollElevation } from '@/components/scroll-elevation'
 import { MobileNav } from '@/components/layout/mobile-nav'
 import { DynamicFavicon } from '@/components/dynamic-favicon'
+import { FooterBar } from '@/components/layout/footer-bar'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
@@ -30,10 +32,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <main id="main-content" className="flex-1 overflow-y-auto">
           <Topbar session={session} />
           <ScrollProgress />
+          <ScrollElevation />
           <div className="p-3 md:p-6 pb-20 md:pb-6">
             <PageTransition>{children}</PageTransition>
           </div>
         </main>
+        <FooterBar />
       </div>
       <div data-print-hide><CommandPalette /></div>
       <div data-print-hide><OnboardingTour /></div>

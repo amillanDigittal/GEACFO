@@ -136,11 +136,11 @@ export default function ForecastPage() {
       </div>
 
       {/* Tab toggle */}
-      <div className="flex gap-1 bg-muted p-1 rounded-lg w-fit">
-        <button onClick={() => setTab('compare')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'compare' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+      <div className="pill-tabs">
+        <button onClick={() => setTab('compare')} className={tab === 'compare' ? 'pill-tab-active' : 'pill-tab'}>
           {t('tabCompare')}
         </button>
-        <button onClick={() => setTab('single')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${tab === 'single' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+        <button onClick={() => setTab('single')} className={tab === 'single' ? 'pill-tab-active' : 'pill-tab'}>
           {t('tabDetail')}
         </button>
       </div>

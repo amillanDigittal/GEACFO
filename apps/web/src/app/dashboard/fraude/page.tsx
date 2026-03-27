@@ -460,12 +460,12 @@ export default function FraudePage() {
         <CardHeader>
           <div className="flex items-center justify-between w-full">
             <CardTitle>{t('detail')}</CardTitle>
-            <div className="flex gap-1.5">
+            <div className="pill-tabs">
               {tabs.map(t2 => (
                 <button
                   key={t2.key}
                   onClick={() => setTab(t2.key)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${tab === t2.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                  className={`${tab === t2.key ? 'pill-tab-active' : 'pill-tab'} pill-tab-xs`}
                 >
                   {t2.label} ({t2.count})
                 </button>

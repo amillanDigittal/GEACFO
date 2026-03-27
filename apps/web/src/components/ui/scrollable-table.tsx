@@ -11,14 +11,29 @@ interface ScrollableTableProps {
 
 export function ScrollableTable({ children, label, maxHeight }: ScrollableTableProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  const [thumbStyle, setThumbStyle] = useState({ width: 0, left: 0 })
+  const [needsScroll, setNeedsScroll] = useState(false)
+  const dragging = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartScroll = useRef(0)
 
   const checkScroll = useCallback(() => {
     const el = ref.current
     if (!el) return
+    const overflow = el.scrollWidth > el.clientWidth
+    setNeedsScroll(overflow)
     setCanScrollLeft(el.scrollLeft > 2)
     setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2)
+    if (overflow) {
+      const ratio = el.clientWidth / el.scrollWidth
+      const thumbW = Math.max(ratio * el.clientWidth, 40)
+      const maxLeft = el.clientWidth - thumbW
+      const scrollRatio = el.scrollLeft / (el.scrollWidth - el.clientWidth)
+      setThumbStyle({ width: thumbW, left: scrollRatio * maxLeft })
+    }
   }, [])
 
   useEffect(() => {
@@ -30,6 +45,39 @@ export function ScrollableTable({ children, label, maxHeight }: ScrollableTableP
     ro.observe(el)
     return () => { el.removeEventListener('scroll', checkScroll); ro.disconnect() }
   }, [checkScroll])
+
+  // Drag-to-scroll on custom thumb
+  const onThumbDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    dragging.current = true
+    dragStartX.current = e.clientX
+    dragStartScroll.current = ref.current?.scrollLeft ?? 0
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current || !ref.current || !trackRef.current) return
+      const trackW = trackRef.current.clientWidth
+      const ratio = ref.current.scrollWidth / trackW
+      const dx = ev.clientX - dragStartX.current
+      ref.current.scrollLeft = dragStartScroll.current + dx * ratio
+    }
+    const onUp = () => {
+      dragging.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  // Click on track to jump
+  const onTrackClick = useCallback((e: React.MouseEvent) => {
+    const el = ref.current
+    const track = trackRef.current
+    if (!el || !track) return
+    const rect = track.getBoundingClientRect()
+    const clickRatio = (e.clientX - rect.left) / rect.width
+    el.scrollLeft = clickRatio * (el.scrollWidth - el.clientWidth)
+  }, [])
 
   return (
     <div className="relative">
@@ -57,9 +105,31 @@ export function ScrollableTable({ children, label, maxHeight }: ScrollableTableP
           </span>
         </div>
       )}
-      <div ref={ref} className="overflow-x-auto scrollbar-table" role="region" aria-label={label} tabIndex={label ? 0 : undefined} style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
+      <div
+        ref={ref}
+        className="scrollbar-table"
+        role="region"
+        aria-label={label}
+        tabIndex={label ? 0 : undefined}
+        style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}
+      >
         {children}
       </div>
+      {/* Custom always-visible scrollbar */}
+      {needsScroll && (
+        <div
+          ref={trackRef}
+          className="custom-scrollbar-track"
+          onClick={onTrackClick}
+        >
+          <div
+            className="custom-scrollbar-thumb"
+            style={{ width: thumbStyle.width, left: thumbStyle.left }}
+            onMouseDown={onThumbDown}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }
