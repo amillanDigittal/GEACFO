@@ -159,11 +159,11 @@ export default function ProyeccionDiariaPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KpiBox label={t('kpiCurrentBalance')} value={fmtEur(currentCash)} tooltip={t('kpiCurrentBalanceTooltip')} source={t('kpiCurrentBalanceSource')} />
-        <KpiBox label={t('kpiExpectedCollections')} value={`+${fmtEur(Math.round(totalCobros30))}`} color="text-success" tooltip={t('kpiExpectedCollectionsTooltip', { horizon })} source={t('kpiExpectedCollectionsSource')} />
-        <KpiBox label={t('kpiPlannedPayments')} value={`\u2212${fmtEur(Math.round(totalPagos30))}`} color="text-destructive" tooltip={t('kpiPlannedPaymentsTooltip', { horizon })} source={t('kpiPlannedPaymentsSource')} />
-        <KpiBox label={t('kpiMinBalance')} value={fmtEur(Math.round(minBalance))} color={minBalance < 0 ? 'text-destructive' : minBalance < currentCash * 0.3 ? 'text-warning' : 'text-success'} tooltip={t('kpiMinBalanceTooltip', { date: minDay ? new Date(minDay.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '—' })} source={t('kpiMinBalanceSource')} />
-        <KpiBox label={t('kpiEndBalance', { horizon })} value={fmtEur(Math.round(endBalance))} color={endBalance >= currentCash ? 'text-success' : 'text-warning'} tooltip={t('kpiEndBalanceTooltip', { horizon })} source={t('kpiEndBalanceSource')} />
+        <KpiBox index={0} label={t('kpiCurrentBalance')} value={fmtEur(currentCash)} tooltip={t('kpiCurrentBalanceTooltip')} source={t('kpiCurrentBalanceSource')} />
+        <KpiBox index={1} label={t('kpiExpectedCollections')} value={`+${fmtEur(Math.round(totalCobros30))}`} color="text-success" tooltip={t('kpiExpectedCollectionsTooltip', { horizon })} source={t('kpiExpectedCollectionsSource')} />
+        <KpiBox index={2} label={t('kpiPlannedPayments')} value={`\u2212${fmtEur(Math.round(totalPagos30))}`} color="text-destructive" tooltip={t('kpiPlannedPaymentsTooltip', { horizon })} source={t('kpiPlannedPaymentsSource')} />
+        <KpiBox index={3} label={t('kpiMinBalance')} value={fmtEur(Math.round(minBalance))} color={minBalance < 0 ? 'text-destructive' : minBalance < currentCash * 0.3 ? 'text-warning' : 'text-success'} tooltip={t('kpiMinBalanceTooltip', { date: minDay ? new Date(minDay.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }) : '—' })} source={t('kpiMinBalanceSource')} />
+        <KpiBox index={4} label={t('kpiEndBalance', { horizon })} value={fmtEur(Math.round(endBalance))} color={endBalance >= currentCash ? 'text-success' : 'text-warning'} tooltip={t('kpiEndBalanceTooltip', { horizon })} source={t('kpiEndBalanceSource')} />
       </div>
 
       {/* Main chart: Area (balance) + Bars (cobros/pagos) */}

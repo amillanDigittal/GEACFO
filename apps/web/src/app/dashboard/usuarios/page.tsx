@@ -12,12 +12,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { FieldError } from '@/components/ui/field-error'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonUsuarios } from '@/components/ui/skeleton-page'
 import { UserPlus, Pencil, Trash2, Shield, Eye, EyeOff, Search } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
 
 const ROLES = ['ADMIN', 'CFO', 'CONTROLLER', 'ANALYST', 'VIEWER'] as const
@@ -153,13 +155,10 @@ export default function UsuariosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {ROLES.map(r => {
+        {ROLES.map((r, i) => {
           const cfg = ROLE_CONFIG[r]
           return (
-            <div key={r} className="bg-card border border-border rounded-xl p-3 text-center">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{cfg.label}</div>
-              <div className="font-mono text-xl font-bold">{roleCounts[r] || 0}</div>
-            </div>
+            <KpiBox key={r} index={i} label={cfg.label} value={roleCounts[r] || 0} />
           )
         })}
       </div>
@@ -179,7 +178,13 @@ export default function UsuariosPage() {
             <Card key={user.id}>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-[hsl(var(--gold))] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 ${
+                    user.role === 'ADMIN' ? 'bg-gradient-to-br from-destructive to-destructive/70' :
+                    user.role === 'CFO' ? 'bg-gradient-to-br from-primary to-[hsl(var(--gold))]' :
+                    user.role === 'CONTROLLER' ? 'bg-gradient-to-br from-warning to-warning/70' :
+                    user.role === 'ANALYST' ? 'bg-gradient-to-br from-success to-success/70' :
+                    'bg-gradient-to-br from-muted-foreground to-muted-foreground/70'
+                  }`}>
                     {initials}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -293,21 +298,16 @@ export default function UsuariosPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('deleteUser')}</DialogTitle>
-            <DialogDescription>
-              {t('deleteUserConfirm', { name: deleteConfirm?.name || '', email: deleteConfirm?.email || '' })}
-              {' '}{t('deleteUserWarning')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>{t('cancel')}</Button>
-            <Button variant="destructive" onClick={handleDelete}>{t('delete')}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        onOpenChange={(open) => { if (!open) setDeleteConfirm(null) }}
+        title={t('deleteUser')}
+        description={`${t('deleteUserConfirm', { name: deleteConfirm?.name || '', email: deleteConfirm?.email || '' })} ${t('deleteUserWarning')}`}
+        confirmLabel={t('delete')}
+        cancelLabel={t('cancel')}
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

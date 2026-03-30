@@ -133,8 +133,8 @@ export function Topbar({ session }: { session: any }) {
   return (
     <header data-print-hide className="h-[60px] bg-card/80 backdrop-blur-xl border-b border-border gradient-sep flex items-center px-4 gap-3 flex-shrink-0 sticky top-0 z-40">
       <button onClick={toggleSidebar} aria-label="Abrir menú lateral" className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><Menu size={18} /></button>
-      <nav aria-label="Migas de pan" className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden">
-        <Link href="/dashboard/cockpit" aria-label="Ir al Cockpit" className="hover:text-foreground transition-colors flex-shrink-0">
+      <nav aria-label="Migas de pan" className="flex items-center gap-1.5 text-sm text-muted-foreground min-w-0 overflow-hidden">
+        <Link href="/dashboard/cockpit" aria-label="Ir al Cockpit" className="hover:text-foreground transition-colors flex-shrink-0 p-1 rounded-md hover:bg-muted">
           <Home size={14} />
         </Link>
         {(() => {
@@ -144,12 +144,12 @@ export function Topbar({ session }: { session: any }) {
             <>
               {crumb.section && (
                 <>
-                  <ChevronRight size={12} className="flex-shrink-0 opacity-40 breadcrumb-enter" />
-                  <span key={`${pathname}-section`} className="hidden sm:inline truncate breadcrumb-enter">{crumb.section}</span>
+                  <ChevronRight size={12} className="flex-shrink-0 opacity-30 breadcrumb-enter" />
+                  <span key={`${pathname}-section`} className="hidden sm:inline truncate breadcrumb-enter text-[11px] px-2 py-0.5 rounded-md bg-primary/10 text-primary font-medium">{crumb.section}</span>
                 </>
               )}
-              <ChevronRight size={12} className="flex-shrink-0 opacity-40 breadcrumb-enter" style={{ animationDelay: '80ms' }} />
-              <span key={pathname} className="text-foreground font-medium truncate breadcrumb-enter" style={{ animationDelay: '120ms' }}>{crumb.label}</span>
+              <ChevronRight size={12} className="flex-shrink-0 opacity-30 breadcrumb-enter" style={{ animationDelay: '80ms' }} />
+              <span key={pathname} className="text-foreground font-semibold truncate breadcrumb-enter" style={{ animationDelay: '120ms' }}>{crumb.label}</span>
             </>
           )
         })()}

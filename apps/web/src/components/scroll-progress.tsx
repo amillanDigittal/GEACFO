@@ -22,10 +22,14 @@ export function ScrollProgress() {
   if (progress <= 0) return null
 
   return (
-    <div className="h-[2px] bg-muted/30 sticky top-0 z-30 print:hidden" data-print-hide>
+    <div className="sticky top-[60px] z-50 h-[3px] bg-muted/20 print:hidden" data-print-hide>
       <div
-        className="h-full bg-primary/60 transition-[width] duration-75 ease-linear"
-        style={{ width: `${progress}%` }}
+        className="h-full transition-[width] duration-75 ease-linear"
+        style={{
+          width: `${progress}%`,
+          background: 'linear-gradient(90deg, hsl(var(--primary)), hsl(var(--gold)))',
+          boxShadow: '0 0 8px hsl(var(--primary) / 0.4), 0 0 2px hsl(var(--primary) / 0.6)',
+        }}
       />
     </div>
   )

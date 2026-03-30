@@ -11,6 +11,7 @@ import { Download, AlertTriangle, Siren } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import { exportXLSX } from '@/lib/export-xlsx'
 
 function rotationColor(days: number) {
@@ -123,11 +124,8 @@ export default function InventarioPage() {
           { label: t('kpiTotalUnits'), value: fmt(totalStock), color: 'text-foreground' },
           { label: t('kpiAvgRotation'), value: t('kpiAvgRotationValue', { days: avgRotation }), color: rotationColor(avgRotation) },
           { label: t('kpiCoverage'), value: t('kpiCoverageValue', { weeks: Math.round(avgRotation / 7) }), color: 'text-foreground' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color} />
         ))}
       </div>
 

@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { useRouter } from 'next/navigation'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import {
   Bell, BellOff, Search, Download, Filter, CheckCircle2, Clock, Eye,
   AlertTriangle, XCircle, ExternalLink, MessageSquare, ChevronDown,
@@ -185,14 +187,8 @@ export default function NotificacionesPage() {
           { label: t('kpiInvestigating'), value: totalInvestigating, icon: <Eye size={16} />, color: totalInvestigating > 0 ? 'text-warning' : 'text-foreground' },
           { label: t('kpiResolved'), value: totalResolved, icon: <CheckCircle2 size={16} />, color: 'text-success' },
           { label: t('kpiCriticalOpen'), value: criticalCount, icon: <AlertTriangle size={16} />, color: criticalCount > 0 ? 'text-destructive' : 'text-success' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="flex items-center justify-center gap-1.5 mb-2">
-              <span className="text-muted-foreground">{m.icon}</span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{m.label}</span>
-            </div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} icon={m.icon} color={m.color} />
         ))}
       </div>
 
@@ -296,24 +292,24 @@ export default function NotificacionesPage() {
             </div>
 
             {/* Type filter */}
-            <select
+            <Select
               value={filterType}
               onChange={e => { setFilterType(e.target.value); setPage(0) }}
-              className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+              className="h-8 text-xs"
             >
               <option value="ALL">{t('filterAllTypes')}</option>
               {types.map(tp => <option key={tp} value={tp}>{TYPE_LABELS[tp] || tp}</option>)}
-            </select>
+            </Select>
 
             {/* Status filter */}
-            <select
+            <Select
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value); setPage(0) }}
-              className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+              className="h-8 text-xs"
             >
               <option value="ALL">{t('filterAllStatuses')}</option>
               {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
+            </Select>
 
             <span className="text-xs text-muted-foreground ml-auto">{t('resultsCount', { count: filtered.length })}</span>
           </div>

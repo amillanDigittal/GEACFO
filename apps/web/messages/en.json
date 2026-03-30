@@ -1437,6 +1437,7 @@
     "title": "Settings",
     "subtitle": "GEACFO platform parameters",
     "unsavedChanges": "There are unsaved changes",
+    "reset": "Reset",
     "sectionCompany": "Company",
     "sectionKpiThresholds": "KPI Thresholds",
     "sectionCovenants": "Covenants",

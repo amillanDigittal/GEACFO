@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { Info } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
+import { AnimatedValue } from '@/components/animated-value'
 
 interface KpiBoxProps {
   label: string
@@ -12,21 +13,38 @@ interface KpiBoxProps {
   tooltip?: string
   source?: string
   highlight?: boolean
+  /** Position index for staggered entrance animation (0-based) */
+  index?: number
 }
 
-export const KpiBox = memo(function KpiBox({ label, value, color, icon, tooltip, source, highlight }: KpiBoxProps) {
+export const KpiBox = memo(function KpiBox({ label, value, color, icon, tooltip, source, highlight, index = 0 }: KpiBoxProps) {
   const box = (
-    <div className={`border rounded-xl p-3 md:p-4 text-center group relative ${highlight ? 'bg-primary/5 border-primary/20' : 'bg-card border-border'}`}>
+    <div
+      className="kpi-card group"
+      data-trend="neutral"
+      style={{ '--stagger': `${index * 60}ms` } as React.CSSProperties}
+    >
+      {/* Top notch — uses highlight color or neutral */}
+      <div className={`absolute top-0 left-3 right-3 h-[3px] rounded-b ${
+        highlight ? 'bg-primary' : 'bg-border'
+      }`} />
+
+      {/* Icon (top-right, faded) */}
+      {icon && <span className="absolute top-4 right-4 opacity-20">{icon}</span>}
+
+      {/* Tooltip hint */}
       {tooltip && (
-        <span className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-40 transition-opacity">
-          <Info size={10} />
+        <span className="absolute top-2 left-2 opacity-0 group-hover:opacity-40 transition-opacity">
+          <Info size={12} />
         </span>
       )}
-      <div className="flex items-center justify-center gap-1.5 mb-1 md:mb-2">
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{label}</span>
+
+      <div className="kpi-label flex items-center gap-1.5">
+        {label}
       </div>
-      <div className={`font-mono text-lg md:text-xl font-bold ${color || 'text-foreground'}`}>{value}</div>
+      <div className={`kpi-value ${color || ''}`}>
+        <AnimatedValue value={String(value)} delay={index * 60 + 150} />
+      </div>
     </div>
   )
 

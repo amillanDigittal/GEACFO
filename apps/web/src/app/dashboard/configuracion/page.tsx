@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonConfiguracion } from '@/components/ui/skeleton-page'
+import { Select } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 
@@ -37,16 +39,7 @@ function Field({ label, desc, children }: { label: string; desc?: string; childr
   )
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative w-10 h-5 rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-muted'}`}
-    >
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
-    </button>
-  )
-}
+// Toggle is now the shared Switch component from ui/switch
 
 export default function ConfiguracionPage() {
   const t = useTranslations('configuracion')
@@ -114,6 +107,17 @@ export default function ConfiguracionPage() {
 
   if (!hydrated || loading || !config) return <SkeletonConfiguracion />
 
+  function resetChanges() {
+    if (savedTenantRef.current) {
+      const t = JSON.parse(savedTenantRef.current)
+      setTName(t.tName); setTNif(t.tNif); setTSector(t.tSector); setTCurrency(t.tCurrency); setTLocale(t.tLocale)
+    }
+    if (savedConfigRef.current) {
+      setConfig(JSON.parse(savedConfigRef.current))
+    }
+    setDirty(false)
+  }
+
   function updateConfig(path: string, value: any) {
     setConfig(prev => {
       if (!prev) return prev
@@ -165,6 +169,24 @@ export default function ConfiguracionPage() {
         onRefresh={loadData}
       />
 
+      {/* Sticky unsaved changes bar */}
+      {dirty && (
+        <div className="sticky top-[60px] z-40 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-warning/30 bg-warning/10 backdrop-blur-md animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+            <span className="font-medium text-warning">{t('unsavedChanges')}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={resetChanges}>
+              <RotateCcw size={12} className="mr-1" />{t('reset')}
+            </Button>
+            <Button size="sm" loading={saving} onClick={activeSection === 'empresa' ? saveTenant : saveConfig}>
+              <Save size={14} className="mr-1" />{t('save')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Section nav */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {SECTIONS.map(s => (
@@ -203,18 +225,18 @@ export default function ConfiguracionPage() {
               <Input value={tSector} onChange={e => setTSector(e.target.value)} className="h-8 text-sm" placeholder={t('sectorPlaceholder')} />
             </Field>
             <Field label={t('currencyLabel')} desc={t('currencyDesc')}>
-              <select value={tCurrency} onChange={e => setTCurrency(e.target.value)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-sm">
+              <Select value={tCurrency} onChange={e => setTCurrency(e.target.value)} className="w-full h-8 text-sm">
                 <option value="EUR">{t('currencyEur')}</option>
                 <option value="USD">{t('currencyUsd')}</option>
                 <option value="GBP">{t('currencyGbp')}</option>
-              </select>
+              </Select>
             </Field>
             <Field label={t('languageLabel')} desc={t('languageDesc')}>
-              <select value={tLocale} onChange={e => setTLocale(e.target.value)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-sm">
+              <Select value={tLocale} onChange={e => setTLocale(e.target.value)} className="w-full h-8 text-sm">
                 <option value="es-ES">{t('langSpanish')}</option>
                 <option value="en-US">{t('langEnglish')}</option>
                 <option value="pt-BR">{t('langPortuguese')}</option>
-              </select>
+              </Select>
             </Field>
             <Field label={t('slugLabel')} desc={t('slugDesc')}>
               <div className="h-8 flex items-center px-2 rounded-md bg-muted text-sm text-muted-foreground font-mono">{tenant?.slug}</div>
@@ -328,20 +350,20 @@ export default function ConfiguracionPage() {
               </div>
             </Field>
             <Field label={t('defaultScenarioLabel')} desc={t('defaultScenarioDesc')}>
-              <select value={config.forecast.scenarioDefault} onChange={e => updateConfig('forecast.scenarioDefault', e.target.value)} className="w-full h-8 rounded-md border border-border bg-background px-2 text-sm">
+              <Select value={config.forecast.scenarioDefault} onChange={e => updateConfig('forecast.scenarioDefault', e.target.value)} className="w-full h-8 text-sm">
                 <option value="BASE">{t('scenarioBase')}</option>
                 <option value="CONSERVADOR">{t('scenarioConservative')}</option>
                 <option value="AGRESIVO">{t('scenarioAggressive')}</option>
-              </select>
+              </Select>
             </Field>
             <Field label={t('gapAlertsLabel')} desc={t('gapAlertsDesc')}>
-              <Toggle checked={config.forecast.gapAlertEnabled} onChange={v => updateConfig('forecast.gapAlertEnabled', v)} />
+              <Switch checked={config.forecast.gapAlertEnabled} onChange={v => updateConfig('forecast.gapAlertEnabled', v)} />
             </Field>
             <Field label={t('customerAlertScoreLabel')} desc={t('customerAlertScoreDesc')}>
               <Input type="number" min={0} max={100} value={config.scoring.alertScoreThreshold} onChange={e => updateConfig('scoring.alertScoreThreshold', parseInt(e.target.value) || 50)} className="h-8 text-sm font-mono" />
             </Field>
             <Field label={t('autoSuspendLabel')} desc={t('autoSuspendDesc')}>
-              <Toggle checked={config.scoring.riskAutoSuspend} onChange={v => updateConfig('scoring.riskAutoSuspend', v)} />
+              <Switch checked={config.scoring.riskAutoSuspend} onChange={v => updateConfig('scoring.riskAutoSuspend', v)} />
             </Field>
           </CardContent>
         </Card>
@@ -363,7 +385,7 @@ export default function ConfiguracionPage() {
           </CardHeader>
           <CardContent>
             <Field label={t('emailNotificationsLabel')} desc={t('emailNotificationsDesc')}>
-              <Toggle checked={config.notifications.emailEnabled} onChange={v => updateConfig('notifications.emailEnabled', v)} />
+              <Switch checked={config.notifications.emailEnabled} onChange={v => updateConfig('notifications.emailEnabled', v)} />
             </Field>
             <Field label={t('overdueAlertDaysLabel')} desc={t('overdueAlertDaysDesc')}>
               <div className="flex items-center gap-2">

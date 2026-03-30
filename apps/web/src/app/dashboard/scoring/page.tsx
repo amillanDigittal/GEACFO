@@ -9,9 +9,11 @@ import { fmtEur, scoreColor, riskLabel, riskVariant } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { KpiBox } from '@/components/kpi-box'
 import { RefreshCw, Siren, ChevronDown, ChevronUp, FileDown } from 'lucide-react'
 import { exportScoringPDF } from '@/lib/export-pdf-modules'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { MiniSparkline } from '@/components/ui/mini-sparkline'
 import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -65,17 +67,10 @@ export default function ScoringPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: t('kpiTotalExposure'), value: fmtEur(964850) },
-          { label: t('kpiAverageScore'), value: '75.0', color: 'text-success' },
-          { label: t('kpiHighRisk'), value: '1', color: 'text-destructive' },
-          { label: t('kpiAverageDso'), value: t('kpiAverageDsoValue') },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
-          </div>
-        ))}
+        <KpiBox index={0} label={t('kpiTotalExposure')} value={fmtEur(964850)} />
+        <KpiBox index={1} label={t('kpiAverageScore')} value="75.0" color="text-success" />
+        <KpiBox index={2} label={t('kpiHighRisk')} value="1" color="text-destructive" />
+        <KpiBox index={3} label={t('kpiAverageDso')} value={t('kpiAverageDsoValue')} />
       </div>
 
       <Card>
@@ -100,6 +95,12 @@ export default function ScoringPage() {
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden w-16"><div className="h-full rounded-full transition-all" style={{ width: `${c.creditScore}%`, background: scoreColorVal }} /></div>
                       <span className="font-mono text-xs font-bold" style={{ color: scoreColorVal }}>{c.creditScore}</span>
+                      <MiniSparkline
+                        data={c.scoreHistory?.map((h: any) => h.score) || [c.creditScore, c.creditScore]}
+                        color={scoreColorVal}
+                        width={40}
+                        height={14}
+                      />
                     </div>
                   </td>
                   <td className="p-3"><Badge variant={riskVariant(c.riskLevel)}>{riskLabel(c.riskLevel)}</Badge></td>

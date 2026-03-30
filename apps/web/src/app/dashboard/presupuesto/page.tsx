@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Save, PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { SkeletonPresupuesto } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useTranslations } from 'next-intl'
@@ -174,11 +175,8 @@ export default function PresupuestoPage() {
               { label: t('kpiTotalCosts'), value: fmtEur(totalCosts), color: 'text-destructive' },
               { label: t('kpiBudgetedEbitda'), value: fmtEur(totalEBITDA), color: totalEBITDA > 0 ? 'text-success' : 'text-destructive' },
               { label: t('kpiEbitdaMargin'), value: fmtPct(ebitdaMargin), color: ebitdaMargin > 20 ? 'text-success' : 'text-warning' },
-            ].map(m => (
-              <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-                <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
-              </div>
+            ].map((m, i) => (
+              <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color || 'text-foreground'} />
             ))}
           </div>
 
@@ -218,7 +216,7 @@ export default function PresupuestoPage() {
                               type="number"
                               value={grid[cat]?.[m] || ''}
                               onChange={e => updateCell(cat, m, e.target.value)}
-                              className="w-full bg-transparent border border-border/50 rounded px-2 py-1.5 text-xs font-mono text-center focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 hover:border-border"
+                              className="w-full bg-transparent border border-border/50 rounded px-2 py-1.5 text-xs font-mono text-center hover:border-border"
                               placeholder="0"
                             />
                           </td>

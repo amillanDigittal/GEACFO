@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Save } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { SkeletonProvisiones } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
 import { useTranslations } from 'next-intl'
@@ -129,11 +130,8 @@ export default function ProvisionesPage() {
           { label: t('provisionNiif9'), value: fmtEur(data.totalProvision), color: 'text-warning' },
           { label: t('eclCoverage'), value: fmtPct(data.coverageRate), color: 'text-primary' },
           { label: t('customersAtRisk'), value: String(data.customersAtRisk), color: data.customersAtRisk > 0 ? 'text-destructive' : 'text-success' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color || 'text-foreground'} />
         ))}
       </div>
 

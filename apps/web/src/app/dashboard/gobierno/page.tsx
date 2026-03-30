@@ -10,6 +10,7 @@ import { CheckCircle2, RefreshCw, AlertTriangle, XCircle, Ban, Building2, Landma
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
 
 function timeAgo(dateStr: string) {
@@ -140,11 +141,8 @@ export default function GobiernoPage() {
           { label: t('kpiGlobalStatus'), value: warningCount === 0 ? 'OK' : t('kpiAlertCount', { count: warningCount }), color: warningCount === 0 ? 'text-success' : 'text-warning' },
           { label: t('kpiTotalRecords'), value: fmt(totalRecords), color: 'text-foreground' },
           { label: t('kpiSynced'), value: `${syncedCount}/${sources.length}`, color: syncedCount === sources.length ? 'text-success' : 'text-warning' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color} />
         ))}
       </div>
 
@@ -340,11 +338,8 @@ export default function GobiernoPage() {
                 { label: t('auditToday'), value: String(todayCount), color: todayCount > 0 ? 'text-primary' : '' },
                 { label: t('auditMostFrequentAction'), value: Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—' },
                 { label: t('auditActiveUsers'), value: String(new Set(filtered.map((l: any) => l.userId).filter(Boolean)).size) },
-              ].map(m => (
-                <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-                  <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
-                </div>
+              ].map((m, i) => (
+                <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color || 'text-foreground'} />
               ))}
             </div>
 

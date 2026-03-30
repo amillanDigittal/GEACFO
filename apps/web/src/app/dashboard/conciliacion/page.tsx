@@ -18,6 +18,7 @@ import { VirtualTableBody } from '@/components/ui/virtual-table'
 import { exportXLSX } from '@/lib/export-xlsx'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonConciliacion } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 
 const bankColors: Record<string, string> = {
   BBVA: 'hsl(var(--bank-bbva))',
@@ -142,11 +143,8 @@ export default function ConciliacionPage() {
           { label: t('kpiActiveAccounts'), value: `${accounts.length}`, color: 'text-foreground' },
           { label: t('kpiMovements'), value: totalMovements > 0 ? `${totalMovements}` : t('noData'), color: totalMovements > 0 ? 'text-foreground' : 'text-muted-foreground' },
           { label: t('kpiReconciliations'), value: reconciliations.length > 0 ? `${reconciledCount}/${reconciliations.length}` : t('noData'), color: reconciliations.length > 0 ? 'text-success' : 'text-muted-foreground' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color} />
         ))}
       </div>
 
@@ -358,8 +356,8 @@ export default function ConciliacionPage() {
             <CardTitle>{t('recentMovements')}</CardTitle>
             <div className="flex items-center gap-2">
               {selected.size > 0 && (
-                <Button size="sm" onClick={() => handleReconcile([...selected])} disabled={reconciling}>
-                  <CheckCircle2 size={14} className="mr-1" />
+                <Button size="sm" onClick={() => handleReconcile([...selected])} loading={reconciling}>
+                  {!reconciling && <CheckCircle2 size={14} className="mr-1" />}
                   {reconciling ? t('processing') : t('reconcileSelected', { count: selected.size })}
                 </Button>
               )}

@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
+import { Select } from '@/components/ui/select'
 import { Download, ClipboardList, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 const PAGE_SIZE = 25
@@ -35,14 +37,14 @@ function FilterSelect({ label, value, onChange, options }: {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{label}</label>
-      <select
+      <Select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 px-2 rounded-md border border-border bg-card text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        className="h-8 text-xs"
       >
         <option value="">{label}</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      </Select>
     </div>
   )
 }
@@ -315,11 +317,8 @@ export default function AuditoriaPage() {
           { label: t('kpiToday'), value: String(todayCount), color: todayCount > 0 ? 'text-primary' : '' },
           { label: t('kpiFrequentAction'), value: topAction ? (ACTION_LABELS[topAction[0]]?.label || topAction[0]) : '—', color: '' },
           { label: t('kpiActiveUsers'), value: String(activeUsers), color: '' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color || 'text-foreground'} />
         ))}
       </div>
 
@@ -346,7 +345,7 @@ export default function AuditoriaPage() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="h-8 px-2 rounded-md border border-border bg-card text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-8 px-2 rounded-lg border border-border bg-muted/50 backdrop-blur-sm text-xs text-foreground hover:border-primary/40 transition-all duration-200"
               />
             </div>
             <div className="flex flex-col gap-1">
@@ -355,7 +354,7 @@ export default function AuditoriaPage() {
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="h-8 px-2 rounded-md border border-border bg-card text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-8 px-2 rounded-lg border border-border bg-muted/50 backdrop-blur-sm text-xs text-foreground hover:border-primary/40 transition-all duration-200"
               />
             </div>
             {hasFilters && (

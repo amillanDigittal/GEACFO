@@ -14,6 +14,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, FileText, AlertTriangle, AlertCircle, CircleDot, ExternalLink, ArrowRight, Bot, Sparkles, GripVertical, Presentation, X as XIcon, ArrowUp, ArrowDown } from 'lucide-react'
 import { SkeletonCockpit } from '@/components/ui/skeleton-page'
 import { LazyChart } from '@/components/ui/lazy-chart'
+import { ChartEmpty } from '@/components/ui/chart-empty'
 import { useChartColors } from '@/hooks/use-chart-colors'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useAppStore } from '@/store/app'
@@ -434,7 +435,7 @@ export default function CockpitPage() {
           cashCovenants: () => (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2">
-                <Card>
+                <Card data-accent="primary">
                   <CardHeader>
                     <div className="flex items-center justify-between w-full">
                       <CardTitle>{t('cashEvolutionTitle')}</CardTitle>
@@ -463,12 +464,12 @@ export default function CockpitPage() {
                         </ResponsiveContainer>
                       </LazyChart>
                     ) : (
-                      <div className="text-center py-10 text-sm text-muted-foreground">{t('cashEvolutionNoData')}</div>
+                      <ChartEmpty message={t('cashEvolutionNoData')} height={220} />
                     )}
                   </CardContent>
                 </Card>
               </div>
-              <Card data-glow="success">
+              <Card data-glow="success" data-accent="success">
                 <CardHeader><CardTitle>{t('covenantsTitle')}</CardTitle><Badge variant="success">{t('covenantsOk')}</Badge></CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">

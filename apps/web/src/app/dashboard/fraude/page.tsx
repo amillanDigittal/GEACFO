@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Download, Siren, CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonFraude } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import dynamic from 'next/dynamic'
 import { FraudAlert, Anomaly, TabKey, severityConfig, alertTypeLabels, daysDiff } from './_components/types'
 
@@ -302,11 +303,8 @@ export default function FraudePage() {
           { label: t('kpiExposureAtRisk'), value: fmtEur(totalExposure), color: totalExposure > 0 ? 'text-warning' : 'text-foreground' },
           { label: t('kpiRiskCustomers'), value: `${riskCustomers.length}/${customers.length}`, color: riskCustomers.length > 0 ? 'text-destructive' : 'text-success' },
           { label: t('kpiComplianceScore'), value: `${complianceScore}%`, color: complianceScore >= 80 ? 'text-success' : complianceScore >= 60 ? 'text-warning' : 'text-destructive' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color} />
         ))}
       </div>
 

@@ -12,6 +12,7 @@ import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
 import { useTranslations } from 'next-intl'
 
@@ -137,11 +138,8 @@ export default function ProveedoresPage() {
           { label: t('totalVolume'), value: fmtEur(totalVolume) },
           { label: t('averageScore'), value: avgScore > 0 ? String(avgScore) : '—', color: avgScore >= 75 ? 'text-success' : avgScore >= 50 ? 'text-warning' : 'text-destructive' },
           { label: t('atRisk'), value: String(atRisk), color: atRisk > 0 ? 'text-destructive' : 'text-success' },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.color || 'text-foreground'}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color || 'text-foreground'} />
         ))}
       </div>
 
@@ -168,7 +166,7 @@ export default function ProveedoresPage() {
                     value={(form as any)[f.key]}
                     onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
-                    className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm"
                   />
                 </div>
               ))}

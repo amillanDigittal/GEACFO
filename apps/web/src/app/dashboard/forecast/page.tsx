@@ -7,6 +7,8 @@ import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useChartColors } from '@/hooks/use-chart-colors'
 import { exportXLSX } from '@/lib/export-xlsx'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
+import { PillTabs } from '@/components/ui/pill-tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { KpiCard } from '@/components/kpi-card'
@@ -136,14 +138,14 @@ export default function ForecastPage() {
       </div>
 
       {/* Tab toggle */}
-      <div className="pill-tabs">
-        <button onClick={() => setTab('compare')} className={tab === 'compare' ? 'pill-tab-active' : 'pill-tab'}>
-          {t('tabCompare')}
-        </button>
-        <button onClick={() => setTab('single')} className={tab === 'single' ? 'pill-tab-active' : 'pill-tab'}>
-          {t('tabDetail')}
-        </button>
-      </div>
+      <PillTabs
+        tabs={[
+          { key: 'compare', label: t('tabCompare') },
+          { key: 'single', label: t('tabDetail') },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
 
       {tab === 'compare' ? (
         <>
@@ -292,11 +294,11 @@ export default function ForecastPage() {
           {/* Single scenario view */}
           <div className="flex gap-2 items-center">
             <span className="text-sm text-muted-foreground">{t('scenarioLabel')}:</span>
-            <select value={scenario} onChange={e => setScenario(e.target.value)} className="text-sm bg-card border border-border rounded-md px-3 py-1.5 text-foreground">
+            <Select value={scenario} onChange={e => setScenario(e.target.value)} className="text-sm">
               <option value="BASE">{t('scenarioBase')}</option>
               <option value="CONSERVADOR">{t('scenarioConservativeOption')}</option>
               <option value="AGRESIVO">{t('scenarioAggressiveOption')}</option>
-            </select>
+            </Select>
           </div>
 
           <Card>

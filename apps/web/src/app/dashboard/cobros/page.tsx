@@ -7,8 +7,10 @@ import { useHydrated } from '@/hooks/use-hydrated'
 import { useChartColors } from '@/hooks/use-chart-colors'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { RowPreview } from '@/components/ui/row-preview'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { Download, Siren, ChevronDown, FileDown, TrendingUp, TrendingDown } from 'lucide-react'
 import { exportCobrosPDF } from '@/lib/export-pdf-modules'
 import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
@@ -48,6 +50,7 @@ export default function CobrosPage() {
 
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [filter, setFilter] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<'dueDate' | 'totalAmount'>('dueDate')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -63,12 +66,16 @@ export default function CobrosPage() {
   const [dateTo, setDateTo] = useState<string | undefined>()
   const cc = useChartColors()
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
+    setError(false)
     api.treasury.ar()
       .then(setInvoices)
-      .catch(console.error)
+      .catch(() => setError(true))
       .finally(() => { setLoading(false); setLastUpdated(new Date()) })
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, [])
 
   async function refresh() {
     try {
@@ -111,6 +118,7 @@ export default function CobrosPage() {
   const hydrated = useHydrated()
 
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
+  if (error) return <ErrorState onRetry={loadData} />
 
   const filtered = invoices
     .filter((i: any) => {
@@ -234,10 +242,10 @@ export default function CobrosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox label={t('kpiTotalPending')} value={fmtEur(totalPending)} tooltip={t('kpiTotalPendingTooltip')} source={t('kpiTotalPendingSource')} />
-        <KpiBox label={t('kpiOverdue')} value={fmtEur(totalOverdue)} color={totalOverdue > 0 ? 'text-destructive' : 'text-success'} tooltip={t('kpiOverdueTooltip')} source={t('kpiOverdueSource')} />
-        <KpiBox label={t('kpiPendingInvoices')} value={`${pendingCount + overdueCount}`} tooltip={t('kpiPendingInvoicesTooltip')} source={t('kpiPendingInvoicesSource')} />
-        <KpiBox label={t('kpiAvgDso')} value={`${Math.round(invoices.reduce((s, i) => s + (i.customer?.dso || 0), 0) / (invoices.length || 1))}d`} tooltip={t('kpiAvgDsoTooltip')} source={t('kpiAvgDsoSource')} />
+        <KpiBox index={0} label={t('kpiTotalPending')} value={fmtEur(totalPending)} tooltip={t('kpiTotalPendingTooltip')} source={t('kpiTotalPendingSource')} />
+        <KpiBox index={1} label={t('kpiOverdue')} value={fmtEur(totalOverdue)} color={totalOverdue > 0 ? 'text-destructive' : 'text-success'} tooltip={t('kpiOverdueTooltip')} source={t('kpiOverdueSource')} />
+        <KpiBox index={2} label={t('kpiPendingInvoices')} value={`${pendingCount + overdueCount}`} tooltip={t('kpiPendingInvoicesTooltip')} source={t('kpiPendingInvoicesSource')} />
+        <KpiBox index={3} label={t('kpiAvgDso')} value={`${Math.round(invoices.reduce((s, i) => s + (i.customer?.dso || 0), 0) / (invoices.length || 1))}d`} tooltip={t('kpiAvgDsoTooltip')} source={t('kpiAvgDsoSource')} />
       </div>
 
       {/* Aging Report interactivo */}
@@ -431,7 +439,17 @@ export default function CobrosPage() {
                         const pending = Number(inv.totalAmount) - Number(inv.paidAmount)
                         const cfg = statusConfig[inv.status] || statusConfig.PENDING
                         return (
-                          <tr key={inv.id} className="border-b border-border hover:bg-muted/50">
+                          <RowPreview
+                            key={inv.id}
+                            fields={[
+                              { label: t('thClient'), value: inv.customer.name },
+                              { label: 'Score', value: inv.customer.creditScore },
+                              { label: t('thTotal'), value: fmtEur(inv.totalAmount) },
+                              { label: t('thPending'), value: fmtEur(pending) },
+                              { label: t('thStatus'), value: <Badge variant={cfg.variant}>{cfg.label}</Badge> },
+                            ]}
+                          >
+                          <tr className="border-b border-border hover:bg-muted/50 cursor-default">
                             <td className="p-3 font-mono text-xs font-semibold">{inv.number}</td>
                             <td className="p-3">
                               <div className="text-sm font-medium">{inv.customer.name}</div>
@@ -446,6 +464,7 @@ export default function CobrosPage() {
                             <td className={`p-3 font-mono text-xs font-semibold ${pending > 0 ? 'text-warning' : 'text-success'}`}>{fmtEur(pending)}</td>
                             <td className="p-3"><Badge variant={cfg.variant}>{cfg.label}</Badge></td>
                           </tr>
+                          </RowPreview>
                         )
                       })}
                     </tbody>
@@ -523,7 +542,14 @@ export default function CobrosPage() {
                   <span className={`text-xs font-mono ${inv.status === 'OVERDUE' ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{fmtDate(inv.dueDate)}</span>
                 </td>
                 <td className="p-3 font-mono text-xs text-muted-foreground">{fmtEur(Number(inv.amount))}</td>
-                <td className={`p-3 font-mono text-xs font-semibold ${Number(inv.totalAmount) - Number(inv.paidAmount) > 0 ? 'text-warning' : 'text-success'}`}>{fmtEur(Number(inv.totalAmount))}</td>
+                <td className="p-3">
+                  <span className={`font-mono text-xs font-semibold ${Number(inv.totalAmount) - Number(inv.paidAmount) > 0 ? 'text-warning' : 'text-success'}`}>{fmtEur(Number(inv.totalAmount))}</span>
+                  {Number(inv.paidAmount) > 0 && Number(inv.paidAmount) < Number(inv.totalAmount) && (
+                    <span className="ml-1.5 inline-flex items-center text-[9px] font-bold text-success bg-success/10 px-1 py-0.5 rounded">
+                      {Math.round((Number(inv.paidAmount) / Number(inv.totalAmount)) * 100)}%
+                    </span>
+                  )}
+                </td>
                 <td className="p-3 font-mono text-xs">
                   {Number(inv.paidAmount) > 0 ? <span className="text-success">{fmtEur(Number(inv.paidAmount))}</span> : <span className="text-muted-foreground">—</span>}
                 </td>

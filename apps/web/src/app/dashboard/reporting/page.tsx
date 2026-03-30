@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import { exportBoardPackPDF } from '@/lib/export-pdf'
 import { Plus, Send, Pencil, Trash2, Clock, CheckCircle2, Pause, Play, FileDown, Calendar, Mail } from 'lucide-react'
 
@@ -190,14 +191,8 @@ export default function ReportingPage() {
           { label: t('kpiActive'), value: activeCount, icon: <Play size={14} />, color: 'text-success' },
           { label: t('kpiRecipients'), value: totalRecipients, icon: <Mail size={14} /> },
           { label: t('kpiLastSent'), value: schedules.filter(s => s.lastSentAt).length > 0 ? fmtRelative(schedules.filter(s => s.lastSentAt).sort((a, b) => new Date(b.lastSentAt!).getTime() - new Date(a.lastSentAt!).getTime())[0].lastSentAt) : t('never'), icon: <Send size={14} /> },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="flex items-center justify-center gap-1.5 mb-2">
-              <span className="text-muted-foreground">{m.icon}</span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{m.label}</span>
-            </div>
-            <div className={`font-mono text-xl font-bold ${m.color || ''}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} icon={m.icon} color={m.color || ''} />
         ))}
       </div>
 

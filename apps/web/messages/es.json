@@ -1437,6 +1437,7 @@
     "title": "Configuración",
     "subtitle": "Parámetros de la plataforma GEACFO",
     "unsavedChanges": "Hay cambios sin guardar",
+    "reset": "Resetear",
     "sectionCompany": "Empresa",
     "sectionKpiThresholds": "Umbrales KPI",
     "sectionCovenants": "Covenants",

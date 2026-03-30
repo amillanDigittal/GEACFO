@@ -191,7 +191,7 @@ export default function ImportarPage() {
                   value={accountAlias}
                   onChange={e => setAccountAlias(e.target.value)}
                   placeholder={t('accountPlaceholder')}
-                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm"
                 />
                 <div className="text-[10px] text-muted-foreground mt-1">{t('accountHelp')}</div>
               </CardContent>

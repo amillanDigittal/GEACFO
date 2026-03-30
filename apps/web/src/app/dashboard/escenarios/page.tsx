@@ -6,11 +6,13 @@ import { fmt, fmtEur, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PillTabs } from '@/components/ui/pill-tabs'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts'
 import { Download, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Siren } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonEscenarios } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
 
 export default function EscenariosPage() {
@@ -91,17 +93,15 @@ export default function EscenariosPage() {
         onRefresh={refresh}
         actions={
           <>
-            <div className="pill-tabs">
-              {(['comparativa', 'simulador'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`${activeTab === tab ? 'pill-tab-active' : 'pill-tab'} pill-tab-xs`}
-                >
-                  {tab === 'comparativa' ? t('tabComparison') : t('tabSimulator')}
-                </button>
-              ))}
-            </div>
+            <PillTabs
+              tabs={[
+                { key: 'comparativa', label: t('tabComparison') },
+                { key: 'simulador', label: t('tabSimulator') },
+              ]}
+              active={activeTab}
+              onChange={(k) => setActiveTab(k as any)}
+              size="xs"
+            />
             <Button variant="outline" size="sm" onClick={() => exportCSV('escenarios_comparativa', [t('colWeek'), ...scenarios.map((s: any) => `${t('colCollections')}_${s.scenario}`), ...scenarios.map((s: any) => `${t('colPayments')}_${s.scenario}`), ...scenarios.map((s: any) => `${t('colBalance')}_${s.scenario}`)], chartData.map((row: any) => [row.week, ...scenarios.map((s: any) => row[`cobros_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`pagos_${s.scenario}`] ?? ''), ...scenarios.map((s: any) => row[`saldo_${s.scenario}`] ?? '')]))}><Download size={14} className="mr-1" />{t('export')}</Button>
           </>
         }
@@ -356,30 +356,10 @@ export default function EscenariosPage() {
           {/* Resultados simulación */}
           {simResult && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('projectedCash')}</div>
-                <div className={`font-mono text-xl font-bold ${simResult.projectedCash >= 0 ? 'text-foreground' : 'text-destructive'}`}>
-                  {fmtEur(Math.round(simResult.projectedCash))}
-                </div>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('dsoImpact')}</div>
-                <div className={`font-mono text-xl font-bold ${simResult.dsoImpact >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {simResult.dsoImpact >= 0 ? '+' : ''}{fmtEur(Math.round(simResult.dsoImpact))}
-                </div>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('revenueImpact')}</div>
-                <div className={`font-mono text-xl font-bold ${simResult.revenueImpact >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {simResult.revenueImpact >= 0 ? '+' : ''}{fmtEur(Math.round(simResult.revenueImpact))}
-                </div>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-4 text-center">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('covenantRisk')}</div>
-                <div className={`font-mono text-xl font-bold ${simResult.covenantRisk ? 'text-destructive' : 'text-success'}`}>
-                  {simResult.covenantRisk ? t('atRisk') : t('ok')}
-                </div>
-              </div>
+              <KpiBox index={0} label={t('projectedCash')} value={fmtEur(Math.round(simResult.projectedCash))} color={simResult.projectedCash >= 0 ? 'text-foreground' : 'text-destructive'} />
+              <KpiBox index={1} label={t('dsoImpact')} value={`${simResult.dsoImpact >= 0 ? '+' : ''}${fmtEur(Math.round(simResult.dsoImpact))}`} color={simResult.dsoImpact >= 0 ? 'text-success' : 'text-destructive'} />
+              <KpiBox index={2} label={t('revenueImpact')} value={`${simResult.revenueImpact >= 0 ? '+' : ''}${fmtEur(Math.round(simResult.revenueImpact))}`} color={simResult.revenueImpact >= 0 ? 'text-success' : 'text-destructive'} />
+              <KpiBox index={3} label={t('covenantRisk')} value={simResult.covenantRisk ? t('atRisk') : t('ok')} color={simResult.covenantRisk ? 'text-destructive' : 'text-success'} />
             </div>
           )}
 

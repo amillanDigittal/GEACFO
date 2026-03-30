@@ -11,6 +11,7 @@ import { Download, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonVariance } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
+import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
 
 function varianceAbs(actual: number, ref: number) { return actual - ref }
@@ -140,11 +141,8 @@ export default function VariancePage() {
             value: `${totalFavorable}/${categories.length}`,
             good: totalFavorable >= categories.length / 2,
           },
-        ].map(m => (
-          <div key={m.label} className="bg-card border border-border rounded-xl p-4 text-center">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{m.label}</div>
-            <div className={`font-mono text-xl font-bold ${m.good ? 'text-success' : 'text-destructive'}`}>{m.value}</div>
-          </div>
+        ].map((m, i) => (
+          <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.good ? 'text-success' : 'text-destructive'} />
         ))}
       </div>
 

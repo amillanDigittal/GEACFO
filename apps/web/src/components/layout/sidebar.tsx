@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app'
 import { useHydrated } from '@/hooks/use-hydrated'
@@ -38,6 +38,7 @@ import {
   Star,
   Pin,
   ClipboardList,
+  ChevronDown,
 } from 'lucide-react'
 
 const badgeKeyMap: Record<string, string> = {
@@ -101,10 +102,32 @@ export function Sidebar() {
   const t = useTranslations('nav')
 
   // Use stable defaults during SSR and first client render to avoid hydration mismatch.
-  // useHydrated() returns false on the server AND on the first client render (useEffect-based),
-  // unlike Zustand's _hydrated which is already true on first client render (synchronous rehydration).
   const collapsed = hydrated ? sidebarCollapsed : false
   const favs = hydrated ? favorites : []
+
+  // Collapsible sections state
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(section)) next.delete(section)
+      else next.add(section)
+      return next
+    })
+  }
+
+  // Compute badge count per section
+  const sectionBadgeTotals: Record<string, number> = {}
+  let currentSection = ''
+  for (const item of nav) {
+    if ('section' in item && item.section) { currentSection = item.section; continue }
+    if ('href' in item && item.href) {
+      const bk = badgeKeyMap[item.href]
+      if (bk && badges[bk]) {
+        sectionBadgeTotals[currentSection] = (sectionBadgeTotals[currentSection] || 0) + badges[bk]
+      }
+    }
+  }
 
   // Close sidebar on mobile when navigating
   useEffect(() => {
@@ -187,50 +210,70 @@ export function Sidebar() {
           </>
         )}
 
-        {nav.map((item, i) => {
-          if ('section' in item && item.section) {
-            if (collapsed) return <div key={i} className="h-px bg-border mx-2 my-1.5" />
+        {(() => {
+          let curSection = ''
+          return nav.map((item, i) => {
+            if ('section' in item && item.section) {
+              curSection = item.section
+              if (collapsed) return <div key={i} className="h-px bg-border mx-2 my-1.5" />
+              const isOpen = !collapsedSections.has(item.section)
+              const sectionTotal = sectionBadgeTotals[item.section]
+              return (
+                <button
+                  key={i}
+                  onClick={() => toggleSection(item.section!)}
+                  className="w-full px-4 pt-3 pb-1 flex items-center gap-1.5 group/section hover:bg-muted/30 transition-colors"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{t(item.section as any)}</span>
+                  {sectionTotal > 0 && (
+                    <span className="ml-1 bg-destructive/15 text-destructive text-[9px] font-bold px-1.5 py-0.5 rounded-full">{sectionTotal}</span>
+                  )}
+                  <ChevronDown size={10} className={cn(
+                    'ml-auto text-muted-foreground transition-transform duration-200',
+                    !isOpen && '-rotate-90'
+                  )} />
+                </button>
+              )
+            }
+            if (!item.href) return null
+            // Hide items in collapsed sections
+            if (!collapsed && collapsedSections.has(curSection)) return null
+            const active = pathname === item.href
+            const badgeKey = badgeKeyMap[item.href]
+            const badgeCount = badgeKey ? badges[badgeKey] : undefined
+            const isFav = favs.includes(item.href)
             return (
-              <div key={i} className="px-4 pt-3 pb-1">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />{t(item.section as any)}</span>
+              <div key={item.href} className="group relative">
+                <Link href={item.href} prefetch={PREFETCH_ROUTES.has(item.href)} aria-current={active ? 'page' : undefined} className={cn(
+                  'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors relative',
+                  collapsed && 'justify-center px-2',
+                  active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                )}>
+                  <span className="sidebar-nav-icon text-base flex-shrink-0">{item.icon}</span>
+                  {!collapsed && <span className="truncate">{'i18n' in item ? t(item.i18n as any) : ''}</span>}
+                  {!collapsed && badgeCount !== undefined && badgeCount > 0 && (
+                    <span key={badgeCount} className={cn('ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full sidebar-badge group-hover:mr-5', isFav && 'mr-5')}>
+                      {badgeCount}
+                    </span>
+                  )}
+                </Link>
+                {!collapsed && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(item.href!) }}
+                    className={cn(
+                      'absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded transition-all',
+                      isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 hover:bg-muted',
+                    )}
+                    title={isFav ? t('removeFavorite') : t('addFavorite')}
+                  >
+                    <Star size={12} className={isFav ? 'text-[hsl(var(--gold))] fill-[hsl(var(--gold))]' : 'text-muted-foreground hover:text-[hsl(var(--gold))]'} />
+                  </button>
+                )}
               </div>
             )
-          }
-          if (!item.href) return null
-          const active = pathname === item.href
-          const badgeKey = badgeKeyMap[item.href]
-          const badgeCount = badgeKey ? badges[badgeKey] : undefined
-          const isFav = favs.includes(item.href)
-          return (
-            <div key={item.href} className="group relative">
-              <Link href={item.href} prefetch={PREFETCH_ROUTES.has(item.href)} aria-current={active ? 'page' : undefined} className={cn(
-                'flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors relative',
-                collapsed && 'justify-center px-2',
-                active ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              )}>
-                <span className="sidebar-nav-icon text-base flex-shrink-0">{item.icon}</span>
-                {!collapsed && <span className="truncate">{'i18n' in item ? t(item.i18n as any) : ''}</span>}
-                {!collapsed && badgeCount !== undefined && badgeCount > 0 && (
-                  <span key={badgeCount} className={cn('ml-auto bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full sidebar-badge group-hover:mr-5', isFav && 'mr-5')}>
-                    {badgeCount}
-                  </span>
-                )}
-              </Link>
-              {!collapsed && (
-                <button
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(item.href!) }}
-                  className={cn(
-                    'absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded transition-all',
-                    isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 hover:bg-muted',
-                  )}
-                  title={isFav ? t('removeFavorite') : t('addFavorite')}
-                >
-                  <Star size={12} className={isFav ? 'text-[hsl(var(--gold))] fill-[hsl(var(--gold))]' : 'text-muted-foreground hover:text-[hsl(var(--gold))]'} />
-                </button>
-              )}
-            </div>
-          )
-        })}
+          })
+        })()}
       </div>
 
       {/* User */}

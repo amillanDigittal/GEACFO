@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { CheckCircle2, AlertTriangle, Clock, Calculator, TrendingDown, TrendingUp, ArrowRight, RotateCcw } from 'lucide-react'
 import {
@@ -163,10 +164,10 @@ export default function DeudaPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox label={t('kpiTotalDebt')} value={fmtEur(data?.totalDebt || 0)} tooltip={t('kpiTotalDebtTooltip')} source={t('kpiTotalDebtSource')} />
-        <KpiBox label={t('kpiNetDebt')} value={fmtEur(data?.netDebt || 0)} tooltip={t('kpiNetDebtTooltip')} source={t('kpiNetDebtSource')} />
-        <KpiBox label={t('kpiAvgCost')} value={`${fmt((data?.avgRate || 0) * 100, 2)}%`} color="text-warning" tooltip={t('kpiAvgCostTooltip')} source={t('kpiAvgCostSource')} />
-        <KpiBox label={t('kpiCovenantsOk')} value={`${covenants.filter((c: any) => c.status === 'COMPLIANT').length}/${covenants.length}`} color="text-success" tooltip={t('kpiCovenantsOkTooltip')} source={t('kpiCovenantsOkSource')} />
+        <KpiBox index={0} label={t('kpiTotalDebt')} value={fmtEur(data?.totalDebt || 0)} tooltip={t('kpiTotalDebtTooltip')} source={t('kpiTotalDebtSource')} />
+        <KpiBox index={1} label={t('kpiNetDebt')} value={fmtEur(data?.netDebt || 0)} tooltip={t('kpiNetDebtTooltip')} source={t('kpiNetDebtSource')} />
+        <KpiBox index={2} label={t('kpiAvgCost')} value={`${fmt((data?.avgRate || 0) * 100, 2)}%`} color="text-warning" tooltip={t('kpiAvgCostTooltip')} source={t('kpiAvgCostSource')} />
+        <KpiBox index={3} label={t('kpiCovenantsOk')} value={`${covenants.filter((c: any) => c.status === 'COMPLIANT').length}/${covenants.length}`} color="text-success" tooltip={t('kpiCovenantsOkTooltip')} source={t('kpiCovenantsOkSource')} />
       </div>
 
       {/* Amortization Chart + Maturity Timeline */}
@@ -369,13 +370,13 @@ export default function DeudaPage() {
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1">{t('simInstrumentType')}</label>
-                  <select
+                  <Select
                     value={simType}
                     onChange={e => setSimType(e.target.value)}
-                    className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm font-medium"
+                    className="w-full h-9 text-sm font-medium"
                   >
                     {DEBT_TYPES.map(t_ => <option key={t_} value={t_}>{DEBT_LABELS[t_]}</option>)}
-                  </select>
+                  </Select>
                 </div>
               </div>
 

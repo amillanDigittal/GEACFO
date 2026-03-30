@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { Info, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
@@ -126,27 +127,9 @@ export default function RatiosPage() {
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-success/10 border border-success/20 rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <CheckCircle2 size={14} className="text-success" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('healthy')}</span>
-          </div>
-          <div className="font-mono text-2xl font-bold text-success">{healthy}</div>
-        </div>
-        <div className="bg-warning/10 border border-warning/20 rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <AlertTriangle size={14} className="text-warning" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('attention')}</span>
-          </div>
-          <div className="font-mono text-2xl font-bold text-warning">{warning}</div>
-        </div>
-        <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-1">
-            <XCircle size={14} className="text-destructive" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('criticals')}</span>
-          </div>
-          <div className="font-mono text-2xl font-bold text-destructive">{critical}</div>
-        </div>
+        <KpiBox index={0} label={t('healthy')} value={String(healthy)} icon={<CheckCircle2 size={16} />} color="text-success" />
+        <KpiBox index={1} label={t('attention')} value={String(warning)} icon={<AlertTriangle size={16} />} color="text-warning" />
+        <KpiBox index={2} label={t('criticals')} value={String(critical)} icon={<XCircle size={16} />} color="text-destructive" />
       </div>
 
       {/* Category filter */}

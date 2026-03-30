@@ -187,10 +187,10 @@ export default function CashFlowPage() {
 
       {/* KPIs: Operating / Investing / Financing / Net */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox label={t('kpiOperatingFlow')} value={`${totals.operating >= 0 ? '+' : ''}${fmtEur(Math.round(totals.operating))}`} icon={<Factory size={16} />} color={totals.operating >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiOperatingTooltip')} source={t('kpiOperatingSource')} />
-        <KpiBox label={t('kpiInvestingFlow')} value={`${totals.investing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.investing))}`} icon={<Building2 size={16} />} color={totals.investing >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiInvestingTooltip')} source={t('kpiInvestingSource')} />
-        <KpiBox label={t('kpiFinancingFlow')} value={`${totals.financing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.financing))}`} icon={<Landmark size={16} />} color={totals.financing >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiFinancingTooltip')} source={t('kpiFinancingSource')} />
-        <KpiBox label={t('kpiNetFlow')} value={`${totals.net >= 0 ? '+' : ''}${fmtEur(Math.round(totals.net))}`} icon={<Banknote size={16} />} color={totals.net >= 0 ? 'text-success' : 'text-destructive'} highlight tooltip={t('kpiNetTooltip')} source={t('kpiNetSource')} />
+        <KpiBox index={0} label={t('kpiOperatingFlow')} value={`${totals.operating >= 0 ? '+' : ''}${fmtEur(Math.round(totals.operating))}`} icon={<Factory size={16} />} color={totals.operating >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiOperatingTooltip')} source={t('kpiOperatingSource')} />
+        <KpiBox index={1} label={t('kpiInvestingFlow')} value={`${totals.investing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.investing))}`} icon={<Building2 size={16} />} color={totals.investing >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiInvestingTooltip')} source={t('kpiInvestingSource')} />
+        <KpiBox index={2} label={t('kpiFinancingFlow')} value={`${totals.financing >= 0 ? '+' : ''}${fmtEur(Math.round(totals.financing))}`} icon={<Landmark size={16} />} color={totals.financing >= 0 ? 'text-success' : 'text-destructive'} tooltip={t('kpiFinancingTooltip')} source={t('kpiFinancingSource')} />
+        <KpiBox index={3} label={t('kpiNetFlow')} value={`${totals.net >= 0 ? '+' : ''}${fmtEur(Math.round(totals.net))}`} icon={<Banknote size={16} />} color={totals.net >= 0 ? 'text-success' : 'text-destructive'} highlight tooltip={t('kpiNetTooltip')} source={t('kpiNetSource')} />
       </div>
 
       {/* Monthly chart */}

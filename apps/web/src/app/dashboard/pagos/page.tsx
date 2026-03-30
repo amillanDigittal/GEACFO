@@ -192,12 +192,18 @@ export default function PagosPage() {
   }
 
   async function handleApprove(id: string) {
+    setApproving(true)
     try {
       await api.treasury.approveAP(id)
+      toast({ title: t('toastApprovedTitle'), description: t('toastApprovedDesc', { count: 1 }), variant: 'success' })
       setSelected(prev => { const next = new Set(prev); next.delete(id); return next })
       const updated = await api.treasury.ap()
       setInvoices(updated)
-    } catch (e) { console.error(e) }
+    } catch (err: any) {
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
+    } finally {
+      setApproving(false)
+    }
   }
 
   async function handleApproveBatch() {
@@ -287,10 +293,10 @@ export default function PagosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox label={t('kpiTotalPending')} value={fmtEur(totalPending)} tooltip={t('kpiTotalPendingTooltip')} source={t('kpiTotalPendingSource')} />
-        <KpiBox label={t('kpiDueThisWeek')} value={fmtEur(dueThisWeekAmount)} color={dueThisWeekAmount > 0 ? 'text-warning' : 'text-success'} tooltip={t('kpiDueThisWeekTooltip')} source={t('kpiDueThisWeekSource')} />
-        <KpiBox label={t('kpiApproved')} value={`${approvedCount}`} color="text-success" tooltip={t('kpiApprovedTooltip')} source={t('kpiApprovedSource')} />
-        <KpiBox label={t('kpiInReview')} value={`${reviewCount}`} color={reviewCount > 0 ? 'text-warning' : 'text-foreground'} tooltip={t('kpiInReviewTooltip')} source={t('kpiInReviewSource')} />
+        <KpiBox index={0} label={t('kpiTotalPending')} value={fmtEur(totalPending)} tooltip={t('kpiTotalPendingTooltip')} source={t('kpiTotalPendingSource')} />
+        <KpiBox index={1} label={t('kpiDueThisWeek')} value={fmtEur(dueThisWeekAmount)} color={dueThisWeekAmount > 0 ? 'text-warning' : 'text-success'} tooltip={t('kpiDueThisWeekTooltip')} source={t('kpiDueThisWeekSource')} />
+        <KpiBox index={2} label={t('kpiApproved')} value={`${approvedCount}`} color="text-success" tooltip={t('kpiApprovedTooltip')} source={t('kpiApprovedSource')} />
+        <KpiBox index={3} label={t('kpiInReview')} value={`${reviewCount}`} color={reviewCount > 0 ? 'text-warning' : 'text-foreground'} tooltip={t('kpiInReviewTooltip')} source={t('kpiInReviewSource')} />
       </div>
 
       {/* Calendar + By Supplier */}
@@ -361,8 +367,8 @@ export default function PagosPage() {
           <div className="flex items-center gap-3">
             <CardTitle>{t('invoiceDetailTitle')}</CardTitle>
             {selected.size > 0 && (
-              <Button size="sm" onClick={handleApproveBatch} disabled={approving}>
-                <CheckCircle2 size={14} className="mr-1" />
+              <Button size="sm" onClick={handleApproveBatch} loading={approving}>
+                {!approving && <CheckCircle2 size={14} className="mr-1" />}
                 {approving ? t('approving') : t('approveCount', { count: selected.size })}
               </Button>
             )}
@@ -470,7 +476,7 @@ export default function PagosPage() {
                   )}
                 </td>
                 <td className="p-3">
-                  {inv.status === 'IN_REVIEW' && <Button variant="outline" size="sm" onClick={() => handleApprove(inv.id)}>{t('actionApprove')}</Button>}
+                  {inv.status === 'IN_REVIEW' && <Button variant="outline" size="sm" loading={approving} onClick={() => handleApprove(inv.id)}>{t('actionApprove')}</Button>}
                   {inv.status === 'APPROVED' && <span className="text-xs text-success font-medium">{t('readyForPayment')}</span>}
                 </td>
               </>

@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { KpiBox } from '@/components/kpi-box'
 import { ChevronLeft, ChevronRight, ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Zap } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -160,36 +161,10 @@ export default function VencimientosPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <ArrowDownToLine size={14} className="text-success" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiMonthlyCollections')}</span>
-          </div>
-          <div className="font-mono text-xl font-bold text-success">+{fmtEur(Math.round(totalCobros))}</div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <ArrowUpFromLine size={14} className="text-destructive" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiMonthlyPayments')}</span>
-          </div>
-          <div className="font-mono text-xl font-bold text-destructive">{'\u2212'}{fmtEur(Math.round(totalPagos))}</div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <Zap size={14} className="text-warning" />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiPeakDay')}</span>
-          </div>
-          <div className="font-mono text-xl font-bold">{peakDay?.date ? new Date(peakDay.date).getDate() : '—'}</div>
-          <div className="text-[10px] text-muted-foreground">{peakDay ? fmtEur(Math.round(peakDay.cobros + peakDay.pagos)) : ''}</div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <div className="flex items-center justify-center gap-1.5 mb-2">
-            <AlertTriangle size={14} className={tensionDays.length > 0 ? 'text-destructive' : 'text-success'} />
-            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('kpiTensionDays')}</span>
-          </div>
-          <div className={`font-mono text-xl font-bold ${tensionDays.length > 0 ? 'text-destructive' : 'text-success'}`}>{tensionDays.length}</div>
-          <div className="text-[10px] text-muted-foreground">{t('tensionThreshold')}</div>
-        </div>
+        <KpiBox index={0} label={t('kpiMonthlyCollections')} value={`+${fmtEur(Math.round(totalCobros))}`} icon={<ArrowDownToLine size={16} />} color="text-success" />
+        <KpiBox index={1} label={t('kpiMonthlyPayments')} value={`\u2212${fmtEur(Math.round(totalPagos))}`} icon={<ArrowUpFromLine size={16} />} color="text-destructive" />
+        <KpiBox index={2} label={t('kpiPeakDay')} value={peakDay?.date ? String(new Date(peakDay.date).getDate()) : '—'} icon={<Zap size={16} />} />
+        <KpiBox index={3} label={t('kpiTensionDays')} value={String(tensionDays.length)} icon={<AlertTriangle size={16} />} color={tensionDays.length > 0 ? 'text-destructive' : 'text-success'} />
       </div>
 
       {/* Calendar */}

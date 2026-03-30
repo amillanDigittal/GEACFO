@@ -16,7 +16,9 @@ const TooltipContent = React.forwardRef<
     ref={ref}
     sideOffset={sideOffset}
     className={cn(
-      'z-50 overflow-visible rounded-lg border border-primary/25 bg-card/95 backdrop-blur-xl px-3 py-2 text-xs text-foreground shadow-[0_4px_20px_hsl(var(--primary)/0.15),0_0_0_1px_hsl(var(--border)/0.3)] animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 max-w-[280px]',
+      'tooltip-glass z-50 overflow-visible rounded-xl border border-primary/20 px-3.5 py-2.5 text-xs text-foreground max-w-[280px]',
+      'animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
+      'data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
       className
     )}
     {...props}
@@ -25,7 +27,7 @@ const TooltipContent = React.forwardRef<
     <TooltipPrimitive.Arrow
       width={12}
       height={6}
-      className="[&>polygon]:fill-card/95 [&>polygon]:stroke-[hsl(var(--primary)/0.25)] [&>polygon]:stroke-1"
+      className="[&>polygon]:fill-[hsl(var(--card))] [&>polygon]:stroke-[hsl(var(--primary)/0.2)] [&>polygon]:stroke-1"
     />
   </TooltipPrimitive.Content>
 ))
