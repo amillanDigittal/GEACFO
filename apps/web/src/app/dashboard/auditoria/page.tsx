@@ -9,13 +9,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { VirtualTableBody } from '@/components/ui/virtual-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { Select } from '@/components/ui/select'
-import { Download, ClipboardList, ChevronLeft, ChevronRight, X } from 'lucide-react'
-
-const PAGE_SIZE = 25
+import { Download, ClipboardList, X } from 'lucide-react'
 
 function extractDetail(log: any): string {
   if (log.oldValue?.email) return log.oldValue.email
@@ -50,7 +49,11 @@ function FilterSelect({ label, value, onChange, options }: {
 }
 
 /* ── Activity Heatmap (GitHub-style) ─────────────────────────────── */
-function ActivityHeatmap({ logs }: { logs: any[] }) {
+function ActivityHeatmap({ logs, heatmapFilter, onCellClick }: {
+  logs: any[]
+  heatmapFilter: { day: string; hour: number } | null
+  onCellClick: (day: string, hour: number) => void
+}) {
   const heatmap = useMemo(() => {
     // Build 30 days × 24 hours grid
     const now = new Date()
@@ -124,16 +127,19 @@ function ActivityHeatmap({ logs }: { logs: any[] }) {
             {/* Hour cells */}
             {hours.map(h => {
               const count = grid[h][di]
+              const dayISO = day.date.toISOString().slice(0, 10)
+              const isSelected = heatmapFilter?.day === dayISO && heatmapFilter?.hour === h
               return (
                 <div
                   key={h}
-                  className="rounded-[3px] transition-colors heatmap-cell"
+                  className={`rounded-[3px] transition-colors heatmap-cell cursor-pointer ${isSelected ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                   style={{
                     width: CELL,
                     height: CELL,
                     backgroundColor: intensity(count),
                   }}
                   title={`${day.label} ${String(h).padStart(2, '0')}:00 — ${count} evento${count !== 1 ? 's' : ''}`}
+                  onClick={() => onCellClick(dayISO, h)}
                 />
               )
             })}
@@ -166,7 +172,6 @@ export default function AuditoriaPage() {
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [page, setPage] = useState(0)
 
   // Filters
   const [actionFilter, setActionFilter] = useState('')
@@ -174,6 +179,7 @@ export default function AuditoriaPage() {
   const [userFilter, setUserFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [heatmapFilter, setHeatmapFilter] = useState<{ day: string; hour: number } | null>(null)
 
   const hydrated = useHydrated()
 
@@ -251,16 +257,17 @@ export default function AuditoriaPage() {
       const to = new Date(dateTo + 'T23:59:59')
       result = result.filter((l: any) => new Date(l.createdAt) <= to)
     }
+    if (heatmapFilter) {
+      result = result.filter((l: any) => {
+        const d = new Date(l.createdAt)
+        const logDay = d.toISOString().slice(0, 10)
+        return logDay === heatmapFilter.day && d.getHours() === heatmapFilter.hour
+      })
+    }
     return result
-  }, [logs, actionFilter, entityFilter, userFilter, dateFrom, dateTo])
+  }, [logs, actionFilter, entityFilter, userFilter, dateFrom, dateTo, heatmapFilter])
 
-  // Reset page when filters change
-  useEffect(() => { setPage(0) }, [actionFilter, entityFilter, userFilter, dateFrom, dateTo])
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-
-  const hasFilters = !!(actionFilter || entityFilter || userFilter || dateFrom || dateTo)
+  const hasFilters = !!(actionFilter || entityFilter || userFilter || dateFrom || dateTo || heatmapFilter)
 
   // Summary stats
   const todayCount = useMemo(() => {
@@ -328,7 +335,21 @@ export default function AuditoriaPage() {
           <CardTitle>{t('heatmapTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <ActivityHeatmap logs={logs} />
+          <ActivityHeatmap
+            logs={logs}
+            heatmapFilter={heatmapFilter}
+            onCellClick={(day, hour) =>
+              setHeatmapFilter(prev =>
+                prev?.day === day && prev?.hour === hour ? null : { day, hour }
+              )
+            }
+          />
+          {heatmapFilter && (
+            <div className="flex items-center gap-2 text-xs text-primary mt-3">
+              <span>Filtro: {heatmapFilter.day} a las {String(heatmapFilter.hour).padStart(2, '0')}:00</span>
+              <button onClick={() => setHeatmapFilter(null)} className="underline hover:text-primary/80 transition-colors">Limpiar</button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -362,7 +383,7 @@ export default function AuditoriaPage() {
                 variant="ghost"
                 size="sm"
                 className="text-xs text-muted-foreground"
-                onClick={() => { setActionFilter(''); setEntityFilter(''); setUserFilter(''); setDateFrom(''); setDateTo('') }}
+                onClick={() => { setActionFilter(''); setEntityFilter(''); setUserFilter(''); setDateFrom(''); setDateTo(''); setHeatmapFilter(null) }}
               >
                 <X size={12} className="mr-1" />{t('clearFilters')}
               </Button>
@@ -399,71 +420,34 @@ export default function AuditoriaPage() {
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {pageData.map((log: any) => {
-                    const actionCfg = ACTION_LABELS[log.action]
-                      || (log.action?.includes('FAILED')
-                        ? { label: log.action, variant: 'destructive' as const }
-                        : { label: log.action, variant: 'secondary' as const })
-                    const entityLabel = ENTITY_LABELS[log.entity] || log.entity
-                    const detail = extractDetail(log)
-                    return (
-                      <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                        <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(log.createdAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </td>
-                        <td className="p-3 text-xs font-medium">{log.user?.name || '—'}</td>
-                        <td className="p-3 text-xs text-muted-foreground">{log.user?.role || '—'}</td>
-                        <td className="p-3"><Badge variant={actionCfg.variant}>{actionCfg.label}</Badge></td>
-                        <td className="p-3 text-xs">{entityLabel}</td>
-                        <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.entityId ? log.entityId.slice(0, 12) + '…' : '—'}</td>
-                        <td className="p-3 text-xs text-muted-foreground truncate max-w-[200px]">{detail || '—'}</td>
-                        <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.ipAddress || '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
               </table>
             </ScrollableTable>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-              <span className="text-xs text-muted-foreground">
-                {t('paginationRange', { from: page * PAGE_SIZE + 1, to: Math.min((page + 1) * PAGE_SIZE, filtered.length), total: filtered.length })}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-                  <ChevronLeft size={14} />
-                </Button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  // Show pages around current page
-                  let p: number
-                  if (totalPages <= 5) {
-                    p = i
-                  } else if (page < 3) {
-                    p = i
-                  } else if (page > totalPages - 4) {
-                    p = totalPages - 5 + i
-                  } else {
-                    p = page - 2 + i
-                  }
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`w-7 h-7 rounded text-xs font-medium transition-colors ${
-                        p === page ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      {p + 1}
-                    </button>
-                  )
-                })}
-                <Button variant="ghost" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
-                  <ChevronRight size={14} />
-                </Button>
-              </div>
-            </div>
+            <VirtualTableBody
+              data={filtered}
+              getKey={(log: any) => log.id}
+              renderRow={(log: any) => {
+                const actionCfg = ACTION_LABELS[log.action]
+                  || (log.action?.includes('FAILED')
+                    ? { label: log.action, variant: 'destructive' as const }
+                    : { label: log.action, variant: 'secondary' as const })
+                const entityLabel = ENTITY_LABELS[log.entity] || log.entity
+                const detail = extractDetail(log)
+                return (
+                  <>
+                    <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </td>
+                    <td className="p-3 text-xs font-medium">{log.user?.name || '—'}</td>
+                    <td className="p-3 text-xs text-muted-foreground">{log.user?.role || '—'}</td>
+                    <td className="p-3"><Badge variant={actionCfg.variant}>{actionCfg.label}</Badge></td>
+                    <td className="p-3 text-xs">{entityLabel}</td>
+                    <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.entityId ? log.entityId.slice(0, 12) + '…' : '—'}</td>
+                    <td className="p-3 text-xs text-muted-foreground truncate max-w-[200px]">{detail || '—'}</td>
+                    <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.ipAddress || '—'}</td>
+                  </>
+                )
+              }}
+            />
           </>
         )}
       </Card>

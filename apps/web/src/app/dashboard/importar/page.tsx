@@ -26,6 +26,31 @@ function parseCSV(text: string): any[] {
   }).filter(r => Object.values(r).some(v => v !== ''))
 }
 
+function validateRow(row: Record<string, string>, headers: string[], type: string): { valid: boolean; errors: string[]; errorCols: Set<string> } {
+  const errors: string[] = []
+  const errorCols = new Set<string>()
+  headers.forEach((h) => {
+    const val = row[h]?.trim()
+    const hl = h.toLowerCase()
+    // Required field check
+    if (!val && (hl.includes('fecha') || hl.includes('date') || hl.includes('importe') || hl.includes('amount') || hl.includes('total'))) {
+      errors.push(`${h} vacío`)
+      errorCols.add(h)
+    }
+    // Number format check
+    if (val && (hl.includes('importe') || hl.includes('amount') || hl.includes('total') || hl.includes('coste') || hl.includes('cost') || hl.includes('stock') || hl.includes('quantity') || hl.includes('precio') || hl.includes('price') || hl.includes('saldo') || hl.includes('balance'))) {
+      const num = Number(val.replace(',', '.'))
+      if (isNaN(num)) { errors.push(`${h}: no es un número`); errorCols.add(h) }
+    }
+    // Date format check
+    if (val && (hl.includes('fecha') || hl.includes('date') || hl.includes('vencimiento') || hl.includes('due'))) {
+      const d = new Date(val)
+      if (isNaN(d.getTime())) { errors.push(`${h}: fecha inválida`); errorCols.add(h) }
+    }
+  })
+  return { valid: errors.length === 0, errors, errorCols }
+}
+
 export default function ImportarPage() {
   const t = useTranslations('importar')
   const [templates, setTemplates] = useState<any>(null)
@@ -37,6 +62,8 @@ export default function ImportarPage() {
   const [csvError, setCsvError] = useState<string | null>(null)
   const [accountAlias, setAccountAlias] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const IMPORT_TYPES: { key: ImportType; label: string; icon: React.ReactNode; description: string; color: string }[] = [
@@ -50,9 +77,7 @@ export default function ImportarPage() {
     api.import.templates().then(setTemplates).catch(console.error).finally(() => setLastUpdated(new Date()))
   }, [])
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  function handleFile(file: File) {
     setFileName(file.name)
     setResult(null)
     setCsvError(null)
@@ -84,6 +109,12 @@ export default function ImportarPage() {
     reader.readAsText(file, 'UTF-8')
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    handleFile(file)
+  }
+
   function reset() {
     setSelectedType(null)
     setParsedRows([])
@@ -102,11 +133,15 @@ export default function ImportarPage() {
     }
     setImporting(true)
     setResult(null)
+    setImportProgress(0)
+    const progressInterval = setInterval(() => {
+      setImportProgress(p => Math.min(p + Math.random() * 15, 90))
+    }, 300)
     try {
       let res: any
       switch (selectedType) {
         case 'movimientos':
-          if (!accountAlias) { setResult({ error: t('errorSelectAccount') }); setImporting(false); return }
+          if (!accountAlias) { clearInterval(progressInterval); setImportProgress(0); setResult({ error: t('errorSelectAccount') }); setImporting(false); return }
           res = await api.import.movements(accountAlias, parsedRows)
           break
         case 'facturas_cobrar':
@@ -122,7 +157,12 @@ export default function ImportarPage() {
       setResult(res)
     } catch (e: any) {
       setResult({ error: e.message || t('errorImport') })
-    } finally { setImporting(false) }
+    } finally {
+      clearInterval(progressInterval)
+      setImportProgress(100)
+      setImporting(false)
+      setTimeout(() => setImportProgress(0), 1000)
+    }
   }
 
   function downloadTemplate(type: ImportType) {
@@ -204,7 +244,18 @@ export default function ImportarPage() {
               <input ref={fileRef} type="file" accept=".csv,.tsv,.txt" onChange={handleFileSelect} className="hidden" />
               <div
                 onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-border rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true) }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false) }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setDragOver(false)
+                  const file = e.dataTransfer.files?.[0]
+                  if (file && (file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.tsv') || file.name.endsWith('.txt'))) {
+                    handleFile(file)
+                  }
+                }}
+                className={`border-2 rounded-xl p-8 text-center cursor-pointer transition-all ${dragOver ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-dashed border-border hover:border-primary/50 hover:bg-muted/30'}`}
               >
                 {fileName ? (
                   <div>
@@ -235,12 +286,36 @@ export default function ImportarPage() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>{t('preview', { count: parsedRows.length })}</CardTitle>
+                  <div className="flex items-center gap-4">
+                    <CardTitle>{t('preview', { count: parsedRows.length })}</CardTitle>
+                    {(() => {
+                      const errorCount = parsedRows.filter((row) => !validateRow(row, previewHeaders, selectedType!).valid).length
+                      return errorCount > 0 ? (
+                        <div className="flex items-center gap-1.5 text-xs text-warning">
+                          <AlertTriangle size={14} />
+                          <span>{errorCount} fila{errorCount > 1 ? 's' : ''} con posibles errores</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs text-success">
+                          <CheckCircle2 size={14} />
+                          <span>Datos válidos</span>
+                        </div>
+                      )
+                    })()}
+                  </div>
                   <Button onClick={doImport} disabled={importing}>
                     <Upload size={14} className="mr-1" />
                     {importing ? t('importing') : t('importCount', { count: parsedRows.length })}
                   </Button>
                 </div>
+                {importing && importProgress > 0 && (
+                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden mt-3">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-300"
+                      style={{ width: `${importProgress}%` }}
+                    />
+                  </div>
+                )}
               </CardHeader>
               <ScrollableTable>
                 <table className="w-full text-sm">
@@ -253,14 +328,27 @@ export default function ImportarPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewData.map((row, i) => (
-                      <tr key={i} className="border-b border-border">
-                        <td className="p-3 text-xs text-muted-foreground">{i + 1}</td>
-                        {previewHeaders.map(h => (
-                          <td key={h} className="p-3 text-xs font-mono truncate max-w-[200px]">{row[h]}</td>
-                        ))}
-                      </tr>
-                    ))}
+                    {previewData.map((row, i) => {
+                      const validation = validateRow(row, previewHeaders, selectedType!)
+                      return (
+                        <tr key={i} className={`border-b border-border ${!validation.valid ? 'bg-destructive/5' : ''}`}>
+                          <td className="p-3 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                              {!validation.valid && <AlertTriangle size={12} className="text-warning flex-shrink-0" />}
+                              {i + 1}
+                            </div>
+                          </td>
+                          {previewHeaders.map(h => {
+                            const hasError = validation.errorCols.has(h)
+                            return (
+                              <td key={h} className={`p-3 text-xs font-mono truncate max-w-[200px] ${hasError ? 'text-destructive' : ''}`} title={hasError ? validation.errors.filter(e => e.startsWith(h)).join(', ') : undefined}>
+                                <span className={hasError ? 'border-b border-dashed border-destructive' : ''}>{row[h]}</span>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
                     {parsedRows.length > 5 && (
                       <tr><td colSpan={previewHeaders.length + 1} className="p-3 text-xs text-center text-muted-foreground">{t('andMoreRows', { count: parsedRows.length - 5 })}</td></tr>
                     )}

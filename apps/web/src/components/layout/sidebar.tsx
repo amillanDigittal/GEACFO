@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useAlertCounts } from '@/hooks/use-api'
+import { useSession } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
+import { useRole } from '@/hooks/use-role'
 import {
   BarChart3,
   LayoutDashboard,
@@ -84,11 +86,11 @@ const nav = [
   { href: '/dashboard/ratios', i18n: 'ratios', icon: <BarChartAbc size={18} /> },
   { section: 'platform' },
   { href: '/dashboard/notificaciones', i18n: 'notificaciones', icon: <Bell size={18} /> },
-  { href: '/dashboard/usuarios', i18n: 'usuarios', icon: <Users size={18} /> },
-  { href: '/dashboard/configuracion', i18n: 'configuracion', icon: <Settings size={18} /> },
-  { href: '/dashboard/importar', i18n: 'importar', icon: <Upload size={18} /> },
-  { href: '/dashboard/gobierno', i18n: 'gobierno', icon: <FolderOpen size={18} /> },
-  { href: '/dashboard/auditoria', i18n: 'auditoria', icon: <ClipboardList size={18} /> },
+  { href: '/dashboard/usuarios', i18n: 'usuarios', icon: <Users size={18} />, minRole: 'ADMIN' as const },
+  { href: '/dashboard/configuracion', i18n: 'configuracion', icon: <Settings size={18} />, minRole: 'CFO' as const },
+  { href: '/dashboard/importar', i18n: 'importar', icon: <Upload size={18} />, minRole: 'CONTROLLER' as const },
+  { href: '/dashboard/gobierno', i18n: 'gobierno', icon: <FolderOpen size={18} />, minRole: 'CONTROLLER' as const },
+  { href: '/dashboard/auditoria', i18n: 'auditoria', icon: <ClipboardList size={18} />, minRole: 'CONTROLLER' as const },
   { href: '/dashboard/bot', i18n: 'bot', icon: <Bot size={18} /> },
   { href: '/dashboard/boardpack', i18n: 'boardpack', icon: <FileText size={18} /> },
   { href: '/dashboard/reporting', i18n: 'reporting', icon: <Send size={18} /> },
@@ -99,7 +101,16 @@ export function Sidebar() {
   const { sidebarCollapsed, setSidebarCollapsed, favorites, toggleFavorite } = useAppStore()
   const hydrated = useHydrated()
   const { data: badges = {} } = useAlertCounts()
+  const { data: session } = useSession()
+  const { hasRole } = useRole()
   const t = useTranslations('nav')
+
+  const userInitials = session?.user?.name
+    ?.split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || '??'
 
   // Use stable defaults during SSR and first client render to avoid hydration mismatch.
   const collapsed = hydrated ? sidebarCollapsed : false
@@ -116,10 +127,13 @@ export function Sidebar() {
     })
   }
 
+  // Filter nav items by role
+  const filteredNav = nav.filter(item => !('minRole' in item) || !item.minRole || hasRole(item.minRole as any))
+
   // Compute badge count per section
   const sectionBadgeTotals: Record<string, number> = {}
   let currentSection = ''
-  for (const item of nav) {
+  for (const item of filteredNav) {
     if ('section' in item && item.section) { currentSection = item.section; continue }
     if ('href' in item && item.href) {
       const bk = badgeKeyMap[item.href]
@@ -212,7 +226,7 @@ export function Sidebar() {
 
         {(() => {
           let curSection = ''
-          return nav.map((item, i) => {
+          return filteredNav.map((item, i) => {
             if ('section' in item && item.section) {
               curSection = item.section
               if (collapsed) return <div key={i} className="h-px bg-border mx-2 my-1.5" />
@@ -279,10 +293,10 @@ export function Sidebar() {
       {/* User */}
       {!collapsed && (
         <div className="p-3 border-t border-white/[0.06] flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-[hsl(var(--gold))] flex items-center justify-center text-xs font-bold text-white flex-shrink-0">AC</div>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-[hsl(var(--gold))] flex items-center justify-center text-xs font-bold text-white flex-shrink-0">{userInitials}</div>
           <div className="overflow-hidden">
-            <div className="text-sm font-medium text-foreground truncate">Ana Castro</div>
-            <div className="text-[11px] text-muted-foreground truncate">CFO · Grupo Ibérico</div>
+            <div className="text-sm font-medium text-foreground truncate">{session?.user?.name || '—'}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{session?.user?.role || ''} · {session?.user?.tenantName || ''}</div>
           </div>
         </div>
       )}

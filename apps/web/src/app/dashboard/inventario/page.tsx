@@ -13,6 +13,7 @@ import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { KpiBox } from '@/components/kpi-box'
 import { exportXLSX } from '@/lib/export-xlsx'
+import { ErrorState } from '@/components/ui/error-state'
 
 function rotationColor(days: number) {
   if (days >= 120) return 'text-destructive'
@@ -48,7 +49,7 @@ export default function InventarioPage() {
   const hydrated = useHydrated()
 
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
-  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}</div>
+  if (!data) return <ErrorState title={t('errorLoading')} onRetry={() => refresh()} />
 
   const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' }> = {
     NORMAL: { label: t('statusNormal'), variant: 'success' },

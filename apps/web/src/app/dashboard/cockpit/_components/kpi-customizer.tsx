@@ -75,7 +75,7 @@ export function KpiCustomizer({ kpis }: KpiCustomizerProps) {
                     Reset
                   </button>
                 )}
-                <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground p-0.5">
+                <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground p-0.5" aria-label="Cerrar personalización">
                   <X size={14} />
                 </button>
               </div>

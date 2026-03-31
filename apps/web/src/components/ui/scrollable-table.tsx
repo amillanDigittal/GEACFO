@@ -1,5 +1,6 @@
 'use client'
 import { useRef, useState, useEffect, useCallback, memo, type ReactNode } from 'react'
+import { HelpCircle } from 'lucide-react'
 
 interface ScrollableTableProps {
   children: React.ReactNode
@@ -81,22 +82,23 @@ export function ScrollableTable({ children, label, maxHeight }: ScrollableTableP
 
   return (
     <div className="relative">
-      {/* Left fade */}
+      {/* Left shadow indicator */}
       <div
-        className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10 transition-opacity duration-200"
-        style={{
-          opacity: canScrollLeft ? 1 : 0,
-          background: 'linear-gradient(to right, hsl(var(--card)), transparent)',
-        }}
-      />
-      {/* Right fade + hint */}
+        className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 z-10 transition-opacity duration-300 bg-gradient-to-r from-background/80 to-transparent"
+        style={{ opacity: canScrollLeft ? 1 : 0 }}
+      >
+        <div className="absolute inset-0 shadow-[inset_8px_0_8px_-4px_rgba(0,0,0,0.15)]" />
+      </div>
+      {/* Right shadow indicator + arrow */}
       <div
-        className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10 transition-opacity duration-200"
-        style={{
-          opacity: canScrollRight ? 1 : 0,
-          background: 'linear-gradient(to left, hsl(var(--card)), transparent)',
-        }}
-      />
+        className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 z-10 transition-opacity duration-300 bg-gradient-to-l from-background/80 to-transparent"
+        style={{ opacity: canScrollRight ? 1 : 0 }}
+      >
+        <div className="absolute inset-0 shadow-[inset_-8px_0_8px_-4px_rgba(0,0,0,0.15)]" />
+        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 text-xs select-none" aria-hidden="true">
+          &#8250;
+        </span>
+      </div>
       {/* Scroll hint badge */}
       {canScrollRight && (
         <div className="absolute right-2 top-2 z-20 pointer-events-none md:hidden">
@@ -141,6 +143,8 @@ interface ThProps {
   sorted?: 'asc' | 'desc' | false
   onSort?: () => void
   className?: string
+  /** When provided, renders a small help icon with a native tooltip explaining the column */
+  tooltip?: string
 }
 
 const TH_BASE = 'text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider'
@@ -150,7 +154,13 @@ const TH_BASE = 'text-left p-3 text-muted-foreground font-semibold text-[10px] u
  * - Always renders `scope="col"`
  * - When `sorted` is provided, adds `aria-sort` and renders a keyboard-accessible button
  */
-export const Th = memo(function Th({ children, sorted, onSort, className }: ThProps) {
+export const Th = memo(function Th({ children, sorted, onSort, className, tooltip }: ThProps) {
+  const tooltipIcon = tooltip ? (
+    <span className="ml-1 text-muted-foreground/50 cursor-help inline-flex" title={tooltip}>
+      <HelpCircle size={12} />
+    </span>
+  ) : null
+
   if (onSort) {
     const ariaSort = sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none'
     return (
@@ -164,13 +174,17 @@ export const Th = memo(function Th({ children, sorted, onSort, className }: ThPr
           {sorted === 'asc' && <span aria-hidden="true"> ↑</span>}
           {sorted === 'desc' && <span aria-hidden="true"> ↓</span>}
         </button>
+        {tooltipIcon}
       </th>
     )
   }
 
   return (
     <th scope="col" className={`${TH_BASE} ${className || ''}`}>
-      {children}
+      <span className="inline-flex items-center">
+        {children}
+        {tooltipIcon}
+      </span>
     </th>
   )
 })

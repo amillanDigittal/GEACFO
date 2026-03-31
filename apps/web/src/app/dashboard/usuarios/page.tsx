@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useForm } from 'react-hook-form'
@@ -21,6 +21,8 @@ import { UserPlus, Pencil, Trash2, Shield, Eye, EyeOff, Search } from 'lucide-re
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
+import { useRole } from '@/hooks/use-role'
+import { AccessDenied } from '@/components/ui/access-denied'
 
 const ROLES = ['ADMIN', 'CFO', 'CONTROLLER', 'ANALYST', 'VIEWER'] as const
 
@@ -47,6 +49,7 @@ export default function UsuariosPage() {
   }
 
   const { data: users = [], isLoading, mutate } = useUsers()
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editUser, setEditUser] = useState<User | null>(null)
@@ -67,8 +70,14 @@ export default function UsuariosPage() {
   ])
 
   const hydrated = useHydrated()
+  const { isAdmin } = useRole()
+
+  useEffect(() => {
+    if (users.length > 0 && !isLoading) setLastUpdated(new Date())
+  }, [users, isLoading])
 
   if (!hydrated || isLoading) return <SkeletonUsuarios />
+  if (!isAdmin) return <AccessDenied />
 
   const filtered = search
     ? users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
@@ -144,7 +153,7 @@ export default function UsuariosPage() {
       <PageHeader
         title={t('title')}
         subtitle={t('subtitle', { count: users.length })}
-        lastUpdated={null}
+        lastUpdated={lastUpdated}
         onRefresh={() => mutate()}
         actions={
           <Button size="sm" onClick={openCreate}>

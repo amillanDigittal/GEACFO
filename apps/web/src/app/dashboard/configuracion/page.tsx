@@ -1,7 +1,10 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { api } from '@/lib/api'
+import { tenantSchema, configSchema, type TenantForm, type ConfigForm } from '@/lib/validations'
 import { useUnsavedChanges } from '@/hooks/use-unsaved-changes'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -12,19 +15,15 @@ import { useToast } from '@/components/ui/use-toast'
 import { SkeletonConfiguracion } from '@/components/ui/skeleton-page'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles } from 'lucide-react'
+import { FieldError } from '@/components/ui/field-error'
+import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles, Sun } from 'lucide-react'
+import { useTheme } from 'next-themes'
 import { PageHeader } from '@/components/page-header'
+import { useRole } from '@/hooks/use-role'
+import { AccessDenied } from '@/components/ui/access-denied'
 
 interface Tenant {
   id: string; name: string; nif: string; sector: string | null; slug: string; logo: string | null; currency: string; locale: string
-}
-
-interface Config {
-  kpiTargets: { dsoTarget: number; dpoTarget: number; cccTarget: number; ebitdaMarginTarget: number; liquidezMinima: number }
-  covenantAlerts: { warningThreshold: number; criticalThreshold: number }
-  forecast: { horizonWeeks: number; gapAlertEnabled: boolean; scenarioDefault: string }
-  scoring: { alertScoreThreshold: number; riskAutoSuspend: boolean }
-  notifications: { emailEnabled: boolean; overdueAlertDays: number; apDueSoonDays: number }
 }
 
 function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -39,29 +38,33 @@ function Field({ label, desc, children }: { label: string; desc?: string; childr
   )
 }
 
-// Toggle is now the shared Switch component from ui/switch
-
 export default function ConfiguracionPage() {
   const t = useTranslations('configuracion')
   const [tenant, setTenant] = useState<Tenant | null>(null)
-  const [config, setConfig] = useState<Config | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeSection, setActiveSection] = useState('empresa')
   const [saving, setSaving] = useState(false)
-
-  // Tenant form
-  const [tName, setTName] = useState('')
-  const [tNif, setTNif] = useState('')
-  const [tSector, setTSector] = useState('')
-  const [tCurrency, setTCurrency] = useState('EUR')
-  const [tLocale, setTLocale] = useState('es-ES')
-
   const { toast } = useToast()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const [dirty, setDirty] = useState(false)
-  const savedConfigRef = useRef<string>('')
-  const savedTenantRef = useRef<string>('')
+  const { theme, setTheme } = useTheme()
 
+  const tenantForm = useForm<TenantForm>({
+    resolver: zodResolver(tenantSchema),
+    defaultValues: { name: '', nif: '', sector: '', currency: 'EUR', locale: 'es-ES' },
+  })
+
+  const configForm = useForm<ConfigForm>({
+    resolver: zodResolver(configSchema),
+    defaultValues: {
+      kpiTargets: { dsoTarget: 45, dpoTarget: 60, cccTarget: 30, ebitdaMarginTarget: 15, liquidezMinima: 1.2 },
+      covenantAlerts: { warningThreshold: 15, criticalThreshold: 5 },
+      forecast: { horizonWeeks: 13, gapAlertEnabled: true, scenarioDefault: 'BASE' },
+      scoring: { alertScoreThreshold: 50, riskAutoSuspend: false },
+      notifications: { emailEnabled: true, overdueAlertDays: 3, apDueSoonDays: 3 },
+    },
+  })
+
+  const dirty = tenantForm.formState.isDirty || configForm.formState.isDirty
   useUnsavedChanges(dirty)
 
   const SECTIONS = [
@@ -70,73 +73,47 @@ export default function ConfiguracionPage() {
     { key: 'covenants', label: t('sectionCovenants'), icon: <Shield size={14} /> },
     { key: 'forecast', label: t('sectionForecast'), icon: <TrendingUp size={14} /> },
     { key: 'notificaciones', label: t('sectionNotifications'), icon: <Bell size={14} /> },
+    { key: 'apariencia', label: t('sectionAppearance'), icon: <Sun size={14} /> },
     { key: 'tour', label: t('sectionGuidedTour'), icon: <Sparkles size={14} /> },
   ]
-
-  // Track changes by comparing current state to saved snapshot
-  useEffect(() => {
-    const currentTenant = JSON.stringify({ tName, tNif, tSector, tCurrency, tLocale })
-    const currentConfig = JSON.stringify(config)
-    const tenantChanged = savedTenantRef.current !== '' && currentTenant !== savedTenantRef.current
-    const configChanged = savedConfigRef.current !== '' && currentConfig !== savedConfigRef.current
-    setDirty(tenantChanged || configChanged)
-  }, [tName, tNif, tSector, tCurrency, tLocale, config])
 
   const loadData = useCallback(() => {
     return Promise.all([api.settings.getTenant(), api.settings.getConfig()])
       .then(([t, c]) => {
         setTenant(t)
-        setConfig(c)
-        setTName(t.name)
-        setTNif(t.nif)
-        setTSector(t.sector || '')
-        setTCurrency(t.currency || 'EUR')
-        setTLocale(t.locale || 'es-ES')
-        // Save snapshots for dirty tracking
-        savedTenantRef.current = JSON.stringify({ tName: t.name, tNif: t.nif, tSector: t.sector || '', tCurrency: t.currency || 'EUR', tLocale: t.locale || 'es-ES' })
-        savedConfigRef.current = JSON.stringify(c)
-        setDirty(false)
+        const tenantValues: TenantForm = {
+          name: t.name,
+          nif: t.nif,
+          sector: t.sector || '',
+          currency: (t.currency || 'EUR') as TenantForm['currency'],
+          locale: (t.locale || 'es-ES') as TenantForm['locale'],
+        }
+        tenantForm.reset(tenantValues)
+        configForm.reset(c)
       })
       .catch(console.error)
       .finally(() => { setLoading(false); setLastUpdated(new Date()) })
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadData() }, [loadData])
 
   const hydrated = useHydrated()
+  const { canManage } = useRole()
 
-  if (!hydrated || loading || !config) return <SkeletonConfiguracion />
+  if (!hydrated || loading || !tenant) return <SkeletonConfiguracion />
+  if (!canManage) return <AccessDenied />
 
   function resetChanges() {
-    if (savedTenantRef.current) {
-      const t = JSON.parse(savedTenantRef.current)
-      setTName(t.tName); setTNif(t.tNif); setTSector(t.tSector); setTCurrency(t.tCurrency); setTLocale(t.tLocale)
-    }
-    if (savedConfigRef.current) {
-      setConfig(JSON.parse(savedConfigRef.current))
-    }
-    setDirty(false)
+    tenantForm.reset()
+    configForm.reset()
   }
 
-  function updateConfig(path: string, value: any) {
-    setConfig(prev => {
-      if (!prev) return prev
-      const parts = path.split('.')
-      const next = JSON.parse(JSON.stringify(prev))
-      let obj = next
-      for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]]
-      obj[parts[parts.length - 1]] = value
-      return next
-    })
-  }
-
-  async function saveTenant() {
+  async function saveTenant(data: TenantForm) {
     setSaving(true)
     try {
-      await api.settings.updateTenant({ name: tName, nif: tNif, sector: tSector || null, currency: tCurrency, locale: tLocale })
+      await api.settings.updateTenant({ name: data.name, nif: data.nif, sector: data.sector || null, currency: data.currency, locale: data.locale })
       toast({ title: t('toastDataSavedTitle'), description: t('toastDataSavedDesc') })
-      savedTenantRef.current = JSON.stringify({ tName, tNif, tSector, tCurrency, tLocale })
-      setDirty(false)
+      tenantForm.reset(data)
       loadData()
     } catch (err: any) {
       toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
@@ -145,19 +122,21 @@ export default function ConfiguracionPage() {
     }
   }
 
-  async function saveConfig() {
+  async function saveConfig(data: ConfigForm) {
     setSaving(true)
     try {
-      await api.settings.updateConfig(config)
+      await api.settings.updateConfig(data)
       toast({ title: t('toastConfigSavedTitle'), description: t('toastConfigSavedDesc') })
-      savedConfigRef.current = JSON.stringify(config)
-      setDirty(false)
+      configForm.reset(data)
     } catch (err: any) {
       toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
     } finally {
       setSaving(false)
     }
   }
+
+  const configErrors = configForm.formState.errors
+  const tenantErrors = tenantForm.formState.errors
 
   return (
     <div className="space-y-6">
@@ -180,7 +159,7 @@ export default function ConfiguracionPage() {
             <Button variant="secondary" size="sm" onClick={resetChanges}>
               <RotateCcw size={12} className="mr-1" />{t('reset')}
             </Button>
-            <Button size="sm" loading={saving} onClick={activeSection === 'empresa' ? saveTenant : saveConfig}>
+            <Button size="sm" loading={saving} onClick={activeSection === 'empresa' ? tenantForm.handleSubmit(saveTenant) : configForm.handleSubmit(saveConfig)}>
               <Save size={14} className="mr-1" />{t('save')}
             </Button>
           </div>
@@ -209,34 +188,49 @@ export default function ConfiguracionPage() {
                 <Building2 size={18} />
                 <CardTitle>{t('companyDataTitle')}</CardTitle>
               </div>
-              <Button size="sm" onClick={saveTenant} disabled={saving}>
+              <Button size="sm" onClick={tenantForm.handleSubmit(saveTenant)} disabled={saving}>
                 <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <Field label={t('companyNameLabel')} desc={t('companyNameDesc')}>
-              <Input value={tName} onChange={e => setTName(e.target.value)} className="h-8 text-sm" />
+              <div>
+                <Input {...tenantForm.register('name')} className="h-8 text-sm" />
+                <FieldError message={tenantErrors.name?.message} />
+              </div>
             </Field>
             <Field label={t('nifLabel')} desc={t('nifDesc')}>
-              <Input value={tNif} onChange={e => setTNif(e.target.value)} className="h-8 text-sm" />
+              <div>
+                <Input {...tenantForm.register('nif')} className="h-8 text-sm" />
+                <FieldError message={tenantErrors.nif?.message} />
+              </div>
             </Field>
             <Field label={t('sectorLabel')} desc={t('sectorDesc')}>
-              <Input value={tSector} onChange={e => setTSector(e.target.value)} className="h-8 text-sm" placeholder={t('sectorPlaceholder')} />
+              <div>
+                <Input {...tenantForm.register('sector')} className="h-8 text-sm" placeholder={t('sectorPlaceholder')} />
+                <FieldError message={tenantErrors.sector?.message} />
+              </div>
             </Field>
             <Field label={t('currencyLabel')} desc={t('currencyDesc')}>
-              <Select value={tCurrency} onChange={e => setTCurrency(e.target.value)} className="w-full h-8 text-sm">
-                <option value="EUR">{t('currencyEur')}</option>
-                <option value="USD">{t('currencyUsd')}</option>
-                <option value="GBP">{t('currencyGbp')}</option>
-              </Select>
+              <div>
+                <Select {...tenantForm.register('currency')} className="w-full h-8 text-sm">
+                  <option value="EUR">{t('currencyEur')}</option>
+                  <option value="USD">{t('currencyUsd')}</option>
+                  <option value="GBP">{t('currencyGbp')}</option>
+                </Select>
+                <FieldError message={tenantErrors.currency?.message} />
+              </div>
             </Field>
             <Field label={t('languageLabel')} desc={t('languageDesc')}>
-              <Select value={tLocale} onChange={e => setTLocale(e.target.value)} className="w-full h-8 text-sm">
-                <option value="es-ES">{t('langSpanish')}</option>
-                <option value="en-US">{t('langEnglish')}</option>
-                <option value="pt-BR">{t('langPortuguese')}</option>
-              </Select>
+              <div>
+                <Select {...tenantForm.register('locale')} className="w-full h-8 text-sm">
+                  <option value="es-ES">{t('langSpanish')}</option>
+                  <option value="en-US">{t('langEnglish')}</option>
+                  <option value="pt-BR">{t('langPortuguese')}</option>
+                </Select>
+                <FieldError message={tenantErrors.locale?.message} />
+              </div>
             </Field>
             <Field label={t('slugLabel')} desc={t('slugDesc')}>
               <div className="h-8 flex items-center px-2 rounded-md bg-muted text-sm text-muted-foreground font-mono">{tenant?.slug}</div>
@@ -254,40 +248,55 @@ export default function ConfiguracionPage() {
                 <Target size={18} />
                 <CardTitle>{t('kpiThresholdsTitle')}</CardTitle>
               </div>
-              <Button size="sm" onClick={saveConfig} disabled={saving}>
+              <Button size="sm" onClick={configForm.handleSubmit(saveConfig)} disabled={saving}>
                 <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <Field label={t('dsoTargetLabel')} desc={t('dsoTargetDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={1} max={120} value={config.kpiTargets.dsoTarget} onChange={e => updateConfig('kpiTargets.dsoTarget', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={120} {...configForm.register('kpiTargets.dsoTarget', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+                </div>
+                <FieldError message={configErrors.kpiTargets?.dsoTarget?.message} />
               </div>
             </Field>
             <Field label={t('dpoTargetLabel')} desc={t('dpoTargetDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={1} max={180} value={config.kpiTargets.dpoTarget} onChange={e => updateConfig('kpiTargets.dpoTarget', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={180} {...configForm.register('kpiTargets.dpoTarget', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+                </div>
+                <FieldError message={configErrors.kpiTargets?.dpoTarget?.message} />
               </div>
             </Field>
             <Field label={t('cccTargetLabel')} desc={t('cccTargetDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={-30} max={120} value={config.kpiTargets.cccTarget} onChange={e => updateConfig('kpiTargets.cccTarget', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={-30} max={120} {...configForm.register('kpiTargets.cccTarget', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+                </div>
+                <FieldError message={configErrors.kpiTargets?.cccTarget?.message} />
               </div>
             </Field>
             <Field label={t('ebitdaMarginLabel')} desc={t('ebitdaMarginDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} step={0.1} value={config.kpiTargets.ebitdaMarginTarget} onChange={e => updateConfig('kpiTargets.ebitdaMarginTarget', parseFloat(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">%</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0} max={100} step={0.1} {...configForm.register('kpiTargets.ebitdaMarginTarget', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+                <FieldError message={configErrors.kpiTargets?.ebitdaMarginTarget?.message} />
               </div>
             </Field>
             <Field label={t('liquidityRatioLabel')} desc={t('liquidityRatioDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0.1} max={5} step={0.05} value={config.kpiTargets.liquidezMinima} onChange={e => updateConfig('kpiTargets.liquidezMinima', parseFloat(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">x</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={0.1} max={5} step={0.05} {...configForm.register('kpiTargets.liquidezMinima', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">x</span>
+                </div>
+                <FieldError message={configErrors.kpiTargets?.liquidezMinima?.message} />
               </div>
             </Field>
           </CardContent>
@@ -303,26 +312,32 @@ export default function ConfiguracionPage() {
                 <Shield size={18} />
                 <CardTitle>{t('covenantAlertsTitle')}</CardTitle>
               </div>
-              <Button size="sm" onClick={saveConfig} disabled={saving}>
+              <Button size="sm" onClick={configForm.handleSubmit(saveConfig)} disabled={saving}>
                 <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <Field label={t('warningThresholdLabel')} desc={t('warningThresholdDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={1} max={50} value={config.covenantAlerts.warningThreshold} onChange={e => updateConfig('covenantAlerts.warningThreshold', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">%</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={50} {...configForm.register('covenantAlerts.warningThreshold', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+                <FieldError message={configErrors.covenantAlerts?.warningThreshold?.message} />
               </div>
             </Field>
             <Field label={t('criticalThresholdLabel')} desc={t('criticalThresholdDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={1} max={50} value={config.covenantAlerts.criticalThreshold} onChange={e => updateConfig('covenantAlerts.criticalThreshold', parseInt(e.target.value) || 0)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">%</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={50} {...configForm.register('covenantAlerts.criticalThreshold', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+                <FieldError message={configErrors.covenantAlerts?.criticalThreshold?.message} />
               </div>
             </Field>
             <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground">
-              {t('covenantExplanation', { warning: config.covenantAlerts.warningThreshold, critical: config.covenantAlerts.criticalThreshold })}
+              {t('covenantExplanation', { warning: configForm.watch('covenantAlerts.warningThreshold'), critical: configForm.watch('covenantAlerts.criticalThreshold') })}
             </div>
           </CardContent>
         </Card>
@@ -337,33 +352,42 @@ export default function ConfiguracionPage() {
                 <TrendingUp size={18} />
                 <CardTitle>{t('forecastConfigTitle')}</CardTitle>
               </div>
-              <Button size="sm" onClick={saveConfig} disabled={saving}>
+              <Button size="sm" onClick={configForm.handleSubmit(saveConfig)} disabled={saving}>
                 <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <Field label={t('forecastHorizonLabel')} desc={t('forecastHorizonDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={4} max={52} value={config.forecast.horizonWeeks} onChange={e => updateConfig('forecast.horizonWeeks', parseInt(e.target.value) || 13)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">{t('unitWeeks')}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={4} max={52} {...configForm.register('forecast.horizonWeeks', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">{t('unitWeeks')}</span>
+                </div>
+                <FieldError message={configErrors.forecast?.horizonWeeks?.message} />
               </div>
             </Field>
             <Field label={t('defaultScenarioLabel')} desc={t('defaultScenarioDesc')}>
-              <Select value={config.forecast.scenarioDefault} onChange={e => updateConfig('forecast.scenarioDefault', e.target.value)} className="w-full h-8 text-sm">
-                <option value="BASE">{t('scenarioBase')}</option>
-                <option value="CONSERVADOR">{t('scenarioConservative')}</option>
-                <option value="AGRESIVO">{t('scenarioAggressive')}</option>
-              </Select>
+              <div>
+                <Select {...configForm.register('forecast.scenarioDefault')} className="w-full h-8 text-sm">
+                  <option value="BASE">{t('scenarioBase')}</option>
+                  <option value="CONSERVADOR">{t('scenarioConservative')}</option>
+                  <option value="AGRESIVO">{t('scenarioAggressive')}</option>
+                </Select>
+                <FieldError message={configErrors.forecast?.scenarioDefault?.message} />
+              </div>
             </Field>
             <Field label={t('gapAlertsLabel')} desc={t('gapAlertsDesc')}>
-              <Switch checked={config.forecast.gapAlertEnabled} onChange={v => updateConfig('forecast.gapAlertEnabled', v)} />
+              <Switch checked={configForm.watch('forecast.gapAlertEnabled')} onChange={v => configForm.setValue('forecast.gapAlertEnabled', v, { shouldDirty: true })} />
             </Field>
             <Field label={t('customerAlertScoreLabel')} desc={t('customerAlertScoreDesc')}>
-              <Input type="number" min={0} max={100} value={config.scoring.alertScoreThreshold} onChange={e => updateConfig('scoring.alertScoreThreshold', parseInt(e.target.value) || 50)} className="h-8 text-sm font-mono" />
+              <div>
+                <Input type="number" min={0} max={100} {...configForm.register('scoring.alertScoreThreshold', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                <FieldError message={configErrors.scoring?.alertScoreThreshold?.message} />
+              </div>
             </Field>
             <Field label={t('autoSuspendLabel')} desc={t('autoSuspendDesc')}>
-              <Switch checked={config.scoring.riskAutoSuspend} onChange={v => updateConfig('scoring.riskAutoSuspend', v)} />
+              <Switch checked={configForm.watch('scoring.riskAutoSuspend')} onChange={v => configForm.setValue('scoring.riskAutoSuspend', v, { shouldDirty: true })} />
             </Field>
           </CardContent>
         </Card>
@@ -378,25 +402,62 @@ export default function ConfiguracionPage() {
                 <Bell size={18} />
                 <CardTitle>{t('notificationPrefsTitle')}</CardTitle>
               </div>
-              <Button size="sm" onClick={saveConfig} disabled={saving}>
+              <Button size="sm" onClick={configForm.handleSubmit(saveConfig)} disabled={saving}>
                 <Save size={14} className="mr-1" />{saving ? t('saving') : t('save')}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <Field label={t('emailNotificationsLabel')} desc={t('emailNotificationsDesc')}>
-              <Switch checked={config.notifications.emailEnabled} onChange={v => updateConfig('notifications.emailEnabled', v)} />
+              <Switch checked={configForm.watch('notifications.emailEnabled')} onChange={v => configForm.setValue('notifications.emailEnabled', v, { shouldDirty: true })} />
             </Field>
             <Field label={t('overdueAlertDaysLabel')} desc={t('overdueAlertDaysDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={1} max={90} value={config.notifications.overdueAlertDays} onChange={e => updateConfig('notifications.overdueAlertDays', parseInt(e.target.value) || 3)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={90} {...configForm.register('notifications.overdueAlertDays', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+                </div>
+                <FieldError message={configErrors.notifications?.overdueAlertDays?.message} />
               </div>
             </Field>
             <Field label={t('apDueSoonDaysLabel')} desc={t('apDueSoonDaysDesc')}>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={1} max={30} value={config.notifications.apDueSoonDays} onChange={e => updateConfig('notifications.apDueSoonDays', parseInt(e.target.value) || 3)} className="h-8 text-sm font-mono" />
-                <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Input type="number" min={1} max={30} {...configForm.register('notifications.apDueSoonDays', { valueAsNumber: true })} className="h-8 text-sm font-mono" />
+                  <span className="text-xs text-muted-foreground">{t('unitDays')}</span>
+                </div>
+                <FieldError message={configErrors.notifications?.apDueSoonDays?.message} />
+              </div>
+            </Field>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Apariencia */}
+      {activeSection === 'apariencia' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Sun size={18} />
+              <CardTitle>{t('appearanceTitle')}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Field label={t('themeLabel')} desc={t('themeDesc')}>
+              <div className="flex gap-1">
+                {(['light', 'dark', 'system'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => setTheme(opt)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      theme === opt
+                        ? 'bg-primary text-white'
+                        : 'bg-muted text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {opt === 'light' ? t('themeLight') : opt === 'dark' ? t('themeDark') : t('themeSystem')}
+                  </button>
+                ))}
               </div>
             </Field>
           </CardContent>

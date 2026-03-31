@@ -17,6 +17,7 @@ import { Download, TrendingUp, TrendingDown, ArrowRight, Banknote, Factory, Buil
 import { exportCashFlowPDF } from '@/lib/export-pdf-modules'
 import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 export default function CashFlowPage() {
   const t = useTranslations('cashflow')
@@ -202,22 +203,24 @@ export default function CashFlowPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-              <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : v <= -1000 ? `${Math.round(v / 1000)}k` : String(v)} />
-              <Tooltip
-                       
-                formatter={(v: number, name: string) => [fmtEur(v), name]}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-              <Bar dataKey={t('flowOperating')} fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-              <Bar dataKey={t('flowInvesting')} fill="hsl(var(--warning))" radius={[3, 3, 0, 0]} />
-              <Bar dataKey={t('flowFinancing')} fill="hsl(var(--success))" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <LazyChart height={300}>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : v <= -1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+                <Tooltip
+
+                  formatter={(v: number, name: string) => [fmtEur(v), name]}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
+                <Bar dataKey={t('flowOperating')} fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                <Bar dataKey={t('flowInvesting')} fill="hsl(var(--warning))" radius={[3, 3, 0, 0]} />
+                <Bar dataKey={t('flowFinancing')} fill="hsl(var(--success))" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </LazyChart>
         </CardContent>
       </Card>
 

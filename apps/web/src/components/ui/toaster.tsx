@@ -8,7 +8,7 @@ const variantStyles = {
     icon: <Info size={18} className="text-primary flex-shrink-0 mt-0.5" />,
   },
   success: {
-    container: 'border-success/30 toast-glass-success',
+    container: 'border-success/30 toast-glass-success animate-scale-pop',
     icon: <CheckCircle2 size={18} className="text-success flex-shrink-0 mt-0.5" />,
   },
   destructive: {
@@ -24,7 +24,7 @@ const variantStyles = {
 export function Toaster() {
   const { toasts } = useToast()
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none" aria-live="polite" aria-atomic="true">
       {toasts.map(({ id, title, description, variant = 'default' }) => {
         const style = variantStyles[variant as keyof typeof variantStyles] || variantStyles.default
         return (

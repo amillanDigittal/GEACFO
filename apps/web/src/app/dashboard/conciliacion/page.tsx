@@ -41,6 +41,7 @@ export default function ConciliacionPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [acceptedMatches, setAcceptedMatches] = useState<Set<string>>(new Set())
   const [dismissedMatches, setDismissedMatches] = useState<Set<string>>(new Set())
+  const [flashIds, setFlashIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   async function refresh() {
@@ -77,6 +78,7 @@ export default function ConciliacionPage() {
         await api.treasury.reconcileBatch(ids)
       }
       toast({ title: t('toastReconciliationUpdated'), description: t('toastMovementsUpdated', { count: ids.length }) })
+      setFlashIds(new Set(ids)); setTimeout(() => setFlashIds(new Set()), 1000)
       setSelected(new Set())
       await Promise.all([mutateAccounts(), mutateReconciliation()])
     } catch (err: any) {
@@ -320,6 +322,7 @@ export default function ConciliacionPage() {
                           try {
                             await api.treasury.reconcileMovement(match.movementId)
                             setAcceptedMatches(prev => new Set(prev).add(match.movementId))
+                            setFlashIds(new Set([match.movementId])); setTimeout(() => setFlashIds(new Set()), 1000)
                             toast({ title: t('toastReconciled'), description: `${match.invoiceNumber} \u2194 ${match.movement.concept}` })
                             await Promise.all([mutateAccounts(), mutateReconciliation()])
                           } catch (err: any) { toast({ title: t('toastError'), description: err.message, variant: 'destructive' }) }
@@ -356,7 +359,7 @@ export default function ConciliacionPage() {
             <CardTitle>{t('recentMovements')}</CardTitle>
             <div className="flex items-center gap-2">
               {selected.size > 0 && (
-                <Button size="sm" onClick={() => handleReconcile([...selected])} loading={reconciling}>
+                <Button size="sm" className="animate-scale-pop" onClick={() => handleReconcile([...selected])} loading={reconciling}>
                   {!reconciling && <CheckCircle2 size={14} className="mr-1" />}
                   {reconciling ? t('processing') : t('reconcileSelected', { count: selected.size })}
                 </Button>
@@ -443,7 +446,7 @@ export default function ConciliacionPage() {
             <VirtualTableBody
               data={filteredMovements}
               getKey={(m: any) => m.id}
-              rowClassName={(m: any) => selected.has(m.id) ? 'bg-primary/5' : ''}
+              rowClassName={(m: any) => `${selected.has(m.id) ? 'bg-primary/5' : ''} ${flashIds.has(m.id) ? 'animate-flash-success' : ''}`.trim()}
               renderRow={(m: any) => (
                 <>
                   <td className="p-3">

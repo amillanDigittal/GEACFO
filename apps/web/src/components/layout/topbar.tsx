@@ -13,31 +13,55 @@ import { useSocket, RealtimeNotification } from '@/providers/socket-provider'
 import { setLocale } from '@/i18n/set-locale'
 import { type Locale, locales } from '@/i18n/config'
 
-const BREADCRUMBS: Record<string, { section: string; label: string }> = {
-  '/dashboard/cockpit': { section: '', label: 'Cockpit CFO' },
-  '/dashboard/forecast': { section: 'Tesorería', label: 'Forecast 13S' },
-  '/dashboard/conciliacion': { section: 'Tesorería', label: 'Conciliación' },
-  '/dashboard/cobros': { section: 'Tesorería', label: 'Cobros' },
-  '/dashboard/pagos': { section: 'Tesorería', label: 'Pagos' },
-  '/dashboard/cashflow': { section: 'Tesorería', label: 'Flujos' },
-  '/dashboard/vencimientos': { section: 'Tesorería', label: 'Vencimientos' },
-  '/dashboard/proyeccion-diaria': { section: 'Tesorería', label: 'Proyección Diaria' },
-  '/dashboard/scoring': { section: 'Riesgo', label: 'Scoring' },
-  '/dashboard/fraude': { section: 'Riesgo', label: 'Fraude' },
-  '/dashboard/deuda': { section: 'Deuda', label: 'Deuda & Covenants' },
-  '/dashboard/inventario': { section: 'Inventario', label: 'Inventario' },
-  '/dashboard/inventario-abc': { section: 'Inventario', label: 'Análisis ABC' },
-  '/dashboard/escenarios': { section: 'Planificación', label: 'Escenarios' },
-  '/dashboard/variance': { section: 'Planificación', label: 'Variance' },
-  '/dashboard/ratios': { section: 'Planificación', label: 'Ratios' },
-  '/dashboard/notificaciones': { section: 'Plataforma', label: 'Alertas' },
-  '/dashboard/usuarios': { section: 'Plataforma', label: 'Usuarios' },
-  '/dashboard/configuracion': { section: 'Plataforma', label: 'Configuración' },
-  '/dashboard/gobierno': { section: 'Plataforma', label: 'Gobierno' },
-  '/dashboard/auditoria': { section: 'Plataforma', label: 'Auditoría' },
-  '/dashboard/bot': { section: 'Plataforma', label: 'Bot CFO' },
-  '/dashboard/boardpack': { section: 'Plataforma', label: 'Board Pack' },
-  '/dashboard/reporting': { section: 'Plataforma', label: 'Reporting' },
+/** Maps each dashboard route to its i18n keys for section and label.
+ *  sectionKey references a nav section (e.g. 'treasury'), labelKey a nav item (e.g. 'forecast').
+ *  Both are resolved via useTranslations('nav') at render time. */
+const BREADCRUMBS: Record<string, { sectionKey: string; labelKey: string }> = {
+  '/dashboard/cockpit': { sectionKey: '', labelKey: 'cockpit' },
+  '/dashboard/resumen': { sectionKey: '', labelKey: 'resumen' },
+  '/dashboard/forecast': { sectionKey: 'treasury', labelKey: 'forecast' },
+  '/dashboard/conciliacion': { sectionKey: 'treasury', labelKey: 'conciliacion' },
+  '/dashboard/cobros': { sectionKey: 'treasury', labelKey: 'cobros' },
+  '/dashboard/pagos': { sectionKey: 'treasury', labelKey: 'pagos' },
+  '/dashboard/proveedores': { sectionKey: 'treasury', labelKey: 'proveedores' },
+  '/dashboard/cashflow': { sectionKey: 'treasury', labelKey: 'cashflow' },
+  '/dashboard/vencimientos': { sectionKey: 'treasury', labelKey: 'vencimientos' },
+  '/dashboard/proyeccion-diaria': { sectionKey: 'treasury', labelKey: 'proyeccionDiaria' },
+  '/dashboard/scoring': { sectionKey: 'risk', labelKey: 'scoring' },
+  '/dashboard/provisiones': { sectionKey: 'risk', labelKey: 'provisiones' },
+  '/dashboard/fraude': { sectionKey: 'risk', labelKey: 'fraude' },
+  '/dashboard/deuda': { sectionKey: 'debt', labelKey: 'deuda' },
+  '/dashboard/inventario': { sectionKey: 'inventory', labelKey: 'inventario' },
+  '/dashboard/inventario-abc': { sectionKey: 'inventory', labelKey: 'inventarioAbc' },
+  '/dashboard/presupuesto': { sectionKey: 'planning', labelKey: 'presupuesto' },
+  '/dashboard/escenarios': { sectionKey: 'planning', labelKey: 'escenarios' },
+  '/dashboard/variance': { sectionKey: 'planning', labelKey: 'variance' },
+  '/dashboard/ratios': { sectionKey: 'planning', labelKey: 'ratios' },
+  '/dashboard/notificaciones': { sectionKey: 'platform', labelKey: 'notificaciones' },
+  '/dashboard/usuarios': { sectionKey: 'platform', labelKey: 'usuarios' },
+  '/dashboard/configuracion': { sectionKey: 'platform', labelKey: 'configuracion' },
+  '/dashboard/importar': { sectionKey: 'platform', labelKey: 'importar' },
+  '/dashboard/gobierno': { sectionKey: 'platform', labelKey: 'gobierno' },
+  '/dashboard/auditoria': { sectionKey: 'platform', labelKey: 'auditoria' },
+  '/dashboard/bot': { sectionKey: 'platform', labelKey: 'bot' },
+  '/dashboard/boardpack': { sectionKey: 'platform', labelKey: 'boardpack' },
+  '/dashboard/reporting': { sectionKey: 'platform', labelKey: 'reporting' },
+}
+
+/** Resolve breadcrumb for the current pathname, with a dynamic fallback for unknown routes. */
+function getBreadcrumb(pathname: string, t: (key: string) => string): { section: string; label: string } {
+  const known = BREADCRUMBS[pathname]
+  if (known) {
+    return {
+      section: known.sectionKey ? t(known.sectionKey) : '',
+      label: t(known.labelKey),
+    }
+  }
+
+  // Dynamic fallback: derive label from last path segment
+  const segment = pathname.split('/').pop() || 'Dashboard'
+  const label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ')
+  return { section: 'Dashboard', label }
 }
 
 interface Notification {
@@ -67,6 +91,7 @@ export function Topbar({ session }: { session: any }) {
   const { theme, setTheme } = useTheme()
   const router = useRouter()
   const locale = useLocale() as Locale
+  const t = useTranslations('nav')
   // Defer client-only values to avoid SSR/client hydration mismatch
   const [mounted, setMounted] = useState(false)
   const [date, setDate] = useState('')
@@ -138,8 +163,7 @@ export function Topbar({ session }: { session: any }) {
           <Home size={14} />
         </Link>
         {(() => {
-          const crumb = BREADCRUMBS[pathname]
-          if (!crumb) return <><ChevronRight size={12} className="flex-shrink-0 opacity-40 breadcrumb-enter" /><span key={pathname} className="text-foreground font-medium truncate breadcrumb-enter">Dashboard</span></>
+          const crumb = getBreadcrumb(pathname, t)
           return (
             <>
               {crumb.section && (

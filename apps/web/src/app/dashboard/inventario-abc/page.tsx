@@ -12,6 +12,7 @@ import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonInventarioABC } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts'
 import { Download, Package, AlertTriangle, TrendingUp, ShoppingCart } from 'lucide-react'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 export default function AbcPage() {
   const t = useTranslations('inventarioAbc')
@@ -144,24 +145,26 @@ export default function AbcPage() {
         <Card>
           <CardHeader><CardTitle>{t('paretoChart')}</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={paretoData} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
-                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
-                <Tooltip
-                       
-                  formatter={(v: number, name: string) => [name === 'cumPct' ? `${v}%` : fmtEur(v), name === 'cumPct' ? t('tooltipCumPct') : t('tooltipValue')]}
-                />
-                <Bar yAxisId="left" dataKey="value" radius={[3, 3, 0, 0]}>
-                  {paretoData.map((entry: any, idx: number) => (
-                    <Cell key={idx} fill={ABC_CONFIG[entry.category]?.color || 'hsl(var(--muted))'} />
-                  ))}
-                </Bar>
-                <Line yAxisId="right" type="monotone" dataKey="cumPct" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart height={280}>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={paretoData} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
+                  <Tooltip
+
+                    formatter={(v: number, name: string) => [name === 'cumPct' ? `${v}%` : fmtEur(v), name === 'cumPct' ? t('tooltipCumPct') : t('tooltipValue')]}
+                  />
+                  <Bar yAxisId="left" dataKey="value" radius={[3, 3, 0, 0]}>
+                    {paretoData.map((entry: any, idx: number) => (
+                      <Cell key={idx} fill={ABC_CONFIG[entry.category]?.color || 'hsl(var(--muted))'} />
+                    ))}
+                  </Bar>
+                  <Line yAxisId="right" type="monotone" dataKey="cumPct" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </CardContent>
         </Card>
 
@@ -169,22 +172,24 @@ export default function AbcPage() {
         <Card>
           <CardHeader><CardTitle>{t('categoryDistribution')}</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={summaryBars} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => fmtEur(v)} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 14, fontWeight: 'bold', fill: 'hsl(var(--foreground))' }} width={30} />
-                <Tooltip
-                       
-                  formatter={(v: number) => [fmtEur(v), t('tooltipValue')]}
-                />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {summaryBars.map((entry, idx) => (
-                    <Cell key={idx} fill={ABC_CONFIG[entry.name]?.color || 'hsl(var(--muted))'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart height={280}>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={summaryBars} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => fmtEur(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 14, fontWeight: 'bold', fill: 'hsl(var(--foreground))' }} width={30} />
+                  <Tooltip
+
+                    formatter={(v: number) => [fmtEur(v), t('tooltipValue')]}
+                  />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {summaryBars.map((entry, idx) => (
+                      <Cell key={idx} fill={ABC_CONFIG[entry.name]?.color || 'hsl(var(--muted))'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
             <div className="mt-3 space-y-2">
               {summaryBars.map(b => (
                 <div key={b.name} className="flex items-center gap-3 text-xs">

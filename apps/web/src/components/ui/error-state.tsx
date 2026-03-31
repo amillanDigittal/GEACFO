@@ -22,7 +22,7 @@ export function ErrorState({
   compact,
 }: ErrorStateProps) {
   return (
-    <div className={cn(
+    <div role="alert" className={cn(
       'flex flex-col items-center justify-center text-center',
       compact ? 'py-8' : 'py-16',
       'animate-in fade-in duration-500',

@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
@@ -24,6 +24,7 @@ export default function ScoringPage() {
   const [recalculating, setRecalculating] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [page, setPage] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const { data: historyData, isLoading: historyLoading } = useCustomer(expandedId)
 
@@ -47,6 +48,10 @@ export default function ScoringPage() {
 
   const hydrated = useHydrated()
 
+  useEffect(() => {
+    if (customers.length > 0 && !loading) setLastUpdated(new Date())
+  }, [customers, loading])
+
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={8} rows={6} />
 
   return (
@@ -54,6 +59,7 @@ export default function ScoringPage() {
       <PageHeader
         title={t('title')}
         subtitle={t('subtitle')}
+        lastUpdated={lastUpdated}
         onRefresh={() => mutate()}
         actions={
           <Button variant="outline" size="sm" onClick={() => exportScoringPDF(customers)}><FileDown size={14} className="mr-1" />PDF</Button>

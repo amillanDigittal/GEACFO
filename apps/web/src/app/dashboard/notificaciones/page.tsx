@@ -2,7 +2,9 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
 import { useNotifications, useResolutions, usePredictive } from '@/hooks/use-api'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useUrlFilters } from '@/hooks/use-url-filters'
 import { exportCSV } from '@/lib/utils'
 import { PageHeader } from '@/components/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -80,10 +82,12 @@ export default function NotificacionesPage() {
   const loading = nLoading || rLoading || pLoading
   const lastUpdated = (!loading && (rawNotifications || rawResolutions || rawPredictive)) ? new Date() : null
 
-  const [search, setSearch] = useState('')
-  const [filterSeverity, setFilterSeverity] = useState<string>('ALL')
-  const [filterType, setFilterType] = useState<string>('ALL')
-  const [filterStatus, setFilterStatus] = useState<string>('ALL')
+  const { filters, setFilters, clearFilters } = useUrlFilters({
+    search: '',
+    severity: 'ALL',
+    type: 'ALL',
+    status: 'ALL',
+  })
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [noteInput, setNoteInput] = useState('')
@@ -96,6 +100,10 @@ export default function NotificacionesPage() {
     mutateResolutions()
     mutatePredictive()
   }
+
+  useKeyboardShortcuts([
+    { key: 'r', label: 'Actualizar datos', action: loadData },
+  ])
 
   const hydrated = useHydrated()
 
@@ -111,12 +119,12 @@ export default function NotificacionesPage() {
 
   // Filtered + searched notifications
   const filtered = notifications.filter(n => {
-    if (filterSeverity !== 'ALL' && n.severity !== filterSeverity) return false
-    if (filterType !== 'ALL' && n.type !== filterType) return false
+    if (filters.severity !== 'ALL' && n.severity !== filters.severity) return false
+    if (filters.type !== 'ALL' && n.type !== filters.type) return false
     const status = getStatus(n.id)
-    if (filterStatus !== 'ALL' && status !== filterStatus) return false
-    if (search) {
-      const q = search.toLowerCase()
+    if (filters.status !== 'ALL' && status !== filters.status) return false
+    if (filters.search) {
+      const q = filters.search.toLowerCase()
       if (!n.title.toLowerCase().includes(q) && !n.description.toLowerCase().includes(q)) return false
     }
     return true
@@ -270,8 +278,8 @@ export default function NotificacionesPage() {
             <div className="relative flex-1 min-w-[200px]">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(0) }}
+                value={filters.search}
+                onChange={e => { setFilters({ search: e.target.value }); setPage(0) }}
                 placeholder={t('searchPlaceholder')}
                 className="pl-8 h-8 text-xs"
               />
@@ -283,8 +291,8 @@ export default function NotificacionesPage() {
               {['ALL', 'critical', 'warning', 'info'].map(s => (
                 <button
                   key={s}
-                  onClick={() => { setFilterSeverity(s); setPage(0) }}
-                  className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${filterSeverity === s ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => { setFilters({ severity: s }); setPage(0) }}
+                  className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${filters.severity === s ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
                   {s === 'ALL' ? t('filterAll') : SEVERITY_CONFIG[s]?.label}
                 </button>
@@ -293,8 +301,8 @@ export default function NotificacionesPage() {
 
             {/* Type filter */}
             <Select
-              value={filterType}
-              onChange={e => { setFilterType(e.target.value); setPage(0) }}
+              value={filters.type}
+              onChange={e => { setFilters({ type: e.target.value }); setPage(0) }}
               className="h-8 text-xs"
             >
               <option value="ALL">{t('filterAllTypes')}</option>
@@ -303,8 +311,8 @@ export default function NotificacionesPage() {
 
             {/* Status filter */}
             <Select
-              value={filterStatus}
-              onChange={e => { setFilterStatus(e.target.value); setPage(0) }}
+              value={filters.status}
+              onChange={e => { setFilters({ status: e.target.value }); setPage(0) }}
               className="h-8 text-xs"
             >
               <option value="ALL">{t('filterAllStatuses')}</option>

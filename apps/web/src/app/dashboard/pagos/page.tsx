@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { fmtEur, exportCSV } from '@/lib/utils'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useUrlFilters } from '@/hooks/use-url-filters'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,7 @@ import { exportXLSX } from '@/lib/export-xlsx'
 import { VirtualTableBody } from '@/components/ui/virtual-table'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { MobileCardView } from '@/components/ui/mobile-card-view'
 import { useTranslations } from 'next-intl'
 
 function daysUntil(dateStr: string) {
@@ -43,19 +45,23 @@ export default function PagosPage() {
     LOW: { label: t('priorityLow'), variant: 'secondary' },
   }
 
+  const { filters, setFilters, clearFilters } = useUrlFilters({
+    search: '',
+    status: 'ALL',
+    priority: 'ALL',
+    supplier: 'ALL',
+    dueFrom: '',
+    dueTo: '',
+  })
+
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string>('ALL')
-  const [filterPriority, setFilterPriority] = useState('ALL')
-  const [filterSupplier, setFilterSupplier] = useState('ALL')
-  const [filterDueFrom, setFilterDueFrom] = useState('')
-  const [filterDueTo, setFilterDueTo] = useState('')
-  const [searchText, setSearchText] = useState('')
   const [sortBy, setSortBy] = useState<'dueDate' | 'totalAmount'>('dueDate')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [approving, setApproving] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [flashId, setFlashId] = useState<string | null>(null)
   const [prevInvoices, setPrevInvoices] = useState<any[] | null>(null)
   const [periodLabel, setPeriodLabel] = useState<{ current: string; previous: string } | null>(null)
   const [dateFrom, setDateFrom] = useState<string | undefined>()
@@ -110,15 +116,15 @@ export default function PagosPage() {
 
   const filtered = invoices
     .filter((i: any) => {
-      if (filter !== 'ALL' && i.status !== filter) return false
-      if (filterPriority !== 'ALL' && i.priority !== filterPriority) return false
-      if (searchText) {
-        const q = searchText.toLowerCase()
+      if (filters.status !== 'ALL' && i.status !== filters.status) return false
+      if (filters.priority !== 'ALL' && i.priority !== filters.priority) return false
+      if (filters.search) {
+        const q = filters.search.toLowerCase()
         if (!i.number.toLowerCase().includes(q) && !i.supplier?.name?.toLowerCase().includes(q)) return false
       }
-      if (filterSupplier !== 'ALL' && i.supplier?.id !== filterSupplier) return false
-      if (filterDueFrom && i.dueDate < filterDueFrom) return false
-      if (filterDueTo && i.dueDate > filterDueTo) return false
+      if (filters.supplier !== 'ALL' && i.supplier?.id !== filters.supplier) return false
+      if (filters.dueFrom && i.dueDate < filters.dueFrom) return false
+      if (filters.dueTo && i.dueDate > filters.dueTo) return false
       return true
     })
     .sort((a: any, b: any) => {
@@ -130,7 +136,7 @@ export default function PagosPage() {
     })
 
   const supplierOptions = Array.from(new Map(invoices.map((i: any) => [i.supplier?.id, { key: i.supplier?.id, label: i.supplier?.name }])).values()).filter(o => o.key)
-  const pagosFilterCount = [filter !== 'ALL', filterPriority !== 'ALL', filterSupplier !== 'ALL', !!filterDueFrom, !!filterDueTo].filter(Boolean).length
+  const pagosFilterCount = [filters.status !== 'ALL', filters.priority !== 'ALL', filters.supplier !== 'ALL', !!filters.dueFrom, !!filters.dueTo].filter(Boolean).length
 
   const totalPending = invoices.reduce((s, i) => s + Number(i.totalAmount) - Number(i.paidAmount), 0)
   const dueThisWeek = invoices.filter(i => { const d = daysUntil(i.dueDate); return d >= 0 && d <= 7 })
@@ -196,6 +202,7 @@ export default function PagosPage() {
     try {
       await api.treasury.approveAP(id)
       toast({ title: t('toastApprovedTitle'), description: t('toastApprovedDesc', { count: 1 }), variant: 'success' })
+      setFlashId(id); setTimeout(() => setFlashId(null), 1000)
       setSelected(prev => { const next = new Set(prev); next.delete(id); return next })
       const updated = await api.treasury.ap()
       setInvoices(updated)
@@ -361,13 +368,34 @@ export default function PagosPage() {
       {/* Descuento por pronto pago */}
       <DiscountCalculator invoices={invoices} />
 
-      {/* Invoice table */}
-      <Card>
+      {/* Invoice cards (mobile) */}
+      <MobileCardView
+        data={filtered.slice(0, 50)}
+        renderCard={(inv: any) => {
+          const stCfg = statusConfig[inv.status] || statusConfig.IN_REVIEW
+          const priCfg = priorityConfig[inv.priority] || priorityConfig.NORMAL
+          const days = daysUntil(inv.dueDate)
+          return {
+            title: inv.number,
+            subtitle: inv.supplier?.name,
+            badge: { label: stCfg.label, variant: stCfg.variant },
+            fields: [
+              { label: t('thDueDate'), value: fmtDate(inv.dueDate) },
+              { label: t('thTotal'), value: fmtEur(Number(inv.totalAmount)), highlight: true },
+              { label: t('thPriority'), value: priCfg.label },
+              { label: t('thTerm'), value: days < 0 ? `${Math.abs(days)}d ${t('daysOverdue', { days: Math.abs(days) }).split(' ').pop()}` : `${days}d` },
+            ],
+          }
+        }}
+      />
+
+      {/* Invoice table (desktop) */}
+      <Card className="hidden sm:block">
         <CardHeader>
           <div className="flex items-center gap-3">
             <CardTitle>{t('invoiceDetailTitle')}</CardTitle>
             {selected.size > 0 && (
-              <Button size="sm" onClick={handleApproveBatch} loading={approving}>
+              <Button size="sm" className="animate-scale-pop" onClick={handleApproveBatch} loading={approving}>
                 {!approving && <CheckCircle2 size={14} className="mr-1" />}
                 {approving ? t('approving') : t('approveCount', { count: selected.size })}
               </Button>
@@ -376,8 +404,8 @@ export default function PagosPage() {
         </CardHeader>
         <CardContent className="pt-0 space-y-3">
           <TableFilters
-            search={searchText}
-            onSearchChange={setSearchText}
+            search={filters.search}
+            onSearchChange={v => setFilters({ search: v })}
             searchPlaceholder={t('searchPlaceholder')}
             statusOptions={[
               { key: 'ALL', label: t('filterAllStatuses') },
@@ -386,26 +414,26 @@ export default function PagosPage() {
               { key: 'PAID', label: t('filterPaid') },
               { key: 'REJECTED', label: t('filterRejected') },
             ]}
-            status={filter}
-            onStatusChange={setFilter}
+            status={filters.status}
+            onStatusChange={v => setFilters({ status: v })}
             priorityOptions={[
               { key: 'ALL', label: t('filterAllPriorities') },
               { key: 'HIGH', label: t('priorityHigh') },
               { key: 'NORMAL', label: t('priorityNormal') },
               { key: 'LOW', label: t('priorityLow') },
             ]}
-            priority={filterPriority}
-            onPriorityChange={setFilterPriority}
+            priority={filters.priority}
+            onPriorityChange={v => setFilters({ priority: v })}
             entityLabel={t('filterSupplierLabel')}
             entityOptions={supplierOptions}
-            entity={filterSupplier}
-            onEntityChange={setFilterSupplier}
-            dueDateFrom={filterDueFrom}
-            dueDateTo={filterDueTo}
-            onDueDateFromChange={setFilterDueFrom}
-            onDueDateToChange={setFilterDueTo}
+            entity={filters.supplier}
+            onEntityChange={v => setFilters({ supplier: v })}
+            dueDateFrom={filters.dueFrom}
+            dueDateTo={filters.dueTo}
+            onDueDateFromChange={v => setFilters({ dueFrom: v })}
+            onDueDateToChange={v => setFilters({ dueTo: v })}
             activeCount={pagosFilterCount}
-            onClearAll={() => { setFilter('ALL'); setFilterPriority('ALL'); setSearchText(''); setFilterSupplier('ALL'); setFilterDueFrom(''); setFilterDueTo('') }}
+            onClearAll={clearFilters}
           />
         </CardContent>
         <ScrollableTable label={t('invoiceDetailTableLabel')}>
@@ -441,7 +469,9 @@ export default function PagosPage() {
           getKey={(inv: any) => inv.id}
           rowClassName={(inv: any) => {
             const days = daysUntil(inv.dueDate)
-            return selected.has(inv.id) ? 'bg-primary/5' : days < 0 ? 'bg-destructive/5' : days <= 3 && days >= 0 ? 'bg-warning/5' : ''
+            const flash = flashId === inv.id ? 'animate-flash-success' : ''
+            const bg = selected.has(inv.id) ? 'bg-primary/5' : days < 0 ? 'bg-destructive/5' : days <= 3 && days >= 0 ? 'bg-warning/5' : ''
+            return `${bg} ${flash}`.trim()
           }}
           renderRow={(inv: any) => {
             const stCfg = statusConfig[inv.status] || statusConfig.IN_REVIEW

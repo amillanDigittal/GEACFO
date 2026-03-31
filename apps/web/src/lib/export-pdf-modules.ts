@@ -312,3 +312,130 @@ export function exportCashFlowPDF(data: any) {
   h.footer()
   doc.save(`cash_flow_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
+
+// ─── RATIOS ──────────────────────────────────────────────────────────────
+export function exportRatiosPDF(ratios: any[]) {
+  const { doc, helpers: h } = createDoc('Ratios Financieros', 'Análisis de ratios clave')
+
+  const healthy = ratios.filter(r => r.status === 'HEALTHY' || r.status === 'OK' || r.status === 'GOOD').length
+  const warning = ratios.filter(r => r.status === 'WARNING').length
+  const critical = ratios.filter(r => r.status === 'CRITICAL' || r.status === 'DANGER').length
+
+  h.kpiRow([
+    { label: 'Total Ratios', value: String(ratios.length) },
+    { label: 'Saludables', value: String(healthy), color: SUCCESS },
+    { label: 'En Alerta', value: String(warning), color: warning > 0 ? WARNING : SUCCESS },
+    { label: 'Críticos', value: String(critical), color: critical > 0 ? DESTRUCTIVE : SUCCESS },
+  ])
+
+  h.sectionTitle('Ratios de Liquidez y Rentabilidad')
+
+  const statusLabels: Record<string, string> = {
+    HEALTHY: 'Saludable', OK: 'OK', GOOD: 'Bueno', WARNING: 'Alerta', CRITICAL: 'Crítico', DANGER: 'Peligro',
+  }
+
+  h.table(
+    ['Ratio', 'Valor', 'Objetivo', 'Estado'],
+    ratios.map((r: any) => [
+      r.name || '—',
+      r.value != null ? String(r.value) : '—',
+      r.target != null ? String(r.target) : '—',
+      statusLabels[r.status] || r.status || '—',
+    ]),
+  )
+
+  h.footer()
+  doc.save(`ratios_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+// ─── ESCENARIOS ──────────────────────────────────────────────────────────
+export function exportEscenariosPDF(scenarios: any[]) {
+  const { doc, helpers: h } = createDoc('Análisis de Escenarios', 'Comparación de escenarios financieros')
+
+  h.kpiRow([
+    { label: 'Escenarios Analizados', value: String(scenarios.length) },
+  ])
+
+  h.sectionTitle('Escenarios')
+
+  h.table(
+    ['Escenario', 'Ingresos', 'EBITDA', 'Cash Flow', 'Probabilidad'],
+    scenarios.map((s: any) => [
+      s.name || '—',
+      s.revenue != null ? fmtEur(Number(s.revenue)) : '—',
+      s.ebitda != null ? fmtEur(Number(s.ebitda)) : '—',
+      s.cashflow != null ? fmtEur(Number(s.cashflow)) : '—',
+      s.probability != null ? fmtPct(Number(s.probability)) : '—',
+    ]),
+  )
+
+  h.footer()
+  doc.save(`escenarios_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+// ─── CONCILIACIÓN ────────────────────────────────────────────────────────
+export function exportConciliacionPDF(movements: any[]) {
+  const { doc, helpers: h } = createDoc('Conciliación Bancaria', 'Estado de conciliación de movimientos')
+
+  const reconciled = movements.filter(m => m.reconciled).length
+  const pending = movements.length - reconciled
+  const totalAmount = movements.reduce((s: number, m: any) => s + Math.abs(Number(m.amount || 0)), 0)
+
+  h.kpiRow([
+    { label: 'Total Movimientos', value: String(movements.length) },
+    { label: 'Conciliados', value: String(reconciled), color: SUCCESS },
+    { label: 'Pendientes', value: String(pending), color: pending > 0 ? WARNING : SUCCESS },
+    { label: 'Volumen Total', value: fmtEur(totalAmount) },
+  ])
+
+  h.sectionTitle('Movimientos')
+
+  h.table(
+    ['Fecha', 'Concepto', 'Importe', 'Cuenta', 'Estado'],
+    movements.map((m: any) => [
+      m.date ? new Date(m.date).toLocaleDateString('es-ES') : '—',
+      m.concept || m.description || '—',
+      m.amount != null ? `${Number(m.amount).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €` : '—',
+      m.account || '—',
+      m.reconciled ? 'Conciliado' : 'Pendiente',
+    ]),
+  )
+
+  h.footer()
+  doc.save(`conciliacion_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+// ─── INVENTARIO ──────────────────────────────────────────────────────────
+export function exportInventarioPDF(items: any[]) {
+  const { doc, helpers: h } = createDoc('Inventario', 'Estado actual del inventario')
+
+  const totalItems = items.length
+  const totalValue = items.reduce((s: number, i: any) => s + Number(i.totalValue || (i.quantity || 0) * (i.unitCost || 0) || 0), 0)
+  const lowStock = items.filter(i => i.lowStock || (i.quantity != null && i.minStock != null && i.quantity <= i.minStock)).length
+
+  h.kpiRow([
+    { label: 'Artículos', value: String(totalItems) },
+    { label: 'Valor Total', value: fmtEur(totalValue) },
+    { label: 'Stock Bajo', value: String(lowStock), color: lowStock > 0 ? WARNING : SUCCESS },
+  ])
+
+  h.sectionTitle('Artículos')
+
+  h.table(
+    ['SKU', 'Nombre', 'Stock', 'Coste Unitario', 'Valor Total', 'Categoría'],
+    items.map((i: any) => {
+      const value = i.totalValue != null ? Number(i.totalValue) : (i.quantity || 0) * (i.unitCost || 0)
+      return [
+        i.sku || '—',
+        i.name || '—',
+        i.quantity != null ? String(i.quantity) : '—',
+        i.unitCost != null ? `${Number(i.unitCost).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €` : '—',
+        value ? `${value.toLocaleString('es-ES', { minimumFractionDigits: 2 })} €` : '—',
+        i.category || '—',
+      ]
+    }),
+  )
+
+  h.footer()
+  doc.save(`inventario_${new Date().toISOString().slice(0, 10)}.pdf`)
+}

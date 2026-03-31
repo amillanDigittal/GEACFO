@@ -109,14 +109,14 @@ export function DateRangeSelector({ onChange, compare = true }: Props) {
           <div className="absolute right-0 top-9 w-72 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
             {/* Presets */}
             <div className="p-2 space-y-0.5">
-              <button onClick={handleReset} className="w-full text-left px-3 py-2 rounded-lg text-xs hover:bg-muted transition-colors text-muted-foreground">
+              <button onClick={handleReset} className="w-full text-left px-3 py-2 min-h-[44px] rounded-lg text-xs hover:bg-muted transition-colors text-muted-foreground touch-manipulation">
                 Todo el periodo (sin filtro)
               </button>
               {presets.map(p => (
                 <button
                   key={p.label}
                   onClick={() => handlePreset(p)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${selected === p.label ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-foreground'}`}
+                  className={`w-full text-left px-3 py-2 min-h-[44px] rounded-lg text-xs transition-colors touch-manipulation ${selected === p.label ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-foreground'}`}
                 >
                   <div className="font-medium">{p.label}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -130,10 +130,10 @@ export function DateRangeSelector({ onChange, compare = true }: Props) {
             <div className="border-t border-border p-3 space-y-2">
               <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Rango personalizado</div>
               <div className="flex gap-2">
-                <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="flex-1 h-7 rounded border border-border bg-background px-2 text-[11px]" />
-                <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="flex-1 h-7 rounded border border-border bg-background px-2 text-[11px]" />
+                <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="flex-1 h-9 sm:h-8 rounded border border-border bg-background px-2 text-base sm:text-sm touch-manipulation" />
+                <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="flex-1 h-9 sm:h-8 rounded border border-border bg-background px-2 text-base sm:text-sm touch-manipulation" />
               </div>
-              <Button size="sm" className="w-full h-7 text-xs" onClick={handleCustom} disabled={!customFrom || !customTo}>
+              <Button size="sm" className="w-full min-h-[44px] sm:h-8 text-xs touch-manipulation" onClick={handleCustom} disabled={!customFrom || !customTo}>
                 Aplicar
               </Button>
             </div>

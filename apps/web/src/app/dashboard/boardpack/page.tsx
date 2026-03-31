@@ -10,6 +10,7 @@ import { BarChart3, Droplets, RefreshCw, CreditCard, AlertTriangle, FileDown, Do
 import { exportBoardPackPDF } from '@/lib/export-pdf'
 import dynamic from 'next/dynamic'
 import { SkeletonBoardPack } from '@/components/ui/skeleton-page'
+import { ErrorState } from '@/components/ui/error-state'
 import { useTranslations } from 'next-intl'
 
 const ExecutiveSummary = dynamic(() => import('./_components/executive-summary').then(m => ({ default: m.ExecutiveSummary })), { ssr: false })
@@ -52,7 +53,7 @@ export default function BoardPackPage() {
   const hydrated = useHydrated()
 
   if (!hydrated || loading) return <SkeletonBoardPack />
-  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}</div>
+  if (!data) return <ErrorState title={t('errorLoading')} onRetry={() => fetchData()} />
 
   const { sections, generatedAt } = data
   const prev = data.previous?.sections

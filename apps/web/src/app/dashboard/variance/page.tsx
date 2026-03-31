@@ -13,6 +13,8 @@ import { SkeletonVariance } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
+import { ErrorState } from '@/components/ui/error-state'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 function varianceAbs(actual: number, ref: number) { return actual - ref }
 function variancePct(actual: number, ref: number) { return ref !== 0 ? ((actual - ref) / Math.abs(ref)) * 100 : 0 }
@@ -47,7 +49,7 @@ export default function VariancePage() {
   const hydrated = useHydrated()
 
   if (!hydrated || loading) return <SkeletonVariance />
-  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}</div>
+  if (!data) return <ErrorState title={t('errorLoading')} onRetry={() => fetchData()} />
 
   const { categories, actual, budget, prevYear } = data
   const ref = compareMode === 'budget' ? budget : prevYear
@@ -152,17 +154,19 @@ export default function VariancePage() {
         <Card>
           <CardHeader><CardTitle>{t('chartActualVsRef', { ref: refLabel })}</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
-                <Tooltip formatter={(v: any) => fmtEur(Number(v) * 1000)} />
-                <Legend />
-                <Bar dataKey="Actual" fill="hsl(var(--primary))" fillOpacity={0.85} radius={[3, 3, 0, 0]} />
-                <Bar dataKey={refLabel} fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart height={300}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
+                  <Tooltip formatter={(v: any) => fmtEur(Number(v) * 1000)} />
+                  <Legend />
+                  <Bar dataKey="Actual" fill="hsl(var(--primary))" fillOpacity={0.85} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey={refLabel} fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </CardContent>
         </Card>
 
@@ -170,19 +174,21 @@ export default function VariancePage() {
         <Card>
           <CardHeader><CardTitle>{t('chartVarianceVsRef', { ref: refLabel })}</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={waterfallData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
-                <Tooltip formatter={(v: any) => [`${Number(v) > 0 ? '+' : ''}${fmtEur(Number(v) * 1000)}`, t('varianceLabel')]} />
-                <Bar dataKey="varianza" radius={[3, 3, 0, 0]}>
-                  {waterfallData.map((entry: any, index: number) => (
-                    <Cell key={index} fill={entry.fill} fillOpacity={0.75} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart height={300}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={waterfallData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} angle={-20} textAnchor="end" height={50} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
+                  <Tooltip formatter={(v: any) => [`${Number(v) > 0 ? '+' : ''}${fmtEur(Number(v) * 1000)}`, t('varianceLabel')]} />
+                  <Bar dataKey="varianza" radius={[3, 3, 0, 0]}>
+                    {waterfallData.map((entry: any, index: number) => (
+                      <Cell key={index} fill={entry.fill} fillOpacity={0.75} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </CardContent>
         </Card>
       </div>

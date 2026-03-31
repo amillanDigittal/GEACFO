@@ -38,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Topbar session={session} />
           <ScrollProgress />
           <ScrollElevation />
-          <div className="relative z-[1] p-3 md:p-6 pb-20 md:pb-6">
+          <div className="relative z-[1] p-4 sm:p-6 pb-20 sm:pb-6">
             <PageTransition>{children}</PageTransition>
           </div>
         </main>

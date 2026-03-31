@@ -1,7 +1,10 @@
 'use client'
 import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Printer, Check } from 'lucide-react'
+import { RefreshCw, Printer, Check, Star } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { useAppStore } from '@/store/app'
+import { useTranslations } from 'next-intl'
 
 interface PageHeaderProps {
   title: string
@@ -11,20 +14,23 @@ interface PageHeaderProps {
   actions?: React.ReactNode
 }
 
-function fmtTime(d: Date) {
-  const now = new Date()
-  const diffS = Math.floor((now.getTime() - d.getTime()) / 1000)
-  if (diffS < 10) return 'Ahora'
-  if (diffS < 60) return `Hace ${diffS}s`
-  const diffM = Math.floor(diffS / 60)
-  if (diffM < 60) return `Hace ${diffM} min`
-  return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-}
-
 export function PageHeader({ title, subtitle, lastUpdated, onRefresh, actions }: PageHeaderProps) {
   const [refreshing, setRefreshing] = useState(false)
   const [done, setDone] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
+  const { favorites, toggleFavorite } = useAppStore()
+  const tc = useTranslations('common')
+
+  function fmtTime(d: Date) {
+    const now = new Date()
+    const diffS = Math.floor((now.getTime() - d.getTime()) / 1000)
+    if (diffS < 10) return tc('timeNow')
+    if (diffS < 60) return tc('timeSecsAgo', { secs: diffS })
+    const diffM = Math.floor(diffS / 60)
+    if (diffM < 60) return tc('timeMinsAgo', { mins: diffM })
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  }
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -48,7 +54,7 @@ export function PageHeader({ title, subtitle, lastUpdated, onRefresh, actions }:
       <div>
         <h1 className="page-title">{title}</h1>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          {subtitle && <p className="text-xs md:text-sm text-muted-foreground">{subtitle}</p>}
+          {subtitle && <p className="text-xs sm:text-sm text-muted-foreground">{subtitle}</p>}
           {lastUpdated && (
             <>
               {subtitle && <span className="text-muted-foreground text-sm">·</span>}
@@ -59,7 +65,15 @@ export function PageHeader({ title, subtitle, lastUpdated, onRefresh, actions }:
       </div>
       <div className="flex items-center gap-2 print-hide">
         {actions}
-        <Button variant="outline" size="sm" onClick={() => window.print()} title="Imprimir página">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => toggleFavorite(pathname)}
+          aria-label={favorites.includes(pathname) ? tc('removeFavorite') : tc('addFavorite')}
+        >
+          <Star size={15} className={favorites.includes(pathname) ? 'fill-[hsl(var(--gold))] text-[hsl(var(--gold))]' : ''} />
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => window.print()} aria-label={tc('printPage')}>
           <Printer size={14} />
         </Button>
         <Button
@@ -72,12 +86,12 @@ export function PageHeader({ title, subtitle, lastUpdated, onRefresh, actions }:
           {done ? (
             <>
               <Check size={14} className="mr-1" />
-              Actualizado
+              {tc('updated')}
             </>
           ) : (
             <>
               <RefreshCw size={14} className={`mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Actualizando…' : 'Actualizar'}
+              {refreshing ? tc('updating') : tc('refresh')}
             </>
           )}
         </Button>

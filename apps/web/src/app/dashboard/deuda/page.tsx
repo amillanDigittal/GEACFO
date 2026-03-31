@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useDebtSummary, useAmortization } from '@/hooks/use-api'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
-import { fmtEur, fmt, fmtPct } from '@/lib/utils'
+import { fmtEur, fmt, fmtPct, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,11 +14,12 @@ import { CheckCircle2, AlertTriangle, Clock, Calculator, TrendingDown, TrendingU
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { ScrollableTable } from '@/components/ui/scrollable-table'
+import { ScrollableTable, Th } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { SkeletonDeuda } from '@/components/ui/skeleton-page'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 const DEBT_TYPES = ['SYNDICATED_LOAN', 'CREDIT_LINE', 'LEASING', 'BOND', 'FACTORING', 'OTHER']
 
@@ -57,6 +59,18 @@ export default function DeudaPage() {
     mutateSummary()
     mutateAmort()
   }
+
+  const exportCsv = useCallback(() => {
+    const instruments = data?.instruments || []
+    exportCSV('deuda_instrumentos',
+      [t('thInstrument'), t('thEntity'), t('thOutstanding'), t('thRate'), t('thMaturity')],
+      instruments.map((d: any) => [d.type, d.bank, Number(d.outstanding), Number(d.interestRate) * 100, String(d.maturityDate).slice(0, 10)]))
+  }, [data, t])
+
+  useKeyboardShortcuts([
+    { key: 'e', label: 'Exportar CSV', action: exportCsv },
+    { key: 'r', label: 'Actualizar datos', action: refresh },
+  ])
 
   const hydrated = useHydrated()
 
@@ -176,31 +190,33 @@ export default function DeudaPage() {
           <CardHeader><CardTitle>{t('amortizationTitle')}</CardTitle></CardHeader>
           <CardContent>
             {amort?.schedule ? (
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={amort.schedule.filter((_: any, i: number) => i % 2 === 0)} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} interval={2} />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
-                  <Tooltip
-                       
-                    formatter={(value: number, name: string) => {
-                      const inst = amort.instruments?.find((i: any) => i.id === name)
-                      const label = inst ? `${DEBT_LABELS[inst.type] || inst.type} (${inst.bank})` : name
-                      return [fmtEur(value), label]
-                    }}
-                  />
-                  <Legend
-                    formatter={(value: string) => {
-                      const inst = amort.instruments?.find((i: any) => i.id === value)
-                      return inst ? `${DEBT_LABELS[inst.type] || inst.type}` : value
-                    }}
-                    wrapperStyle={{ fontSize: 11 }}
-                  />
-                  {amort.instruments?.map((inst: any, idx: number) => (
-                    <Bar key={inst.id} dataKey={inst.id} stackId="amort" fill={COLORS[idx % COLORS.length]} radius={idx === amort.instruments.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+              <LazyChart height={320}>
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={amort.schedule.filter((_: any, i: number) => i % 2 === 0)} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} interval={2} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+                    <Tooltip
+
+                      formatter={(value: number, name: string) => {
+                        const inst = amort.instruments?.find((i: any) => i.id === name)
+                        const label = inst ? `${DEBT_LABELS[inst.type] || inst.type} (${inst.bank})` : name
+                        return [fmtEur(value), label]
+                      }}
+                    />
+                    <Legend
+                      formatter={(value: string) => {
+                        const inst = amort.instruments?.find((i: any) => i.id === value)
+                        return inst ? `${DEBT_LABELS[inst.type] || inst.type}` : value
+                      }}
+                      wrapperStyle={{ fontSize: 11 }}
+                    />
+                    {amort.instruments?.map((inst: any, idx: number) => (
+                      <Bar key={inst.id} dataKey={inst.id} stackId="amort" fill={COLORS[idx % COLORS.length]} radius={idx === amort.instruments.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </LazyChart>
             ) : (
               <div className="h-[320px] flex items-center justify-center text-muted-foreground text-sm">{t('loading')}</div>
             )}
@@ -278,7 +294,14 @@ export default function DeudaPage() {
           <CardHeader><CardTitle>{t('instrumentsTitle')}</CardTitle></CardHeader>
           <ScrollableTable>
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-border">{[t('thInstrument'), t('thEntity'), t('thOutstanding'), t('thRate'), t('thMaturity'), ''].map(h => <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-border">
+                <Th>{t('thInstrument')}</Th>
+                <Th>{t('thEntity')}</Th>
+                <Th tooltip="Saldo vivo pendiente de amortizar">{t('thOutstanding')}</Th>
+                <Th tooltip="Tasa de interés anual del instrumento (TIR — Tasa Interna de Retorno)">{t('thRate')}</Th>
+                <Th tooltip="Fecha de vencimiento del instrumento de deuda">{t('thMaturity')}</Th>
+                <Th>{''}</Th>
+              </tr></thead>
               <tbody>
                 {instruments.map((d: any) => (
                   <tr key={d.id} className="border-b border-border hover:bg-muted/50">
@@ -453,19 +476,21 @@ export default function DeudaPage() {
               {/* Amortization comparison chart */}
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t('simPaymentComparison')}</div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={sim.schedule.slice(0, 24)} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} interval={3} />
-                    <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
-                    <Tooltip
-                       
-                      formatter={(v: number, name: string) => [fmtEur(v), name === 'original' ? t('simCurrent') : t('simRefinanced')]}
-                    />
-                    <Bar dataKey="original" fill="hsl(var(--muted-foreground))" opacity={0.4} radius={[2, 2, 0, 0]} name="original" />
-                    <Bar dataKey="refinanciado" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} name="refinanciado" />
-                  </BarChart>
-                </ResponsiveContainer>
+                <LazyChart height={180}>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={sim.schedule.slice(0, 24)} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" tick={{ fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} interval={3} />
+                      <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+                      <Tooltip
+
+                        formatter={(v: number, name: string) => [fmtEur(v), name === 'original' ? t('simCurrent') : t('simRefinanced')]}
+                      />
+                      <Bar dataKey="original" fill="hsl(var(--muted-foreground))" opacity={0.4} radius={[2, 2, 0, 0]} name="original" />
+                      <Bar dataKey="refinanciado" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} name="refinanciado" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </LazyChart>
               </div>
 
               {/* Insight */}

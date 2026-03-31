@@ -14,6 +14,7 @@ import { KpiBox } from '@/components/kpi-box'
 import { SkeletonPresupuesto } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const CATEGORIES = ['Revenue', 'COGS', 'Gastos Personal', 'Marketing', 'Otros Gastos', 'Amortización']
@@ -264,28 +265,31 @@ export default function PresupuestoPage() {
             <Card>
               <CardHeader><CardTitle>{t('revenueBudgetVsActual', { year })}</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                    <Tooltip
-                      formatter={(v: any, name: string) => [v != null ? fmtEur(v) : '—', name === 'presupuesto' ? t('legendBudget') : t('legendActual')]}
-                       
-                    />
-                    <Legend formatter={(value: string) => value === 'presupuesto' ? t('legendBudget') : t('legendActual')} />
-                    <Bar dataKey="presupuesto" fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="real" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <LazyChart height={280}>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                      <Tooltip
+                        formatter={(v: any, name: string) => [v != null ? fmtEur(v) : '—', name === 'presupuesto' ? t('legendBudget') : t('legendActual')]}
+
+                      />
+                      <Legend formatter={(value: string) => value === 'presupuesto' ? t('legendBudget') : t('legendActual')} />
+                      <Bar dataKey="presupuesto" fill="hsl(var(--muted-foreground))" fillOpacity={0.4} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="real" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </LazyChart>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader><CardTitle>{t('monthlyBudgetedEbitda')}</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={Array.from({ length: 12 }, (_, i) => {
+                <LazyChart height={280}>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={Array.from({ length: 12 }, (_, i) => {
                     const m = i + 1
                     const rev = grid['Revenue']?.[m] || 0
                     const costs = CATEGORIES.filter(c => COST_CATS.has(c)).reduce((s, c) => s + (grid[c]?.[m] || 0), 0)
@@ -307,8 +311,9 @@ export default function PresupuestoPage() {
                         return <rect key={i} fill={ebitda >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))'} />
                       })}
                     </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </LazyChart>
               </CardContent>
             </Card>
           </div>

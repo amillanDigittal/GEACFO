@@ -9,12 +9,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RefreshCw, Plus, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
-import { EmptyState } from '@/components/ui/empty-state'
+import { VirtualTableBody } from '@/components/ui/virtual-table'
 import { PageHeader } from '@/components/page-header'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { KpiBox } from '@/components/kpi-box'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Activo', ON_WATCH: 'En Observación', SUSPENDED: 'Suspendido', INACTIVE: 'Inactivo' }
 const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'destructive' | 'secondary'> = { ACTIVE: 'success', ON_WATCH: 'warning', SUSPENDED: 'destructive', INACTIVE: 'secondary' }
@@ -42,7 +43,6 @@ export default function ProveedoresPage() {
   const [creating, setCreating] = useState(false)
   const [recalculating, setRecalculating] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
 
   const { data: detail } = useSupplier(expandedId)
 
@@ -103,8 +103,6 @@ export default function ProveedoresPage() {
     ? Math.round(suppliers.filter(s => s.overallScore).reduce((s, sup) => s + sup.overallScore, 0) / suppliers.filter(s => s.overallScore).length)
     : 0
   const atRisk = suppliers.filter(s => s.riskLevel === 'HIGH' || s.riskLevel === 'CRITICAL').length
-  const pageSize = 10
-  const totalPages = Math.ceil(suppliers.length / pageSize)
 
   // Chart: top 10 by volume
   const top10 = [...suppliers].sort((a, b) => b.totalVolume - a.totalVolume).slice(0, 10)
@@ -185,15 +183,17 @@ export default function ProveedoresPage() {
         <Card>
           <CardHeader><CardTitle>{t('top10ByVolume')}</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} width={115} />
-                <Tooltip formatter={(v: any) => [fmtEur(v), t('volumeLabel')]} />
-                <Bar dataKey="volumen" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart height={280}>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} width={115} />
+                  <Tooltip formatter={(v: any) => [fmtEur(v), t('volumeLabel')]} />
+                  <Bar dataKey="volumen" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </CardContent>
         </Card>
       )}
@@ -210,58 +210,56 @@ export default function ProveedoresPage() {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {suppliers.slice(page * pageSize, (page + 1) * pageSize).map(s => {
-                const isExpanded = expandedId === s.id
-                const scoreColor = s.overallScore == null ? undefined : s.overallScore >= 75 ? 'hsl(var(--success))' : s.overallScore >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'
-                return (
-                  <tr key={s.id} className={`border-b border-border hover:bg-muted/50 transition-colors cursor-pointer ${isExpanded ? 'bg-muted/50' : ''}`} onClick={() => toggleExpand(s.id)}>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                        <div>
-                          <div className="font-medium">{s.name}</div>
-                          <div className="text-xs text-muted-foreground">{s.code}{s.nif ? ` · ${s.nif}` : ''}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">{s.category || '—'}</td>
-                    <td className="p-3">
-                      {s.overallScore != null ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden w-12">
-                            <div className="h-full rounded-full" style={{ width: `${s.overallScore}%`, background: scoreColor }} />
-                          </div>
-                          <span className="font-mono text-xs font-bold" style={{ color: scoreColor }}>{s.overallScore}</span>
-                        </div>
-                      ) : <span className="text-xs text-muted-foreground">—</span>}
-                    </td>
-                    <td className="p-3"><Badge variant={riskVariant(s.riskLevel)}>{riskLabel(s.riskLevel)}</Badge></td>
-                    <td className="p-3 font-mono text-xs">{fmtEur(s.totalVolume || 0)}</td>
-                    <td className="p-3 font-mono text-xs" style={{ color: s.pendingAmount > 0 ? 'hsl(var(--warning))' : undefined }}>{fmtEur(s.pendingAmount || 0)}</td>
-                    <td className="p-3 font-mono text-xs">{s.paymentTerms}d</td>
-                    <td className="p-3"><Badge variant={STATUS_VARIANTS[s.status] || 'secondary'}>{STATUS_LABELS[s.status] || s.status}</Badge></td>
-                    <td className="p-3" onClick={e => e.stopPropagation()}>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => recalculate(s.id)} disabled={recalculating.has(s.id) || recalculating.has('__all__')}>
-                          <RefreshCw size={13} className={recalculating.has(s.id) ? 'animate-spin' : ''} />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(s.id)}>
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {suppliers.length === 0 && (
-                <tr><td colSpan={9}>
-                  <EmptyState variant="suppliers" title={t('noSuppliers')} description="Importa proveedores para gestionar pagos y condiciones" compact />
-                </td></tr>
-              )}
-            </tbody>
           </table>
         </ScrollableTable>
+        <VirtualTableBody
+          data={suppliers}
+          getKey={(s: any) => s.id}
+          rowClassName={(s: any) => `cursor-pointer ${expandedId === s.id ? 'bg-muted/50' : ''}`}
+          renderRow={(s: any) => {
+            const isExpanded = expandedId === s.id
+            const scoreColor = s.overallScore == null ? undefined : s.overallScore >= 75 ? 'hsl(var(--success))' : s.overallScore >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'
+            return (
+              <>
+                <td className="p-3" onClick={() => toggleExpand(s.id)}>
+                  <div className="flex items-center gap-2">
+                    {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                    <div>
+                      <div className="font-medium">{s.name}</div>
+                      <div className="text-xs text-muted-foreground">{s.code}{s.nif ? ` · ${s.nif}` : ''}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-3 text-xs text-muted-foreground" onClick={() => toggleExpand(s.id)}>{s.category || '—'}</td>
+                <td className="p-3" onClick={() => toggleExpand(s.id)}>
+                  {s.overallScore != null ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden w-12">
+                        <div className="h-full rounded-full" style={{ width: `${s.overallScore}%`, background: scoreColor }} />
+                      </div>
+                      <span className="font-mono text-xs font-bold" style={{ color: scoreColor }}>{s.overallScore}</span>
+                    </div>
+                  ) : <span className="text-xs text-muted-foreground">—</span>}
+                </td>
+                <td className="p-3" onClick={() => toggleExpand(s.id)}><Badge variant={riskVariant(s.riskLevel)}>{riskLabel(s.riskLevel)}</Badge></td>
+                <td className="p-3 font-mono text-xs" onClick={() => toggleExpand(s.id)}>{fmtEur(s.totalVolume || 0)}</td>
+                <td className="p-3 font-mono text-xs" onClick={() => toggleExpand(s.id)} style={{ color: s.pendingAmount > 0 ? 'hsl(var(--warning))' : undefined }}>{fmtEur(s.pendingAmount || 0)}</td>
+                <td className="p-3 font-mono text-xs" onClick={() => toggleExpand(s.id)}>{s.paymentTerms}d</td>
+                <td className="p-3" onClick={() => toggleExpand(s.id)}><Badge variant={STATUS_VARIANTS[s.status] || 'secondary'}>{STATUS_LABELS[s.status] || s.status}</Badge></td>
+                <td className="p-3">
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => recalculate(s.id)} disabled={recalculating.has(s.id) || recalculating.has('__all__')}>
+                      <RefreshCw size={13} className={recalculating.has(s.id) ? 'animate-spin' : ''} />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleDelete(s.id)}>
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
+                </td>
+              </>
+            )
+          }}
+        />
 
         {/* Expanded detail */}
         {expandedId && detail && (
@@ -328,16 +326,6 @@ export default function ProveedoresPage() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>&#8592;</Button>
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
-            ))}
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>&#8594;</Button>
-            <span className="text-xs text-muted-foreground ml-2">{t('pagination', { from: page * pageSize + 1, to: Math.min((page + 1) * pageSize, suppliers.length), total: suppliers.length })}</span>
-          </div>
-        )}
       </Card>
     </div>
   )

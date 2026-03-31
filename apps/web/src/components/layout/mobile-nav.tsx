@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,24 @@ const QUICK_ROUTES = [
   { href: '/dashboard/cobros', icon: <ArrowDownToLine size={20} />, i18n: 'cobros' },
   { href: '/dashboard/pagos', icon: <ArrowUpFromLine size={20} />, i18n: 'pagos' },
   { href: '/dashboard/conciliacion', icon: <Link2 size={20} />, i18n: 'conciliacion' },
+]
+
+// All routes with size-20 icons for the quick-access bottom bar
+const ALL_ROUTES_BAR = [
+  { href: '/dashboard/cockpit', icon: <LayoutDashboard size={20} />, i18n: 'cockpit' },
+  { href: '/dashboard/forecast', icon: <TrendingUp size={20} />, i18n: 'forecast' },
+  { href: '/dashboard/conciliacion', icon: <Link2 size={20} />, i18n: 'conciliacion' },
+  { href: '/dashboard/cobros', icon: <ArrowDownToLine size={20} />, i18n: 'cobros' },
+  { href: '/dashboard/pagos', icon: <ArrowUpFromLine size={20} />, i18n: 'pagos' },
+  { href: '/dashboard/cashflow', icon: <Banknote size={20} />, i18n: 'cashflow' },
+  { href: '/dashboard/deuda', icon: <CreditCard size={20} />, i18n: 'deuda' },
+  { href: '/dashboard/scoring', icon: <ShieldAlert size={20} />, i18n: 'scoring' },
+  { href: '/dashboard/inventario', icon: <Package size={20} />, i18n: 'inventario' },
+  { href: '/dashboard/escenarios', icon: <SlidersHorizontal size={20} />, i18n: 'escenarios' },
+  { href: '/dashboard/notificaciones', icon: <Bell size={20} />, i18n: 'notificaciones' },
+  { href: '/dashboard/usuarios', icon: <Users size={20} />, i18n: 'usuarios' },
+  { href: '/dashboard/configuracion', icon: <Settings size={20} />, i18n: 'configuracion' },
+  { href: '/dashboard/bot', icon: <Bot size={20} />, i18n: 'bot' },
 ]
 
 const ALL_ROUTES = [
@@ -43,7 +61,16 @@ export function MobileNav() {
   const [search, setSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const t = useTranslations('nav')
-  const { sidebarCollapsed, setSidebarCollapsed } = useAppStore()
+  const { sidebarCollapsed, setSidebarCollapsed, favorites } = useAppStore()
+
+  const quickRoutes = useMemo(() => {
+    if (favorites.length === 0) return QUICK_ROUTES
+    const routeMap = new Map(ALL_ROUTES_BAR.map(r => [r.href, r]))
+    const favRoutes = favorites
+      .map(href => routeMap.get(href))
+      .filter(Boolean) as typeof QUICK_ROUTES
+    return favRoutes.length >= 3 ? favRoutes.slice(0, 5) : QUICK_ROUTES
+  }, [favorites])
 
   // Listen for mobile sidebar toggle — intercept and open bottom sheet instead
   useEffect(() => {
@@ -72,7 +99,7 @@ export function MobileNav() {
       {/* Fixed bottom bar — visible only on mobile */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card/95 backdrop-blur-lg border-t border-border gradient-sep safe-bottom">
         <nav className="flex items-center justify-around px-1 h-14">
-          {QUICK_ROUTES.map(route => {
+          {quickRoutes.map(route => {
             const active = pathname === route.href
             return (
               <Link

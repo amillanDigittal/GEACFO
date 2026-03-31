@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, TrendingDown } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 interface DayProjection {
   date: string
@@ -179,32 +180,34 @@ export default function ProyeccionDiariaPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={320}>
-            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
-              <defs>
-                <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} interval={horizon <= 15 ? 0 : horizon <= 30 ? 2 : 5} angle={-45} textAnchor="end" height={45} />
-              <YAxis yAxisId="balance" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
-              <YAxis yAxisId="flows" orientation="right" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => Math.abs(v) >= 1000 ? `${Math.round(Math.abs(v) / 1000)}k` : String(Math.abs(v))} />
-              <Tooltip
-                       
-                formatter={(v: number, name: string) => {
-                  if (name === t('chartPayments')) return [fmtEur(Math.abs(v)), name]
-                  return [fmtEur(v), name]
-                }}
-              />
-              <ReferenceLine yAxisId="balance" y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" strokeOpacity={0.5} />
-              <ReferenceLine yAxisId="balance" y={currentCash} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.3} label={{ value: t('currentBalanceLabel'), position: 'right', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-              <Bar yAxisId="flows" dataKey={t('chartCollections')} fill="hsl(var(--success))" opacity={0.7} radius={[2, 2, 0, 0]} />
-              <Bar yAxisId="flows" dataKey={t('chartPayments')} fill="hsl(var(--destructive))" opacity={0.7} radius={[0, 0, 2, 2]} />
-              <Area yAxisId="balance" type="monotone" dataKey={t('chartBalance')} stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#balanceGradient)" />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <LazyChart height={320}>
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} interval={horizon <= 15 ? 0 : horizon <= 30 ? 2 : 5} angle={-45} textAnchor="end" height={45} />
+                <YAxis yAxisId="balance" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+                <YAxis yAxisId="flows" orientation="right" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => Math.abs(v) >= 1000 ? `${Math.round(Math.abs(v) / 1000)}k` : String(Math.abs(v))} />
+                <Tooltip
+
+                  formatter={(v: number, name: string) => {
+                    if (name === t('chartPayments')) return [fmtEur(Math.abs(v)), name]
+                    return [fmtEur(v), name]
+                  }}
+                />
+                <ReferenceLine yAxisId="balance" y={0} stroke="hsl(var(--destructive))" strokeDasharray="3 3" strokeOpacity={0.5} />
+                <ReferenceLine yAxisId="balance" y={currentCash} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.3} label={{ value: t('currentBalanceLabel'), position: 'right', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                <Bar yAxisId="flows" dataKey={t('chartCollections')} fill="hsl(var(--success))" opacity={0.7} radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="flows" dataKey={t('chartPayments')} fill="hsl(var(--destructive))" opacity={0.7} radius={[0, 0, 2, 2]} />
+                <Area yAxisId="balance" type="monotone" dataKey={t('chartBalance')} stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#balanceGradient)" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </LazyChart>
         </CardContent>
       </Card>
 

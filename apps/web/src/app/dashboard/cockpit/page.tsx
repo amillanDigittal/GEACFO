@@ -1,6 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { api } from '@/lib/api'
+import { useState, useRef, useMemo, useCallback, memo, lazy, Suspense } from 'react'
 import { useCockpit, useRecommendations } from '@/hooks/use-api'
 import { fmtEur, fmtM, fmt, fmtPct, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -11,10 +10,11 @@ import { KpiCard } from '@/components/kpi-card'
 import { PageHeader } from '@/components/page-header'
 import { useRouter } from 'next/navigation'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, FileText, AlertTriangle, AlertCircle, CircleDot, ExternalLink, ArrowRight, Bot, Sparkles, GripVertical, Presentation, X as XIcon, ArrowUp, ArrowDown } from 'lucide-react'
+import { Landmark, Calendar, CalendarDays, RefreshCw, BarChart3, TrendingUp, CreditCard, Scale, Download, AlertTriangle, AlertCircle, CircleDot, ArrowRight, Bot, Sparkles, GripVertical, Presentation } from 'lucide-react'
 import { SkeletonCockpit } from '@/components/ui/skeleton-page'
 import { LazyChart } from '@/components/ui/lazy-chart'
 import { ChartEmpty } from '@/components/ui/chart-empty'
+import { ErrorState } from '@/components/ui/error-state'
 import { useChartColors } from '@/hooks/use-chart-colors'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useAppStore } from '@/store/app'
@@ -22,6 +22,10 @@ import { KpiCustomizer } from './_components/kpi-customizer'
 import { CompareSelector } from './_components/compare-selector'
 import type { CompareMode } from '@/store/app'
 import { useTranslations } from 'next-intl'
+import { LazySection } from '@/components/ui/lazy-section'
+import { ChartExportButton } from '@/components/ui/chart-export'
+
+const PresentationOverlay = lazy(() => import('./_components/presentation-overlay'))
 
 // Previous-period values for each KPI and comparison mode
 const PREV: Record<string, Record<CompareMode, { value: number; label: string }>> = {
@@ -60,7 +64,7 @@ function computeDelta(key: string, current: number, mode: CompareMode) {
   return { text, positive: isPositive }
 }
 
-function DrilldownRow({ label, value, highlight, pct }: { label: string; value: string; highlight?: boolean; pct?: number }) {
+const DrilldownRow = memo(function DrilldownRow({ label, value, highlight, pct }: { label: string; value: string; highlight?: boolean; pct?: number }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -74,9 +78,9 @@ function DrilldownRow({ label, value, highlight, pct }: { label: string; value: 
       </div>
     </div>
   )
-}
+})
 
-function SparklineChart({ data, label }: { data: number[]; label: string }) {
+const SparklineChart = memo(function SparklineChart({ data, label }: { data: number[]; label: string }) {
   if (!data || data.length < 2) return null
   const chartData = data.map((v, i) => ({ i: i + 1, value: v }))
   return (
@@ -94,7 +98,7 @@ function SparklineChart({ data, label }: { data: number[]; label: string }) {
       </AreaChart>
     </ResponsiveContainer>
   )
-}
+})
 
 export default function CockpitPage() {
   const t = useTranslations('cockpit')
@@ -107,56 +111,62 @@ export default function CockpitPage() {
   const [slideIdx, setSlideIdx] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
   const cc = useChartColors()
+  const cashChartRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const { cockpitLayout, compareMode, setCockpitSectionOrder } = useAppStore()
   const hydrated = useHydrated()
 
   const loading = !hydrated || isLoading
 
-  function refresh() { mutate(); setRefreshKey(k => k + 1) }
+  const refresh = useCallback(() => { mutate(); setRefreshKey(k => k + 1) }, [mutate])
 
   // Presentation mode: fullscreen + auto-rotate
-  function startPresentation() {
+  const startPresentation = useCallback(() => {
     setPresenting(true)
     setSlideIdx(0)
     document.documentElement.requestFullscreen?.().catch(() => {})
-  }
-  function stopPresentation() {
+  }, [])
+  const stopPresentation = useCallback(() => {
     setPresenting(false)
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
-  }
+  }, [])
 
-  if (loading) return <SkeletonCockpit />
-  if (!data) return <div className="text-center text-muted-foreground py-20">{t('errorLoading')}{error && <p className="mt-2 text-xs text-destructive">{error.message}</p>}</div>
-
-  const kpis = [
-    { key: 'caja', label: t('kpiCashToday'), value: fmtEur(data.caja?.value || 1245000), icon: <Landmark size={20} />, sub: t('kpiCashSub', { count: data.caja?.accounts?.length || 4 }), trend: '+3.2%', up: true, page: '/dashboard/conciliacion', sparkline: data.caja?.sparkline, tooltip: t('kpiCashTooltip'), source: t('kpiCashSource') },
-    { key: 'dso', label: 'DSO', value: `${data.dso?.value || 42} ${t('days')}`, icon: <Calendar size={20} />, sub: t('kpiDsoSub'), trend: '-3d', up: true, page: '/dashboard/cobros', sparkline: data.dso?.sparkline, tooltip: t('kpiDsoTooltip'), source: t('kpiDsoSource') },
-    { key: 'dpo', label: 'DPO', value: `${data.dpo?.value || 67} ${t('days')}`, icon: <CalendarDays size={20} />, sub: t('kpiDpoSub'), trend: '+2d', up: true, page: '/dashboard/pagos', sparkline: data.dpo?.sparkline, tooltip: t('kpiDpoTooltip'), source: t('kpiDpoSource') },
-    { key: 'ccc', label: 'Cash Conv. Cycle', value: `${data.ccc?.value || 28} ${t('days')}`, icon: <RefreshCw size={20} />, sub: 'DSO - DPO + DIO', trend: '-2d', up: true, page: '/dashboard/forecast', sparkline: data.ccc?.sparkline, tooltip: t('kpiCccTooltip'), source: t('kpiCccSource') },
-    { key: 'revenue', label: 'Revenue YTD', value: fmtM(data.revenue?.value || 4820000), icon: <BarChart3 size={20} />, sub: t('kpiRevenueSub'), trend: '+12.3%', up: true, page: '/dashboard/variance', sparkline: data.revenue?.sparkline, tooltip: t('kpiRevenueTooltip'), source: t('kpiRevenueSource') },
-    { key: 'ebitda', label: 'EBITDA', value: fmtM(data.ebitda?.value || 1150000), icon: <TrendingUp size={20} />, sub: t('kpiEbitdaSub', { margin: data.ebitda?.margin || 23.9 }), trend: '+0.8pp', up: true, page: '/dashboard/variance', sparkline: data.ebitda?.sparkline, tooltip: t('kpiEbitdaTooltip'), source: t('kpiEbitdaSource') },
-    { key: 'deudaNeta', label: t('kpiNetDebt'), value: fmtM(data.deudaNeta?.value || 2180000), icon: <CreditCard size={20} />, sub: t('kpiNetDebtSub'), trend: '-1.2%', up: true, page: '/dashboard/deuda', sparkline: data.deudaNeta?.sparkline, tooltip: t('kpiNetDebtTooltip'), source: t('kpiNetDebtSource') },
-    { key: 'liquidez', label: t('kpiLiquidity'), value: `${data.liquidez?.value || 1.85}x`, icon: <Scale size={20} />, sub: t('kpiLiquiditySub'), trend: '+0.05x', up: true, page: '/dashboard/deuda', sparkline: data.liquidez?.sparkline, tooltip: t('kpiLiquidityTooltip'), source: t('kpiLiquiditySource') },
-  ]
+  const kpis = useMemo(() => {
+    if (!data) return []
+    return [
+      { key: 'caja', label: t('kpiCashToday'), value: fmtEur(data.caja?.value || 1245000), icon: <Landmark size={20} />, sub: t('kpiCashSub', { count: data.caja?.accounts?.length || 4 }), trend: '+3.2%', up: true, page: '/dashboard/conciliacion', sparkline: data.caja?.sparkline, tooltip: t('kpiCashTooltip'), source: t('kpiCashSource') },
+      { key: 'dso', label: 'DSO', value: `${data.dso?.value || 42} ${t('days')}`, icon: <Calendar size={20} />, sub: t('kpiDsoSub'), trend: '-3d', up: true, page: '/dashboard/cobros', sparkline: data.dso?.sparkline, tooltip: t('kpiDsoTooltip'), source: t('kpiDsoSource') },
+      { key: 'dpo', label: 'DPO', value: `${data.dpo?.value || 67} ${t('days')}`, icon: <CalendarDays size={20} />, sub: t('kpiDpoSub'), trend: '+2d', up: true, page: '/dashboard/pagos', sparkline: data.dpo?.sparkline, tooltip: t('kpiDpoTooltip'), source: t('kpiDpoSource') },
+      { key: 'ccc', label: 'Cash Conv. Cycle', value: `${data.ccc?.value || 28} ${t('days')}`, icon: <RefreshCw size={20} />, sub: 'DSO - DPO + DIO', trend: '-2d', up: true, page: '/dashboard/forecast', sparkline: data.ccc?.sparkline, tooltip: t('kpiCccTooltip'), source: t('kpiCccSource') },
+      { key: 'revenue', label: 'Revenue YTD', value: fmtM(data.revenue?.value || 4820000), icon: <BarChart3 size={20} />, sub: t('kpiRevenueSub'), trend: '+12.3%', up: true, page: '/dashboard/variance', sparkline: data.revenue?.sparkline, tooltip: t('kpiRevenueTooltip'), source: t('kpiRevenueSource') },
+      { key: 'ebitda', label: 'EBITDA', value: fmtM(data.ebitda?.value || 1150000), icon: <TrendingUp size={20} />, sub: t('kpiEbitdaSub', { margin: data.ebitda?.margin || 23.9 }), trend: '+0.8pp', up: true, page: '/dashboard/variance', sparkline: data.ebitda?.sparkline, tooltip: t('kpiEbitdaTooltip'), source: t('kpiEbitdaSource') },
+      { key: 'deudaNeta', label: t('kpiNetDebt'), value: fmtM(data.deudaNeta?.value || 2180000), icon: <CreditCard size={20} />, sub: t('kpiNetDebtSub'), trend: '-1.2%', up: true, page: '/dashboard/deuda', sparkline: data.deudaNeta?.sparkline, tooltip: t('kpiNetDebtTooltip'), source: t('kpiNetDebtSource') },
+      { key: 'liquidez', label: t('kpiLiquidity'), value: `${data.liquidez?.value || 1.85}x`, icon: <Scale size={20} />, sub: t('kpiLiquiditySub'), trend: '+0.05x', up: true, page: '/dashboard/deuda', sparkline: data.liquidez?.sparkline, tooltip: t('kpiLiquidityTooltip'), source: t('kpiLiquiditySource') },
+    ]
+  }, [data, t])
 
   // Apply user layout: reorder + hide
-  const hiddenSet = new Set(cockpitLayout.hidden)
-  const orderedKeys = cockpitLayout.order || kpis.map(k => k.key)
-  const visibleKpis = orderedKeys
-    .map(key => kpis.find(k => k.key === key))
-    .filter((k): k is typeof kpis[number] => k != null && !hiddenSet.has(k.key))
+  const visibleKpis = useMemo(() => {
+    const hiddenSet = new Set(cockpitLayout.hidden)
+    const orderedKeys = cockpitLayout.order || kpis.map(k => k.key)
+    return orderedKeys
+      .map(key => kpis.find(k => k.key === key))
+      .filter((k): k is typeof kpis[number] => k != null && !hiddenSet.has(k.key))
+  }, [kpis, cockpitLayout])
 
   const activeKpi = kpis.find(k => k.key === drilldown)
 
-  const cashEvolution = (data.cashEvolution || []).map((d: any) => ({
-    ...d,
-    date: new Date(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
-  }))
+  const cashEvolution = useMemo(() => {
+    if (!data) return []
+    return (data.cashEvolution || []).map((d: any) => ({
+      ...d,
+      date: new Date(d.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' }),
+    }))
+  }, [data])
 
   // Drill-down content for each KPI
-  function renderDrilldown() {
-    if (!drilldown || !activeKpi) return null
+  const renderDrilldown = useCallback(() => {
+    if (!data || !drilldown || !activeKpi) return null
 
     const totalCash = data.caja?.value || 1245000
     const ar = data.workingCapital?.ar || 964850
@@ -354,7 +364,10 @@ export default function CockpitPage() {
       default:
         return null
     }
-  }
+  }, [drilldown, activeKpi, data, cc, t])
+
+  if (loading) return <SkeletonCockpit />
+  if (!data) return <ErrorState title={t('errorLoading')} description={error?.message} onRetry={() => mutate()} />
 
   return (
     <div className="space-y-6">
@@ -368,7 +381,6 @@ export default function CockpitPage() {
           <>
             <Button variant="outline" size="sm" onClick={() => exportCSV('cockpit_kpis', ['KPI', t('thValue'), t('thTrend')], kpis.map(k => [k.label, k.value, k.trend]))}><Download size={14} className="mr-1" />{t('exportBtn')}</Button>
             <Button variant="outline" size="sm" onClick={startPresentation}><Presentation size={14} className="mr-1" />Presentación</Button>
-            <Button size="sm" onClick={() => router.push('/dashboard/boardpack')}><FileText size={14} className="mr-1" />Board Pack</Button>
           </>
         }
       />
@@ -435,17 +447,21 @@ export default function CockpitPage() {
           cashCovenants: () => (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2">
-                <Card data-accent="primary">
+                <Card data-accent="primary" className="group">
                   <CardHeader>
                     <div className="flex items-center justify-between w-full">
                       <CardTitle>{t('cashEvolutionTitle')}</CardTitle>
-                      {cashEvolution.length > 0 && (
-                        <Badge variant="secondary">{t('cashEvolutionDays', { count: cashEvolution.length })}</Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <ChartExportButton chartRef={cashChartRef} filename="evolucion_caja" />
+                        {cashEvolution.length > 0 && (
+                          <Badge variant="secondary">{t('cashEvolutionDays', { count: cashEvolution.length })}</Badge>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
                     {cashEvolution.length > 1 ? (
+                      <div ref={cashChartRef}>
                       <LazyChart height={220}>
                         <ResponsiveContainer width="100%" height={220}>
                           <AreaChart data={cashEvolution} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -463,6 +479,7 @@ export default function CockpitPage() {
                           </AreaChart>
                         </ResponsiveContainer>
                       </LazyChart>
+                      </div>
                     ) : (
                       <ChartEmpty message={t('cashEvolutionNoData')} height={220} />
                     )}
@@ -514,6 +531,7 @@ export default function CockpitPage() {
               { label: t('wcNofTotal'), value: fmtEur(nofVal), raw: nofVal, highlight: true },
             ]
             return (
+            <LazySection>
             <Card>
               <CardHeader><CardTitle>{t('workingCapitalTitle')}</CardTitle></CardHeader>
               <CardContent>
@@ -526,8 +544,10 @@ export default function CockpitPage() {
                 ))}
               </CardContent>
             </Card>
+            </LazySection>
           )},
           botRecommendations: () => (
+            <LazySection>
             <Card data-glow="primary" className="bg-gradient-to-br from-primary/5 to-transparent">
               <CardHeader>
                 <div className="flex items-center justify-between w-full">
@@ -583,8 +603,10 @@ export default function CockpitPage() {
                 )}
               </CardContent>
             </Card>
+            </LazySection>
           ),
           tasks: () => (
+            <LazySection>
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between w-full">
@@ -611,6 +633,7 @@ export default function CockpitPage() {
                 )}
               </CardContent>
             </Card>
+            </LazySection>
           ),
         }
 
@@ -651,125 +674,18 @@ export default function CockpitPage() {
 
       {/* ── Presentation Mode Overlay ── */}
       {presenting && (
-        <PresentationOverlay
-          kpis={visibleKpis}
-          data={data}
-          compareMode={compareMode}
-          computeDelta={computeDelta}
-          slideIdx={slideIdx}
-          setSlideIdx={setSlideIdx}
-          onClose={stopPresentation}
-        />
-      )}
-    </div>
-  )
-}
-
-/* ── Presentation fullscreen component ── */
-function PresentationOverlay({
-  kpis, data, compareMode, computeDelta, slideIdx, setSlideIdx, onClose,
-}: {
-  kpis: any[]; data: any; compareMode: any; computeDelta: any
-  slideIdx: number; setSlideIdx: (v: number | ((p: number) => number)) => void; onClose: () => void
-}) {
-  const [progress, setProgress] = useState(0)
-  const INTERVAL = 10000
-
-  // Auto-rotate slides
-  useEffect(() => {
-    const start = Date.now()
-    const tick = () => {
-      const elapsed = Date.now() - start
-      setProgress(Math.min((elapsed % INTERVAL) / INTERVAL * 100, 100))
-    }
-    const raf = setInterval(tick, 50)
-    const rotate = setInterval(() => {
-      setSlideIdx((prev: number) => (prev + 1) % kpis.length)
-    }, INTERVAL)
-    return () => { clearInterval(raf); clearInterval(rotate) }
-  }, [slideIdx, kpis.length, setSlideIdx])
-
-  // Keyboard: Escape to close, arrows to navigate
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setSlideIdx((slideIdx + 1) % kpis.length) }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); setSlideIdx((slideIdx - 1 + kpis.length) % kpis.length) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [slideIdx, kpis.length, setSlideIdx, onClose])
-
-  // Listen for fullscreen exit
-  useEffect(() => {
-    function onFsChange() { if (!document.fullscreenElement) onClose() }
-    document.addEventListener('fullscreenchange', onFsChange)
-    return () => document.removeEventListener('fullscreenchange', onFsChange)
-  }, [onClose])
-
-  const k = kpis[slideIdx]
-  if (!k) return null
-  const raw = data[k.key as keyof typeof data] as any
-  const currentVal = raw?.value ?? 0
-  const delta = computeDelta(k.key, currentVal, compareMode)
-
-  return (
-    <div className="fixed inset-0 z-[999] bg-background flex flex-col items-center justify-center presentation-enter">
-      {/* Top bar */}
-      <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-8 py-5">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary to-[hsl(var(--gold))] rounded-lg flex items-center justify-center">
-            <BarChart3 size={16} className="text-white" />
-          </div>
-          <span className="font-display text-lg font-bold text-foreground">GEACFO</span>
-          <span className="text-xs text-muted-foreground font-mono ml-2">
-            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-          </span>
-        </div>
-        <button onClick={onClose} className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <XIcon size={20} />
-        </button>
-      </div>
-
-      {/* Progress bar */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-muted/30">
-        <div className="h-full bg-primary transition-[width] duration-100 ease-linear" style={{ width: `${progress}%` }} />
-      </div>
-
-      {/* Main slide */}
-      <div key={slideIdx} className="flex flex-col items-center gap-6 presentation-slide">
-        <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-          <span className="scale-[2]">{k.icon}</span>
-        </div>
-        <div className="text-sm uppercase tracking-[0.2em] text-muted-foreground font-semibold">{k.label}</div>
-        <div className="font-mono text-7xl md:text-8xl font-bold text-foreground tracking-tight">{k.value}</div>
-        {k.trend && (
-          <div className={`flex items-center gap-2 text-2xl font-semibold ${k.up ? 'text-success' : 'text-destructive'}`}>
-            {k.up ? <ArrowUp size={24} /> : <ArrowDown size={24} />}
-            <span>{k.trend}</span>
-          </div>
-        )}
-        {delta && (
-          <div className={`text-lg font-mono ${delta.positive ? 'text-success' : 'text-destructive'}`}>{delta.text}</div>
-        )}
-        {k.sub && <div className="text-sm text-muted-foreground">{k.sub}</div>}
-      </div>
-
-      {/* Bottom dots */}
-      <div className="absolute bottom-8 flex items-center gap-2">
-        {kpis.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setSlideIdx(i)}
-            className={`rounded-full transition-all ${i === slideIdx ? 'w-8 h-2 bg-primary' : 'w-2 h-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'}`}
+        <Suspense fallback={null}>
+          <PresentationOverlay
+            kpis={visibleKpis}
+            data={data}
+            compareMode={compareMode}
+            computeDelta={computeDelta}
+            slideIdx={slideIdx}
+            setSlideIdx={setSlideIdx}
+            onClose={stopPresentation}
           />
-        ))}
-      </div>
-
-      {/* Hint */}
-      <div className="absolute bottom-3 text-[10px] text-muted-foreground/50">
-        ← → para navegar · Esc para salir · Auto-rota cada 10s
-      </div>
+        </Suspense>
+      )}
     </div>
   )
 }

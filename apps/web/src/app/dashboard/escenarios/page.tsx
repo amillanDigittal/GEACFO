@@ -14,6 +14,7 @@ import { SkeletonEscenarios } from '@/components/ui/skeleton-page'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 export default function EscenariosPage() {
   const t = useTranslations('escenarios')
@@ -173,30 +174,32 @@ export default function EscenariosPage() {
           <Card>
             <CardHeader><CardTitle>{t('cumulativeBalanceChart')}</CardTitle></CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
-                  <Tooltip
-                    formatter={(v: any, name: string) => [fmtEur(Number(v) * 1000), name.replace('saldo_', '')]}
-                       
-                  />
-                  <Legend formatter={(value: string) => scenarioMeta[value.replace('saldo_', '')]?.label || value} />
-                  {scenarios.filter((s: any) => s.weeks.length > 0).map((s: any) => (
-                    <Area
-                      key={s.scenario}
-                      type="monotone"
-                      dataKey={`saldo_${s.scenario}`}
-                      name={`saldo_${s.scenario}`}
-                      stroke={scenarioMeta[s.scenario].color}
-                      fill={scenarioMeta[s.scenario].color}
-                      fillOpacity={0.1}
-                      strokeWidth={s.scenario === 'BASE' ? 2.5 : 1.5}
+              <LazyChart height={300}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
+                    <Tooltip
+                      formatter={(v: any, name: string) => [fmtEur(Number(v) * 1000), name.replace('saldo_', '')]}
+
                     />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
+                    <Legend formatter={(value: string) => scenarioMeta[value.replace('saldo_', '')]?.label || value} />
+                    {scenarios.filter((s: any) => s.weeks.length > 0).map((s: any) => (
+                      <Area
+                        key={s.scenario}
+                        type="monotone"
+                        dataKey={`saldo_${s.scenario}`}
+                        name={`saldo_${s.scenario}`}
+                        stroke={scenarioMeta[s.scenario].color}
+                        fill={scenarioMeta[s.scenario].color}
+                        fillOpacity={0.1}
+                        strokeWidth={s.scenario === 'BASE' ? 2.5 : 1.5}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </LazyChart>
             </CardContent>
           </Card>
 
@@ -205,38 +208,42 @@ export default function EscenariosPage() {
             <Card>
               <CardHeader><CardTitle>{t('collectionsVsPaymentsBase')}</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
-                    <Tooltip
-                      formatter={(v: any) => fmtEur(Number(v) * 1000)}
-                       
-                    />
-                    <Legend />
-                    <Bar dataKey="cobros_BASE" name={t('colCollections')} fill="hsl(var(--success))" fillOpacity={0.75} radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="pagos_BASE" name={t('colPayments')} fill="hsl(var(--destructive))" fillOpacity={0.65} radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <LazyChart height={260}>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}k`} />
+                      <Tooltip
+                        formatter={(v: any) => fmtEur(Number(v) * 1000)}
+
+                      />
+                      <Legend />
+                      <Bar dataKey="cobros_BASE" name={t('colCollections')} fill="hsl(var(--success))" fillOpacity={0.75} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="pagos_BASE" name={t('colPayments')} fill="hsl(var(--destructive))" fillOpacity={0.65} radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </LazyChart>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader><CardTitle>{t('modelConfidence')}</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                    <YAxis domain={[50, 100]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
-                    <Tooltip
-                      formatter={(v: any) => [`${Number(v).toFixed(1)}%`, t('confidence')]}
-                       
-                    />
-                    <Line type="monotone" dataKey="confidence_BASE" name={t('confidence')} stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <LazyChart height={260}>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="week" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                      <YAxis domain={[50, 100]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}%`} />
+                      <Tooltip
+                        formatter={(v: any) => [`${Number(v).toFixed(1)}%`, t('confidence')]}
+
+                      />
+                      <Line type="monotone" dataKey="confidence_BASE" name={t('confidence')} stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </LazyChart>
               </CardContent>
             </Card>
           </div>

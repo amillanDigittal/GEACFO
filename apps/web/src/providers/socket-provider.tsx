@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useSession } from 'next-auth/react'
+import { toast } from '@/components/ui/use-toast'
 
 export interface RealtimeNotification {
   id: string
@@ -35,6 +36,22 @@ const SocketContext = createContext<SocketContextValue>({
   requestPushPermission: async () => 'default',
   pushPermission: 'default',
 })
+
+/** Play a short notification beep using the Web Audio API */
+function playNotificationSound(severity: string) {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = severity === 'critical' ? 880 : 660
+    gain.gain.value = 0.1
+    osc.start()
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+    osc.stop(ctx.currentTime + 0.3)
+  } catch {}
+}
 
 /** Event types that trigger a browser push notification */
 const PUSH_TYPES = new Set(['covenant_risk', 'payment_approved', 'payment_rejected'])
@@ -113,6 +130,18 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         id: `rt-${idCounter.current}-${Date.now()}`,
       }, ...prev].slice(0, 50))
 
+      // Show in-app toast notification
+      toast({
+        title: event.title,
+        description: event.description,
+        variant: event.severity === 'critical' ? 'destructive' : event.severity === 'warning' ? 'warning' : 'default',
+      })
+
+      // Play notification sound if tab is not focused
+      if (!document.hasFocus()) {
+        playNotificationSound(event.severity)
+      }
+
       // Send browser push notification if tab is not focused
       maybeSendBrowserNotification(event)
     })
@@ -126,12 +155,23 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
   }, [(session as any)?.accessToken])
 
+  const unreadCount = notifications.length
+
+  // Update document title with unread count
+  useEffect(() => {
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount}) GEACFO — Plataforma CFO`
+    } else {
+      document.title = 'GEACFO — Plataforma CFO'
+    }
+  }, [unreadCount])
+
   const clearNotifications = useCallback(() => setNotifications([]), [])
 
   return (
     <SocketContext.Provider value={{
       socket, isConnected, notifications, clearNotifications,
-      unreadCount: notifications.length,
+      unreadCount,
       requestPushPermission, pushPermission,
     }}>
       {children}

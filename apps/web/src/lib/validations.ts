@@ -53,6 +53,48 @@ export const editUserSchema = z.object({
 
 export type EditUserForm = z.infer<typeof editUserSchema>
 
+// ── Tenant settings ─────────────────────────────────────────────────
+export const tenantSchema = z.object({
+  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').max(100, 'Máximo 100 caracteres'),
+  nif: z.string().min(1, 'El NIF/CIF es obligatorio'),
+  sector: z.string().optional(),
+  currency: z.enum(['EUR', 'USD', 'GBP']),
+  locale: z.enum(['es-ES', 'en-US', 'pt-BR']),
+})
+
+export type TenantForm = z.infer<typeof tenantSchema>
+
+// ── Platform config ─────────────────────────────────────────────────
+export const configSchema = z.object({
+  kpiTargets: z.object({
+    dsoTarget: z.number().min(1).max(120),
+    dpoTarget: z.number().min(1).max(180),
+    cccTarget: z.number().min(-30).max(120),
+    ebitdaMarginTarget: z.number().min(0).max(100),
+    liquidezMinima: z.number().min(0.1).max(5),
+  }),
+  covenantAlerts: z.object({
+    warningThreshold: z.number().min(1).max(50),
+    criticalThreshold: z.number().min(1).max(50),
+  }),
+  forecast: z.object({
+    horizonWeeks: z.number().min(4).max(52),
+    gapAlertEnabled: z.boolean(),
+    scenarioDefault: z.enum(['BASE', 'CONSERVADOR', 'AGRESIVO']),
+  }),
+  scoring: z.object({
+    alertScoreThreshold: z.number().min(0).max(100),
+    riskAutoSuspend: z.boolean(),
+  }),
+  notifications: z.object({
+    emailEnabled: z.boolean(),
+    overdueAlertDays: z.number().min(1).max(90),
+    apDueSoonDays: z.number().min(1).max(30),
+  }),
+})
+
+export type ConfigForm = z.infer<typeof configSchema>
+
 // ── CSV import ──────────────────────────────────────────────────────
 const EXPECTED_HEADERS: Record<string, string[]> = {
   movimientos: ['fecha', 'concepto', 'importe', 'date', 'concept', 'amount'],

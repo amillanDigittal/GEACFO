@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { MessageSquarePlus, History, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useTranslations } from 'next-intl'
+import { useHydrated } from '@/hooks/use-hydrated'
 
 const STORAGE_KEY = 'geacfo_bot_session'
 const CONTEXTS = ['tesoreria', 'riesgo', 'inventario', 'deuda']
@@ -18,6 +19,23 @@ interface Session { sessionId: string; firstMessage: string; context: string | n
 
 function generateSessionId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+function getFollowUps(lastMessage: string): string[] {
+  const lower = lastMessage.toLowerCase()
+  const suggestions: string[] = []
+
+  if (lower.includes('dso') || lower.includes('cobr')) suggestions.push('¿Qué clientes tienen mayor DSO?')
+  if (lower.includes('liquidez') || lower.includes('ratio')) suggestions.push('¿Cómo puedo mejorar la liquidez?')
+  if (lower.includes('deuda') || lower.includes('covenant')) suggestions.push('¿Cuál es el riesgo de incumplir covenants?')
+  if (lower.includes('flujo') || lower.includes('cash')) suggestions.push('¿Cuál es la proyección de caja a 13 semanas?')
+  if (lower.includes('proveedor') || lower.includes('pago')) suggestions.push('¿Qué pagos vencen esta semana?')
+  if (lower.includes('client') || lower.includes('scoring')) suggestions.push('¿Qué clientes tienen mayor riesgo?')
+  if (lower.includes('ebitda') || lower.includes('margen')) suggestions.push('¿Cómo evoluciona el margen EBITDA?')
+  if (lower.includes('inventario') || lower.includes('stock')) suggestions.push('¿Cuál es la rotación de inventario actual?')
+
+  if (suggestions.length === 0) suggestions.push('¿Cuál es el resumen financiero actual?')
+  return suggestions.slice(0, 3)
 }
 
 export default function BotPage() {
@@ -43,6 +61,7 @@ export default function BotPage() {
   const [context, setContext] = useState('tesoreria')
   const [showSessions, setShowSessions] = useState(false)
   const messagesRef = useRef<HTMLDivElement>(null)
+  const hydrated = useHydrated()
 
   // SWR hooks for data fetching
   const { data: historyData, isLoading: loadingHistory, mutate: mutateHistory } = useBotHistory(sessionId || null)
@@ -121,6 +140,7 @@ export default function BotPage() {
   function renderContent(text: string) {
     return (
       <ReactMarkdown
+        skipHtml
         components={{
           p: ({ children }) => <p className="mb-1">{children}</p>,
           strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
@@ -162,8 +182,8 @@ export default function BotPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
-        <Card className={`${showSessions ? 'lg:col-span-1' : 'lg:col-span-2'} flex flex-col min-h-0`}>
+      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 flex-1 min-h-0">
+        <Card className="lg:col-span-2 flex flex-col min-h-0 flex-1">
           {/* Context */}
           <div className="flex gap-2 p-3 border-b border-border flex-wrap">
             {CONTEXTS.map(c => (
@@ -197,6 +217,20 @@ export default function BotPage() {
                 </div>
               </div>
             )}
+            {/* Follow-up suggestions */}
+            {messages.length > 1 && messages[messages.length - 1]?.role === 'assistant' && !loading && (
+              <div className="flex flex-wrap gap-2 mt-2 ml-11">
+                {getFollowUps(messages[messages.length - 1].content).map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(q)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Input */}
@@ -206,11 +240,42 @@ export default function BotPage() {
           </div>
         </Card>
 
-        {/* Sessions panel */}
-        {showSessions && (
-          <Card className="flex flex-col min-h-0">
+        {/* Sidebar — hidden on mobile */}
+        <div className="hidden lg:flex flex-col gap-4 relative">
+          <Card>
+            <CardHeader><CardTitle>{t('suggestedQuestions')}</CardTitle></CardHeader>
+            <CardContent className="space-y-2 p-3">
+              {SUGGESTED.map(q => (
+                <button key={q} onClick={() => sendMessage(q)} className="w-full text-left text-xs p-2.5 bg-muted hover:bg-muted/80 border border-border rounded-lg text-foreground transition-colors">{q}</button>
+              ))}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>{t('activeContext')}</CardTitle></CardHeader>
+            <CardContent>
+              {[
+                { label: t('contextModule'), value: context.charAt(0).toUpperCase() + context.slice(1) },
+                { label: t('contextDataAt'), value: hydrated ? new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—' },
+                { label: t('contextSources'), value: t('contextSourcesValue') },
+                { label: t('contextModel'), value: 'Claude Sonnet' },
+              ].map(r => (
+                <div key={r.label} className="stat-row"><span className="stat-label">{r.label}</span><span className="stat-value text-xs">{r.value}</span></div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Sessions panel — always rendered as fixed overlay */}
+      {showSessions && (
+        <>
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" onClick={() => setShowSessions(false)} />
+          <Card className="fixed inset-x-4 top-4 bottom-4 z-50 flex flex-col overflow-hidden sm:inset-x-auto sm:right-4 sm:left-auto sm:w-96">
             <CardHeader>
-              <CardTitle>{t('conversations')}</CardTitle>
+              <div className="flex items-center justify-between w-full">
+                <CardTitle>{t('conversations')}</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setShowSessions(false)} className="text-xs">{t('hide')}</Button>
+              </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0 space-y-0">
               {loadingSessions ? (
@@ -241,35 +306,8 @@ export default function BotPage() {
               )}
             </CardContent>
           </Card>
-        )}
-
-        {/* Sidebar */}
-        {!showSessions && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader><CardTitle>{t('suggestedQuestions')}</CardTitle></CardHeader>
-              <CardContent className="space-y-2 p-3">
-                {SUGGESTED.map(q => (
-                  <button key={q} onClick={() => sendMessage(q)} className="w-full text-left text-xs p-2.5 bg-muted hover:bg-muted/80 border border-border rounded-lg text-foreground transition-colors">{q}</button>
-                ))}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>{t('activeContext')}</CardTitle></CardHeader>
-              <CardContent>
-                {[
-                  { label: t('contextModule'), value: context.charAt(0).toUpperCase() + context.slice(1) },
-                  { label: t('contextDataAt'), value: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
-                  { label: t('contextSources'), value: t('contextSourcesValue') },
-                  { label: t('contextModel'), value: 'Claude Sonnet' },
-                ].map(r => (
-                  <div key={r.label} className="stat-row"><span className="stat-label">{r.label}</span><span className="stat-value text-xs">{r.value}</span></div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   )
 }

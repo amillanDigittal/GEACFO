@@ -1,9 +1,10 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, fmt, riskLabel, riskVariant, exportCSV } from '@/lib/utils'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useUrlFilters } from '@/hooks/use-url-filters'
 import { useChartColors } from '@/hooks/use-chart-colors'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +24,9 @@ import { TableFilters } from '@/components/table-filters'
 import { exportXLSX } from '@/lib/export-xlsx'
 import { VirtualTableBody } from '@/components/ui/virtual-table'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
+import { MobileCardView } from '@/components/ui/mobile-card-view'
 import { useTranslations } from 'next-intl'
+import { ChartExportButton } from '@/components/ui/chart-export'
 
 function daysDiff(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
@@ -48,23 +51,29 @@ export default function CobrosPage() {
     return '>90d'
   }
 
+  const { filters, setFilters, clearFilters } = useUrlFilters({
+    search: '',
+    status: 'ALL',
+    customer: 'ALL',
+    dueFrom: '',
+    dueTo: '',
+  })
+
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [filter, setFilter] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<'dueDate' | 'totalAmount'>('dueDate')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [searchText, setSearchText] = useState('')
-  const [filterCustomer, setFilterCustomer] = useState('ALL')
-  const [filterDueFrom, setFilterDueFrom] = useState('')
-  const [filterDueTo, setFilterDueTo] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
   const [prevInvoices, setPrevInvoices] = useState<any[] | null>(null)
   const [periodLabel, setPeriodLabel] = useState<{ current: string; previous: string } | null>(null)
   const [dateFrom, setDateFrom] = useState<string | undefined>()
   const [dateTo, setDateTo] = useState<string | undefined>()
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const cc = useChartColors()
+  const agingChartRef = useRef<HTMLDivElement>(null)
+  const pieChartRef = useRef<HTMLDivElement>(null)
 
   function loadData() {
     setLoading(true)
@@ -113,6 +122,7 @@ export default function CobrosPage() {
   useKeyboardShortcuts([
     { key: 'e', label: t('shortcutExport'), action: exportCsv },
     { key: 'r', label: t('shortcutRefresh'), action: refresh },
+    { key: 's', label: 'Seleccionar todo', action: () => toggleSelectAll() },
   ])
 
   const hydrated = useHydrated()
@@ -122,14 +132,14 @@ export default function CobrosPage() {
 
   const filtered = invoices
     .filter((i: any) => {
-      if (filter !== 'ALL' && i.status !== filter) return false
-      if (searchText) {
-        const q = searchText.toLowerCase()
+      if (filters.status !== 'ALL' && i.status !== filters.status) return false
+      if (filters.search) {
+        const q = filters.search.toLowerCase()
         if (!i.number.toLowerCase().includes(q) && !i.customer?.name?.toLowerCase().includes(q)) return false
       }
-      if (filterCustomer !== 'ALL' && i.customer?.id !== filterCustomer) return false
-      if (filterDueFrom && i.dueDate < filterDueFrom) return false
-      if (filterDueTo && i.dueDate > filterDueTo) return false
+      if (filters.customer !== 'ALL' && i.customer?.id !== filters.customer) return false
+      if (filters.dueFrom && i.dueDate < filters.dueFrom) return false
+      if (filters.dueTo && i.dueDate > filters.dueTo) return false
       return true
     })
     .sort((a: any, b: any) => {
@@ -141,7 +151,29 @@ export default function CobrosPage() {
     })
 
   const customerOptions = Array.from(new Map(invoices.map((i: any) => [i.customer?.id, { key: i.customer?.id, label: i.customer?.name }])).values()).filter(o => o.key)
-  const cobrosFilterCount = [filter !== 'ALL', filterCustomer !== 'ALL', !!filterDueFrom, !!filterDueTo].filter(Boolean).length
+  const cobrosFilterCount = [filters.status !== 'ALL', filters.customer !== 'ALL', !!filters.dueFrom, !!filters.dueTo].filter(Boolean).length
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filtered.length && filtered.length > 0) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filtered.map((i: any) => i.id)))
+    }
+  }
+
+  function exportSelected() {
+    const selectedInvoices = filtered.filter((i: any) => selected.has(i.id))
+    exportCSV('cobros_seleccion', [t('thInvoice'), t('thClient'), t('thIssueDate'), t('thDueDate'), t('thBase'), t('thTotal'), t('thPaid'), t('thStatus')], selectedInvoices.map((i: any) => [i.number, i.customer?.name, i.issueDate?.slice(0, 10), i.dueDate?.slice(0, 10), Number(i.amount), Number(i.totalAmount), Number(i.paidAmount), i.status]))
+    setSelected(new Set())
+  }
 
   const totalPending = invoices.reduce((s, i) => s + Number(i.totalAmount) - Number(i.paidAmount), 0)
   const overdueInvoices = invoices.filter(i => i.status === 'OVERDUE')
@@ -248,6 +280,21 @@ export default function CobrosPage() {
         <KpiBox index={3} label={t('kpiAvgDso')} value={`${Math.round(invoices.reduce((s, i) => s + (i.customer?.dso || 0), 0) / (invoices.length || 1))}d`} tooltip={t('kpiAvgDsoTooltip')} source={t('kpiAvgDsoSource')} />
       </div>
 
+      {/* Batch action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between p-3 rounded-lg border border-primary/30 bg-primary/5">
+          <span className="text-sm font-medium">{selected.size} {selected.size === 1 ? 'factura seleccionada' : 'facturas seleccionadas'}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={exportSelected}>
+              <Download size={14} className="mr-1" />Exportar selección
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              Deseleccionar
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Aging Report interactivo */}
       {(() => {
         const BUCKET_ORDER = [t('bucketCurrent'), '1-30d', '31-60d', '61-90d', '>90d']
@@ -298,18 +345,22 @@ export default function CobrosPage() {
           <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Bar chart */}
-              <Card className="lg:col-span-2">
+              <Card className="lg:col-span-2 group">
                 <CardHeader>
                   <div className="flex items-center justify-between w-full">
                     <CardTitle>{t('agingTitle')}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <ChartExportButton chartRef={agingChartRef} filename="aging_cobros" />
                     {selectedBucket && (
                       <Button variant="outline" size="sm" className="text-xs" onClick={() => setSelectedBucket(null)}>
                         {t('agingClearSelection')}
                       </Button>
                     )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <div ref={agingChartRef}>
                   <LazyChart height={240}>
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -334,6 +385,7 @@ export default function CobrosPage() {
                     </BarChart>
                   </ResponsiveContainer>
                   </LazyChart>
+                  </div>
                   {/* Bucket summary row */}
                   <div className="flex gap-2 mt-3">
                     {BUCKET_ORDER.map(bucket => {
@@ -357,10 +409,16 @@ export default function CobrosPage() {
               </Card>
 
               {/* Pie + Customer exposure */}
-              <Card>
-                <CardHeader><CardTitle>{t('distributionTitle')}</CardTitle></CardHeader>
+              <Card className="group">
+                <CardHeader>
+                  <div className="flex items-center justify-between w-full">
+                    <CardTitle>{t('distributionTitle')}</CardTitle>
+                    <ChartExportButton chartRef={pieChartRef} filename="distribucion_cobros" />
+                  </div>
+                </CardHeader>
                 <CardContent>
                   {pieData.length > 0 ? (
+                    <div ref={pieChartRef}>
                     <LazyChart height={160}>
                     <ResponsiveContainer width="100%" height={160}>
                       <PieChart>
@@ -385,6 +443,7 @@ export default function CobrosPage() {
                       </PieChart>
                     </ResponsiveContainer>
                     </LazyChart>
+                    </div>
                   ) : (
                     <EmptyState variant="chart" title={t('noData')} compact className="h-[160px]" />
                   )}
@@ -428,9 +487,12 @@ export default function CobrosPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
-                        {[t('thInvoice'), t('thClient'), t('thDueDate'), t('thDays'), t('thPending'), t('thStatus')].map(h => (
-                          <Th key={h}>{h}</Th>
-                        ))}
+                        <Th>{t('thInvoice')}</Th>
+                        <Th>{t('thClient')}</Th>
+                        <Th>{t('thDueDate')}</Th>
+                        <Th tooltip="Número de días desde la fecha de vencimiento">{t('thDays')}</Th>
+                        <Th>{t('thPending')}</Th>
+                        <Th>{t('thStatus')}</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -476,15 +538,35 @@ export default function CobrosPage() {
         )
       })()}
 
-      {/* Invoice table */}
-      <Card>
+      {/* Invoice cards (mobile) */}
+      <MobileCardView
+        data={filtered.slice(0, 50)}
+        renderCard={(inv: any) => {
+          const cfg = statusConfig[inv.status] || statusConfig.PENDING
+          const overdueDays = inv.status === 'OVERDUE' ? daysDiff(inv.dueDate) : 0
+          return {
+            title: inv.number,
+            subtitle: inv.customer?.name,
+            badge: { label: cfg.label, variant: cfg.variant },
+            fields: [
+              { label: t('thDueDate'), value: fmtDate(inv.dueDate) },
+              { label: t('thTotal'), value: fmtEur(Number(inv.totalAmount)), highlight: true },
+              { label: t('thPaid'), value: Number(inv.paidAmount) > 0 ? fmtEur(Number(inv.paidAmount)) : '\u2014' },
+              { label: t('thAging'), value: inv.status === 'OVERDUE' ? `${overdueDays}d` : '\u2014' },
+            ],
+          }
+        }}
+      />
+
+      {/* Invoice table (desktop) */}
+      <Card className="hidden sm:block">
         <CardHeader>
           <CardTitle>{t('invoiceDetailTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-0 space-y-3">
           <TableFilters
-            search={searchText}
-            onSearchChange={setSearchText}
+            search={filters.search}
+            onSearchChange={v => setFilters({ search: v })}
             searchPlaceholder={t('searchPlaceholder')}
             statusOptions={[
               { key: 'ALL', label: t('filterAllStatuses') },
@@ -492,24 +574,33 @@ export default function CobrosPage() {
               { key: 'PENDING', label: t('filterPending') },
               { key: 'PAID', label: t('filterPaid') },
             ]}
-            status={filter}
-            onStatusChange={setFilter}
+            status={filters.status}
+            onStatusChange={v => setFilters({ status: v })}
             entityLabel={t('filterClientLabel')}
             entityOptions={customerOptions}
-            entity={filterCustomer}
-            onEntityChange={setFilterCustomer}
-            dueDateFrom={filterDueFrom}
-            dueDateTo={filterDueTo}
-            onDueDateFromChange={setFilterDueFrom}
-            onDueDateToChange={setFilterDueTo}
+            entity={filters.customer}
+            onEntityChange={v => setFilters({ customer: v })}
+            dueDateFrom={filters.dueFrom}
+            dueDateTo={filters.dueTo}
+            onDueDateFromChange={v => setFilters({ dueFrom: v })}
+            onDueDateToChange={v => setFilters({ dueTo: v })}
             activeCount={cobrosFilterCount}
-            onClearAll={() => { setFilter('ALL'); setSearchText(''); setFilterCustomer('ALL'); setFilterDueFrom(''); setFilterDueTo('') }}
+            onClearAll={clearFilters}
           />
         </CardContent>
         <ScrollableTable label={t('invoiceDetailTableLabel')}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
+                <th scope="col" className="p-3 w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todas las facturas"
+                    className="rounded border-border"
+                    checked={selected.size === filtered.length && filtered.length > 0}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <Th>{t('thInvoice')}</Th>
                 <Th>{t('thClient')}</Th>
                 <Th>{t('thIssueDate')}</Th>
@@ -518,7 +609,7 @@ export default function CobrosPage() {
                 <Th sorted={sortBy === 'totalAmount' ? sortDir : false} onSort={() => handleSort('totalAmount')}>{t('thTotal')}</Th>
                 <Th>{t('thPaid')}</Th>
                 <Th>{t('thStatus')}</Th>
-                <Th>{t('thAging')}</Th>
+                <Th tooltip="Days Sales Outstanding — número de días desde el vencimiento de la factura">{t('thAging')}</Th>
               </tr>
             </thead>
           </table>
@@ -526,12 +617,19 @@ export default function CobrosPage() {
         <VirtualTableBody
           data={filtered}
           getKey={(inv: any) => inv.id}
-          rowClassName={(inv: any) => inv.status === 'OVERDUE' ? 'bg-destructive/5' : ''}
+          rowClassName={(inv: any) => {
+            const sel = selected.has(inv.id) ? 'bg-primary/5' : ''
+            const overdue = inv.status === 'OVERDUE' ? 'bg-destructive/5' : ''
+            return `${sel || overdue}`.trim()
+          }}
           renderRow={(inv: any) => {
             const cfg = statusConfig[inv.status] || statusConfig.PENDING
             const overdueDays = inv.status === 'OVERDUE' ? daysDiff(inv.dueDate) : 0
             return (
               <>
+                <td className="p-3">
+                  <input type="checkbox" aria-label={`Seleccionar factura ${inv.number}`} className="rounded border-border" checked={selected.has(inv.id)} onChange={() => toggleSelect(inv.id)} />
+                </td>
                 <td className="p-3 font-mono text-xs font-semibold">{inv.number}</td>
                 <td className="p-3">
                   <div className="font-medium text-sm">{inv.customer.name}</div>

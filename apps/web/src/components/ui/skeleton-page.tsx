@@ -7,7 +7,8 @@ function Bone({ className = '' }: { className?: string }) {
 /** Wraps skeleton layouts with a subtle fade-in so they don't pop in abruptly */
 function SkeletonWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <div className="skeleton-wrapper animate-in fade-in duration-200">
+    <div className="skeleton-wrapper animate-in fade-in duration-200" role="status" aria-busy="true">
+      <span className="sr-only">Cargando...</span>
       {children}
     </div>
   )

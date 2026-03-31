@@ -13,6 +13,7 @@ import { KpiBox } from '@/components/kpi-box'
 import { SkeletonProvisiones } from '@/components/ui/skeleton-page'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from 'recharts'
 import { useTranslations } from 'next-intl'
+import { LazyChart } from '@/components/ui/lazy-chart'
 
 const RISK_ORDER = ['VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 
@@ -199,20 +200,22 @@ export default function ProvisionesPage() {
         <Card>
           <CardHeader><CardTitle>{t('distributionByAging')}</CardTitle></CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                <Tooltip
-                  formatter={(v: any, name: string) => [fmtEur(v), name === 'exposicion' ? t('exposureLabel') : t('provisionLabel')]}
-                       
-                />
-                <Legend formatter={(value: string) => value === 'exposicion' ? t('exposureLabel') : t('provisionEclLabel')} />
-                <Bar dataKey="exposicion" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="provision" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <LazyChart height={280}>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                  <Tooltip
+                    formatter={(v: any, name: string) => [fmtEur(v), name === 'exposicion' ? t('exposureLabel') : t('provisionLabel')]}
+
+                  />
+                  <Legend formatter={(value: string) => value === 'exposicion' ? t('exposureLabel') : t('provisionEclLabel')} />
+                  <Bar dataKey="exposicion" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="provision" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
           </CardContent>
         </Card>
 
@@ -220,20 +223,22 @@ export default function ProvisionesPage() {
           <CardHeader><CardTitle>{t('provisionEvolution')}</CardTitle></CardHeader>
           <CardContent>
             {snapshotChart.length > 1 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={snapshotChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                  <Tooltip
-                    formatter={(v: any, name: string) => [fmtEur(v), name === 'provision' ? t('provisionLabel') : t('exposureLabel')]}
-                       
-                  />
-                  <Legend formatter={(value: string) => value === 'provision' ? t('provisionEclLabel') : t('exposureLabel')} />
-                  <Line type="monotone" dataKey="provision" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="exposicion" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <LazyChart height={280}>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={snapshotChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                    <Tooltip
+                      formatter={(v: any, name: string) => [fmtEur(v), name === 'provision' ? t('provisionLabel') : t('exposureLabel')]}
+
+                    />
+                    <Legend formatter={(value: string) => value === 'provision' ? t('provisionEclLabel') : t('exposureLabel')} />
+                    <Line type="monotone" dataKey="provision" stroke="hsl(var(--destructive))" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="exposicion" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </LazyChart>
             ) : (
               <div className="flex items-center justify-center h-[280px] text-sm text-muted-foreground">
                 {t('snapshotHint')}

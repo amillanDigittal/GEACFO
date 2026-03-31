@@ -132,7 +132,16 @@ interface KpiCardProps {
 }
 export const KpiCard = memo(function KpiCard({ label, value, icon, sub, trend, up, sparkline, onClick, tooltip, source, delta, index = 0 }: KpiCardProps) {
   const card = (
-    <div className="kpi-card group" data-trend={up === true ? 'up' : up === false ? 'down' : 'neutral'} onClick={onClick} style={{ '--stagger': `${index * 60}ms` } as React.CSSProperties}>
+    <div
+      className="kpi-card group"
+      data-trend={up === true ? 'up' : up === false ? 'down' : 'neutral'}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `${label}: ${value}` : undefined}
+      onKeyDown={onClick ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}
+      style={{ '--stagger': `${index * 60}ms` } as React.CSSProperties}
+    >
       {/* Notch semántico: verde positivo, rojo negativo, neutro si no hay tendencia */}
       <div className={`absolute top-0 left-3 right-3 h-[3px] rounded-b ${
         up === true ? 'bg-success' : up === false ? 'bg-destructive' : 'bg-border'
