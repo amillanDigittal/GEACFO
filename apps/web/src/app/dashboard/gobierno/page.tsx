@@ -28,6 +28,9 @@ export default function GobiernoPage() {
   const [auditLog, setAuditLog] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'fuentes' | 'auditoria'>('fuentes')
+  const [actionFilter, setActionFilter] = useState('')
+  const [entityFilter, setEntityFilter] = useState('')
+  const [expandedLog, setExpandedLog] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary'; icon: React.ReactNode }> = {
@@ -95,6 +98,12 @@ export default function GobiernoPage() {
     ProvisionSnapshot: t('entityProvision'), ReportSchedule: t('entityReport'), AlertResolution: t('entityAlert'), Session: t('entitySession'),
   }
 
+  const filteredAuditLog = auditLog.filter((l: any) => {
+    if (actionFilter && l.action !== actionFilter) return false
+    if (entityFilter && l.entity !== entityFilter) return false
+    return true
+  })
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -116,7 +125,7 @@ export default function GobiernoPage() {
                 </button>
               ))}
             </div>
-            <Button variant="outline" size="sm" onClick={() => { if (activeTab === 'fuentes') { exportCSV('gobierno_fuentes', [t('colSource'), t('colType'), t('colStatus'), t('colRecords'), t('colLastSync')], sources.map(s => [s.name, s.type, s.status, s.recordCount, s.lastSync || ''])) } else { exportCSV('gobierno_auditoria', [t('colDate'), t('colUser'), t('colAction'), t('colEntity'), t('colEntityId'), 'IP'], auditLog.map((l: any) => [l.createdAt, l.user?.name || l.userId || '', l.action, l.entity, l.entityId || '', l.ipAddress || ''])) } }}><Download size={14} className="mr-1" />{t('export')}</Button>
+            <Button variant="outline" size="sm" onClick={() => { if (activeTab === 'fuentes') { exportCSV('gobierno_fuentes', [t('colSource'), t('colType'), t('colStatus'), t('colRecords'), t('colLastSync')], sources.map(s => [s.name, s.type, s.status, s.recordCount, s.lastSync || ''])) } else { exportCSV('gobierno_auditoria', [t('colDate'), t('colUser'), t('colAction'), t('colEntity'), t('colEntityId'), 'IP'], filteredAuditLog.map((l: any) => [l.createdAt, l.user?.name || l.userId || '', l.action, l.entity, l.entityId || '', l.ipAddress || ''])) } }}><Download size={14} className="mr-1" />{t('export')}</Button>
           </>
         }
       />
@@ -322,22 +331,52 @@ export default function GobiernoPage() {
 
       {activeTab === 'auditoria' && (() => {
         const pageSize = 20
-        const actionFilter = '' // could be state-driven in future
-        const filtered = auditLog
-        const totalPages = Math.ceil(filtered.length / pageSize)
+        const totalPages = Math.ceil(filteredAuditLog.length / pageSize)
         // Count by action for summary
         const actionCounts: Record<string, number> = {}
-        filtered.forEach((l: any) => { actionCounts[l.action] = (actionCounts[l.action] || 0) + 1 })
-        const todayCount = filtered.filter((l: any) => new Date(l.createdAt).toDateString() === new Date().toDateString()).length
+        filteredAuditLog.forEach((l: any) => { actionCounts[l.action] = (actionCounts[l.action] || 0) + 1 })
+        const todayCount = filteredAuditLog.filter((l: any) => new Date(l.createdAt).toDateString() === new Date().toDateString()).length
         return (
           <>
+            {/* Filters */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={actionFilter}
+                onChange={e => setActionFilter(e.target.value)}
+                className="h-8 rounded-md border border-border bg-card px-2 text-xs"
+              >
+                <option value="">{t('filterAllActions')}</option>
+                {Object.keys(ACTION_LABELS).map(a => (
+                  <option key={a} value={a}>{ACTION_LABELS[a].label}</option>
+                ))}
+              </select>
+              <select
+                value={entityFilter}
+                onChange={e => setEntityFilter(e.target.value)}
+                className="h-8 rounded-md border border-border bg-card px-2 text-xs"
+              >
+                <option value="">{t('filterAllEntities')}</option>
+                {Object.keys(ENTITY_LABELS).map(e => (
+                  <option key={e} value={e}>{ENTITY_LABELS[e]}</option>
+                ))}
+              </select>
+              {(actionFilter || entityFilter) && (
+                <button
+                  onClick={() => { setActionFilter(''); setEntityFilter('') }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {t('clearFilters')}
+                </button>
+              )}
+            </div>
+
             {/* Activity summary */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: t('auditTotalRecords'), value: String(filtered.length) },
+                { label: t('auditTotalRecords'), value: String(filteredAuditLog.length) },
                 { label: t('auditToday'), value: String(todayCount), color: todayCount > 0 ? 'text-primary' : '' },
                 { label: t('auditMostFrequentAction'), value: Object.entries(actionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '—' },
-                { label: t('auditActiveUsers'), value: String(new Set(filtered.map((l: any) => l.userId).filter(Boolean)).size) },
+                { label: t('auditActiveUsers'), value: String(new Set(filteredAuditLog.map((l: any) => l.userId).filter(Boolean)).size) },
               ].map((m, i) => (
                 <KpiBox key={m.label} index={i} label={m.label} value={m.value} color={m.color || 'text-foreground'} />
               ))}
@@ -345,7 +384,7 @@ export default function GobiernoPage() {
 
             <Card>
               <CardHeader><CardTitle>{t('auditLog')}</CardTitle></CardHeader>
-              {filtered.length === 0 ? (
+              {filteredAuditLog.length === 0 ? (
                 <CardContent>
                   <div className="text-center py-12">
                     <div className="mb-3 opacity-30"><ClipboardList size={28} className="mx-auto text-muted-foreground" /></div>
@@ -365,7 +404,7 @@ export default function GobiernoPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.slice(0, pageSize).map((log: any) => {
+                        {filteredAuditLog.slice(0, pageSize).map((log: any) => {
                           const actionCfg = ACTION_LABELS[log.action] || (log.action?.includes('FAILED') ? { label: log.action, variant: 'destructive' as const } : { label: log.action, variant: 'secondary' as const })
                           const entityLabel = ENTITY_LABELS[log.entity] || log.entity
                           // Extract meaningful detail from oldValue/newValue
@@ -375,7 +414,8 @@ export default function GobiernoPage() {
                           else if (log.newValue?.email) detail = log.newValue.email
                           else if (log.oldValue?.ids) detail = `${log.oldValue.ids.length} items`
                           return (
-                            <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                            <>
+                            <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}>
                               <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                                 {new Date(log.createdAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                               </td>
@@ -386,14 +426,62 @@ export default function GobiernoPage() {
                               <td className="p-3 text-xs text-muted-foreground truncate max-w-[200px]">{detail || '—'}</td>
                               <td className="p-3 font-mono text-[10px] text-muted-foreground">{log.ipAddress || '—'}</td>
                             </tr>
+                            {expandedLog === log.id && (log.oldValue || log.newValue) && (
+                              <tr>
+                                <td colSpan={7} className="p-0">
+                                  <div className="px-4 py-3 bg-muted/30 border-b border-border">
+                                    <div className="grid grid-cols-2 gap-4">
+                                      {log.oldValue && (
+                                        <div>
+                                          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t('diffBefore')}</div>
+                                          <div className="space-y-1">
+                                            {Object.entries(log.oldValue).filter(([k]) => k !== '_truncated').map(([key, val]) => {
+                                              const newVal = log.newValue?.[key]
+                                              const changed = log.newValue && JSON.stringify(val) !== JSON.stringify(newVal)
+                                              return (
+                                                <div key={key} className={`flex items-baseline gap-2 text-xs ${changed ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                                  <span className="font-mono text-[10px] opacity-60">{key}:</span>
+                                                  <span className="font-mono">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {log.newValue && (
+                                        <div>
+                                          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{t('diffAfter')}</div>
+                                          <div className="space-y-1">
+                                            {Object.entries(log.newValue).filter(([k]) => k !== '_truncated').map(([key, val]) => {
+                                              const oldVal = log.oldValue?.[key]
+                                              const changed = log.oldValue && JSON.stringify(val) !== JSON.stringify(oldVal)
+                                              return (
+                                                <div key={key} className={`flex items-baseline gap-2 text-xs ${changed ? 'text-success' : 'text-muted-foreground'}`}>
+                                                  <span className="font-mono text-[10px] opacity-60">{key}:</span>
+                                                  <span className="font-mono">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {!log.oldValue && !log.newValue && (
+                                        <div className="col-span-2 text-xs text-muted-foreground italic">{t('noDiffData')}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            </>
                           )
                         })}
                       </tbody>
                     </table>
                   </ScrollableTable>
-                  {filtered.length > pageSize && (
+                  {filteredAuditLog.length > pageSize && (
                     <div className="p-3 border-t border-border text-center text-xs text-muted-foreground">
-                      {t('showingOfTotal', { showing: Math.min(pageSize, filtered.length), total: filtered.length })}
+                      {t('showingOfTotal', { showing: Math.min(pageSize, filteredAuditLog.length), total: filteredAuditLog.length })}
                     </div>
                   )}
                 </>

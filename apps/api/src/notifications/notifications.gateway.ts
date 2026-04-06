@@ -71,6 +71,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       client.data = { userId: payload.sub, tenantId, email: payload.email, role: payload.role }
       client.join(`tenant:${tenantId}`)
       this.logger.log(`Cliente conectado: ${payload.email} (tenant: ${tenantId})`)
+      this.broadcastPresence(tenantId)
     } catch (err) {
       this.logger.warn(`Conexión rechazada: JWT inválido`)
       client.disconnect()
@@ -81,6 +82,19 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     if (client.data?.email) {
       this.logger.log(`Cliente desconectado: ${client.data.email}`)
     }
+    if (client.data?.tenantId) {
+      this.broadcastPresence(client.data.tenantId)
+    }
+  }
+
+  private async broadcastPresence(tenantId: string) {
+    const sockets = await this.server.in(`tenant:${tenantId}`).fetchSockets()
+    const users = sockets
+      .filter(s => s.data?.userId)
+      .map(s => ({ userId: s.data.userId, email: s.data.email, role: s.data.role }))
+    // Deduplicate by userId (user might have multiple tabs)
+    const unique = [...new Map(users.map(u => [u.userId, u])).values()]
+    this.server.to(`tenant:${tenantId}`).emit('presence_update', unique)
   }
 
   @OnEvent(NOTIFICATION_EVENTS.PAYMENT_APPROVED)

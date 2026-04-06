@@ -1,6 +1,7 @@
 'use client'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useEffect, useState } from 'react'
+import { useUrlFilters } from '@/hooks/use-url-filters'
 import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { fmtEur, riskLabel, riskVariant, exportCSV } from '@/lib/utils'
@@ -27,13 +28,32 @@ export default function FraudePage() {
   const [auditLog, setAuditLog] = useState<any[]>([])
   const [resolutions, setResolutions] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<TabKey>('alertas')
+  const { filters: urlFilters, setFilters: setUrlFilters } = useUrlFilters({
+    tab: 'alertas',
+    anomPage: '0',
+    auditPage: '0',
+    alertPage: '0',
+  })
+  const tab = (urlFilters.tab as TabKey) || 'alertas'
+  const setTab = (t: TabKey) => setUrlFilters({ tab: t, anomPage: '0', auditPage: '0', alertPage: '0' })
+  const anomPage = parseInt(urlFilters.anomPage) || 0
+  const setAnomPage = (v: number | ((p: number) => number)) => {
+    const next = typeof v === 'function' ? v(anomPage) : v
+    setUrlFilters({ anomPage: String(next) })
+  }
+  const auditPage = parseInt(urlFilters.auditPage) || 0
+  const setAuditPage = (v: number | ((p: number) => number)) => {
+    const next = typeof v === 'function' ? v(auditPage) : v
+    setUrlFilters({ auditPage: String(next) })
+  }
+  const alertPage = parseInt(urlFilters.alertPage) || 0
+  const setAlertPage = (v: number | ((p: number) => number)) => {
+    const next = typeof v === 'function' ? v(alertPage) : v
+    setUrlFilters({ alertPage: String(next) })
+  }
   const [actionAlert, setActionAlert] = useState<string | null>(null)
   const [actionNotes, setActionNotes] = useState('')
   const [saving, setSaving] = useState(false)
-  const [anomPage, setAnomPage] = useState(0)
-  const [auditPage, setAuditPage] = useState(0)
-  const [alertPage, setAlertPage] = useState(0)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [anomAction, setAnomAction] = useState<string | null>(null)
   const [anomActing, setAnomActing] = useState(false)
@@ -54,8 +74,15 @@ export default function FraudePage() {
         setInvoicesAP(ap)
         setAuditLog(audit)
         const resMap: Record<string, any> = {}
-        res.forEach((r: any) => { resMap[r.alertId] = r })
+        const dismissed = new Set<string>()
+        res.forEach((r: any) => {
+          resMap[r.alertId] = r
+          if (r.status === 'FALSE_POSITIVE' && (r.alertId.startsWith('overdue-') || r.alertId.startsWith('dup-') || r.alertId.startsWith('large-ap-'))) {
+            dismissed.add(r.alertId)
+          }
+        })
         setResolutions(resMap)
+        setDismissedAnoms(dismissed)
         setLastUpdated(new Date())
       })
       .catch(console.error)

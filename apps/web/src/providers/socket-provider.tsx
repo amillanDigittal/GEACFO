@@ -5,6 +5,12 @@ import { io, Socket } from 'socket.io-client'
 import { useSession } from 'next-auth/react'
 import { toast } from '@/components/ui/use-toast'
 
+export interface OnlineUser {
+  userId: string
+  email: string
+  role: string
+}
+
 export interface RealtimeNotification {
   id: string
   type: string
@@ -22,6 +28,7 @@ interface SocketContextValue {
   notifications: RealtimeNotification[]
   clearNotifications: () => void
   unreadCount: number
+  onlineUsers: OnlineUser[]
   /** Request browser notification permission. Returns the permission state. */
   requestPushPermission: () => Promise<NotificationPermission>
   pushPermission: NotificationPermission | 'default'
@@ -33,6 +40,7 @@ const SocketContext = createContext<SocketContextValue>({
   notifications: [],
   clearNotifications: () => {},
   unreadCount: 0,
+  onlineUsers: [],
   requestPushPermission: async () => 'default',
   pushPermission: 'default',
 })
@@ -90,6 +98,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [notifications, setNotifications] = useState<RealtimeNotification[]>([])
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([])
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'default'>('default')
   const idCounter = useRef(0)
 
@@ -121,7 +130,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     })
 
     s.on('connect', () => setIsConnected(true))
-    s.on('disconnect', () => setIsConnected(false))
+    s.on('disconnect', () => {
+      setIsConnected(false)
+      setOnlineUsers([])
+    })
+
+    s.on('presence_update', (users: OnlineUser[]) => {
+      setOnlineUsers(users)
+    })
 
     s.on('notification', (event: Omit<RealtimeNotification, 'id'>) => {
       idCounter.current++
@@ -171,7 +187,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   return (
     <SocketContext.Provider value={{
       socket, isConnected, notifications, clearNotifications,
-      unreadCount,
+      unreadCount, onlineUsers,
       requestPushPermission, pushPermission,
     }}>
       {children}

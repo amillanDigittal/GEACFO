@@ -35,7 +35,8 @@
     "apiChecking": "Verificando...",
     "apiOk": "API OK",
     "apiOffline": "API offline",
-    "syncLabel": "Sync"
+    "syncLabel": "Sync",
+    "footerOnline": "en línea"
   },
   "auth": {
     "title": "GEACFO",
@@ -1302,7 +1303,13 @@
     "auditLog": "Log de Auditoría",
     "noAuditRecords": "Sin registros de auditoría",
     "auditAutoRecord": "Las acciones se registran automáticamente",
-    "showingOfTotal": "Mostrando {showing} de {total}"
+    "showingOfTotal": "Mostrando {showing} de {total}",
+    "filterAllActions": "Todas las acciones",
+    "filterAllEntities": "Todas las entidades",
+    "clearFilters": "Limpiar filtros",
+    "diffBefore": "Antes",
+    "diffAfter": "Después",
+    "noDiffData": "Sin datos de cambios disponibles"
   },
   "importar": {
     "title": "Importar Datos",
@@ -1532,7 +1539,15 @@
     "toastDataSavedDesc": "Los datos de empresa se han actualizado correctamente",
     "toastConfigSavedTitle": "Configuración guardada",
     "toastConfigSavedDesc": "Los parámetros se han actualizado correctamente",
-    "toastErrorTitle": "Error"
+    "toastErrorTitle": "Error",
+    "logoLabel": "Logo de empresa",
+    "logoDesc": "Imagen de marca para informes y cabecera (máx. 512 KB)",
+    "logoUpload": "Subir logo",
+    "logoChange": "Cambiar",
+    "logoRemove": "Eliminar",
+    "logoTooLarge": "La imagen no puede superar 512 KB",
+    "logoSaved": "Logo actualizado correctamente",
+    "logoRemoved": "Logo eliminado"
   },
   "reporting": {
     "title": "Reporting & Distribución",

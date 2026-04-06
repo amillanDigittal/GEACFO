@@ -14,6 +14,9 @@ import { DateRangeSelector, type DateRange, compareValues } from '@/components/d
 import dynamic from 'next/dynamic'
 
 const DiscountCalculator = dynamic(() => import('./_components/discount-calculator').then(m => ({ default: m.DiscountCalculator })), { ssr: false })
+import { PaymentCalendarCard } from './_components/payment-calendar-card'
+import { BySupplierCard } from './_components/by-supplier-card'
+import { PeriodComparison } from './_components/period-comparison'
 import { PageHeader } from '@/components/page-header'
 import { KpiBox } from '@/components/kpi-box'
 import { ScrollableTable, Th } from '@/components/ui/scrollable-table'
@@ -266,37 +269,9 @@ export default function PagosPage() {
       )}
 
       {/* Period comparison */}
-      {prevInvoices && periodLabel && (() => {
-        const prevPending = prevInvoices.reduce((s: number, i: any) => s + Number(i.totalAmount) - Number(i.paidAmount), 0)
-        const prevTotal = prevInvoices.reduce((s: number, i: any) => s + Number(i.totalAmount), 0)
-        const curTotal = invoices.reduce((s: number, i: any) => s + Number(i.totalAmount), 0)
-        const cmpTotal = compareValues(curTotal, prevTotal)
-        const cmpPending = compareValues(totalPending, prevPending)
-        const cmpCount = compareValues(invoices.length, prevInvoices.length)
-        return (
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: t('cmpTotalInvoices'), cur: fmtEur(curTotal), prev: fmtEur(prevTotal), ...cmpTotal },
-              { label: t('cmpPendingPayment'), cur: fmtEur(totalPending), prev: fmtEur(prevPending), ...cmpPending },
-              { label: t('cmpInvoiceCount'), cur: String(invoices.length), prev: String(prevInvoices.length), ...cmpCount },
-            ].map(c => (
-              <div key={c.label} className="bg-card border border-border rounded-xl p-3">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{c.label}</div>
-                <div className="flex items-end justify-between mt-1">
-                  <div>
-                    <div className="font-mono text-lg font-bold">{c.cur}</div>
-                    <div className="text-[10px] text-muted-foreground">vs {c.prev} ({periodLabel.previous})</div>
-                  </div>
-                  <div className={`flex items-center gap-0.5 text-xs font-mono font-semibold ${c.positive ? 'text-success' : 'text-destructive'}`}>
-                    {c.positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {c.pct > 0 ? '+' : ''}{c.pct.toFixed(1)}%
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      })()}
+      {prevInvoices && periodLabel && (
+        <PeriodComparison invoices={invoices} prevInvoices={prevInvoices} periodLabel={periodLabel} totalPending={totalPending} />
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -308,61 +283,8 @@ export default function PagosPage() {
 
       {/* Calendar + By Supplier */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Payment calendar */}
-        <Card>
-          <CardHeader><CardTitle>{t('calendarTitle')}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {calendar.map(w => {
-              const pct = totalPending > 0 ? (w.amount / totalPending) * 100 : 0
-              const isUrgent = w.week === t('calThisWeek') && w.amount > 0
-              return (
-                <div key={w.week}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className={`font-medium ${isUrgent ? 'text-warning' : ''}`}>
-                      {w.week} {isUrgent && <Zap size={12} className="inline" />} <span className="text-muted-foreground">({t('calInvCount', { count: w.count })})</span>
-                    </span>
-                    <span className={`font-mono font-semibold ${isUrgent ? 'text-warning' : 'text-foreground'}`}>
-                      {w.amount > 0 ? fmtEur(w.amount) : '—'}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{
-                      width: `${pct}%`,
-                      background: isUrgent ? 'hsl(var(--warning))' : 'hsl(var(--primary))',
-                    }} />
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-
-        {/* By Supplier */}
-        <Card>
-          <CardHeader><CardTitle>{t('bySupplierTitle')}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {Object.values(bySupplier)
-              .sort((a, b) => b.total - a.total)
-              .map(s => {
-                const pct = totalPending > 0 ? (s.total / totalPending) * 100 : 0
-                return (
-                  <div key={s.code} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium truncate">{s.name}</span>
-                        <Badge variant="secondary">{s.code}</Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground">{t('supplierInvoices', { count: s.count })} · {t('supplierTerms', { days: s.terms })}</div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="font-mono text-xs font-semibold">{fmtEur(s.total)}</div>
-                      <div className="text-[10px] text-muted-foreground">{pct.toFixed(1)}%</div>
-                    </div>
-                  </div>
-                )
-              })}
-          </CardContent>
-        </Card>
+        <PaymentCalendarCard calendar={calendar} totalPending={totalPending} />
+        <BySupplierCard bySupplier={bySupplier} totalPending={totalPending} />
       </div>
 
       {/* Descuento por pronto pago */}

@@ -114,6 +114,24 @@ function ClientOnlySparkline(props: { data: number[]; color: string }) {
   return <Sparkline {...props} />
 }
 
+export const KpiCardSkeleton = memo(function KpiCardSkeleton({ index = 0 }: { index?: number }) {
+  return (
+    <div
+      className="kpi-card"
+      style={{ '--stagger': `${index * 60}ms` } as React.CSSProperties}
+    >
+      <div className="absolute top-0 left-3 right-3 h-[3px] rounded-b bg-border" />
+      <div className="h-3 w-16 bg-muted rounded animate-pulse mb-2" />
+      <div className="h-7 w-24 bg-muted rounded animate-pulse mb-2" />
+      <div className="h-3 w-20 bg-muted rounded animate-pulse" />
+      <div className="flex items-center gap-2 mt-2.5">
+        <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+        <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+      </div>
+    </div>
+  )
+})
+
 interface KpiCardProps {
   label: string
   value: string

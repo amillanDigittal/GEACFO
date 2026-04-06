@@ -16,7 +16,7 @@ import { SkeletonConfiguracion } from '@/components/ui/skeleton-page'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { FieldError } from '@/components/ui/field-error'
-import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles, Sun } from 'lucide-react'
+import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles, Sun, Upload } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { PageHeader } from '@/components/page-header'
 import { useRole } from '@/hooks/use-role'
@@ -46,6 +46,7 @@ export default function ConfiguracionPage() {
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const { theme, setTheme } = useTheme()
 
   const tenantForm = useForm<TenantForm>({
@@ -106,6 +107,39 @@ export default function ConfiguracionPage() {
   function resetChanges() {
     tenantForm.reset()
     configForm.reset()
+  }
+
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 512 * 1024) {
+      toast({ title: t('toastErrorTitle'), description: t('logoTooLarge'), variant: 'destructive' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string
+      setLogoPreview(dataUrl)
+      try {
+        await api.settings.updateTenant({ logo: dataUrl })
+        toast({ title: t('toastDataSavedTitle'), description: t('logoSaved') })
+        loadData()
+      } catch (err: any) {
+        toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleLogoRemove() {
+    setLogoPreview(null)
+    try {
+      await api.settings.updateTenant({ logo: '' })
+      toast({ title: t('toastDataSavedTitle'), description: t('logoRemoved') })
+      loadData()
+    } catch (err: any) {
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
+    }
   }
 
   async function saveTenant(data: TenantForm) {
@@ -194,6 +228,42 @@ export default function ConfiguracionPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Logo */}
+            <div className="flex items-start justify-between gap-4 py-3 border-b border-border">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{t('logoLabel')}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{t('logoDesc')}</div>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {(logoPreview || tenant?.logo) && (
+                  <img
+                    src={logoPreview || tenant?.logo || ''}
+                    alt="Logo"
+                    className="h-10 w-10 rounded-lg object-contain border border-border bg-muted"
+                  />
+                )}
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoChange}
+                  />
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                    <Upload size={12} />
+                    {tenant?.logo ? t('logoChange') : t('logoUpload')}
+                  </span>
+                </label>
+                {(logoPreview || tenant?.logo) && (
+                  <button
+                    onClick={handleLogoRemove}
+                    className="text-xs text-destructive hover:underline"
+                  >
+                    {t('logoRemove')}
+                  </button>
+                )}
+              </div>
+            </div>
             <Field label={t('companyNameLabel')} desc={t('companyNameDesc')}>
               <div>
                 <Input {...tenantForm.register('name')} className="h-8 text-sm" />

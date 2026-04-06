@@ -1,7 +1,7 @@
 'use client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ShieldCheck, ShieldX } from 'lucide-react'
+import { ShieldCheck, ShieldX, CheckCircle2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Anomaly, severityConfig } from './types'
@@ -68,10 +68,15 @@ export function AnomaliasTab({
     } finally { setAnomActing(false) }
   }
 
-  function handleDismiss(anomId: string) {
-    setDismissedAnoms(prev => new Set(prev).add(anomId))
-    setAnomAction(null)
-    toast({ title: 'Descartada', description: 'Anomalía marcada como falso positivo.' })
+  async function handleDismiss(anomId: string) {
+    try {
+      await api.alerts.updateResolution(anomId, 'FALSE_POSITIVE', 'Anomalía descartada desde Fraude & Compliance')
+      setDismissedAnoms(prev => new Set(prev).add(anomId))
+      setAnomAction(null)
+      toast({ title: 'Descartada', description: 'Anomalía marcada como falso positivo.' })
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    }
   }
 
   const visibleAnomalies = anomalies.filter(a => !dismissedAnoms.has(a.id))

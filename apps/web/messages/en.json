@@ -35,7 +35,8 @@
     "apiChecking": "Checking...",
     "apiOk": "API OK",
     "apiOffline": "API offline",
-    "syncLabel": "Sync"
+    "syncLabel": "Sync",
+    "footerOnline": "online"
   },
   "auth": {
     "title": "GEACFO",
@@ -1302,7 +1303,13 @@
     "auditLog": "Audit Log",
     "noAuditRecords": "No audit records",
     "auditAutoRecord": "Actions are recorded automatically",
-    "showingOfTotal": "Showing {showing} of {total}"
+    "showingOfTotal": "Showing {showing} of {total}",
+    "filterAllActions": "All actions",
+    "filterAllEntities": "All entities",
+    "clearFilters": "Clear filters",
+    "diffBefore": "Before",
+    "diffAfter": "After",
+    "noDiffData": "No change data available"
   },
   "importar": {
     "title": "Import Data",
@@ -1532,7 +1539,15 @@
     "toastDataSavedDesc": "Company data has been updated successfully",
     "toastConfigSavedTitle": "Settings saved",
     "toastConfigSavedDesc": "Parameters have been updated successfully",
-    "toastErrorTitle": "Error"
+    "toastErrorTitle": "Error",
+    "logoLabel": "Company logo",
+    "logoDesc": "Brand image for reports and header (max 512 KB)",
+    "logoUpload": "Upload logo",
+    "logoChange": "Change",
+    "logoRemove": "Remove",
+    "logoTooLarge": "Image cannot exceed 512 KB",
+    "logoSaved": "Logo updated successfully",
+    "logoRemoved": "Logo removed"
   },
   "reporting": {
     "title": "Reporting & Distribution",

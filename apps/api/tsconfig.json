@@ -16,7 +16,6 @@
     "noImplicitAny": false,
     "strict": false,
     "noEmitOnError": false,
-    "transpileOnly": true,
     "paths": {
       "@geacfo/database": ["../../packages/database/src/index.ts"]
     }

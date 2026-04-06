@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useUrlFilters } from '@/hooks/use-url-filters'
 import { useAccounts, useReconciliation, useAutoMatch } from '@/hooks/use-api'
 import { fmtEur, fmt, exportCSV } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -19,13 +20,8 @@ import { exportXLSX } from '@/lib/export-xlsx'
 import { useToast } from '@/components/ui/use-toast'
 import { SkeletonConciliacion } from '@/components/ui/skeleton-page'
 import { KpiBox } from '@/components/kpi-box'
-
-const bankColors: Record<string, string> = {
-  BBVA: 'hsl(var(--bank-bbva))',
-  Santander: 'hsl(var(--bank-santander))',
-  CaixaBank: 'hsl(var(--bank-caixabank))',
-  Sabadell: 'hsl(var(--bank-sabadell))',
-}
+import { BankAccountCards } from './_components/bank-account-cards'
+import { BalanceDistribution } from './_components/balance-distribution'
 
 export default function ConciliacionPage() {
   const t = useTranslations('conciliacion')
@@ -35,9 +31,11 @@ export default function ConciliacionPage() {
   const loading = accountsLoading || reconciliationsLoading
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [reconciling, setReconciling] = useState(false)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [searchCounterparty, setSearchCounterparty] = useState('')
+  const { filters, setFilters, clearFilters: clearUrlFilters } = useUrlFilters({
+    dateFrom: '',
+    dateTo: '',
+    search: '',
+  })
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [acceptedMatches, setAcceptedMatches] = useState<Set<string>>(new Set())
   const [dismissedMatches, setDismissedMatches] = useState<Set<string>>(new Set())
@@ -108,10 +106,10 @@ export default function ConciliacionPage() {
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const filteredMovements = allMovements.filter((m: any) => {
-    if (dateFrom && new Date(m.date) < new Date(dateFrom)) return false
-    if (dateTo && new Date(m.date) > new Date(dateTo + 'T23:59:59')) return false
-    if (searchCounterparty) {
-      const q = searchCounterparty.toLowerCase()
+    if (filters.dateFrom && new Date(m.date) < new Date(filters.dateFrom)) return false
+    if (filters.dateTo && new Date(m.date) > new Date(filters.dateTo + 'T23:59:59')) return false
+    if (filters.search) {
+      const q = filters.search.toLowerCase()
       const matchesCounterparty = (m.counterparty || '').toLowerCase().includes(q)
       const matchesConcept = (m.concept || '').toLowerCase().includes(q)
       if (!matchesCounterparty && !matchesConcept) return false
@@ -119,8 +117,8 @@ export default function ConciliacionPage() {
     return true
   })
 
-  const hasActiveFilters = dateFrom || dateTo || searchCounterparty
-  const clearFilters = () => { setDateFrom(''); setDateTo(''); setSearchCounterparty('');  }
+  const hasActiveFilters = filters.dateFrom || filters.dateTo || filters.search
+  const clearFilters = clearUrlFilters
 
   return (
     <div className="space-y-6">
@@ -151,92 +149,10 @@ export default function ConciliacionPage() {
       </div>
 
       {/* Bank accounts cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {accounts.map((acc: any) => {
-          const pct = totalBalance > 0 ? (Number(acc.balance) / totalBalance) * 100 : 0
-          const color = bankColors[acc.bankName] || 'hsl(var(--primary))'
-          return (
-            <Card key={acc.id}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ background: color }}>
-                      {acc.bankName.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-sm">{acc.alias}</div>
-                      <div className="text-xs text-muted-foreground">{acc.bankName}</div>
-                    </div>
-                  </div>
-                  <Badge variant="success">{t('badgeActive')}</Badge>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('labelBalance')}</div>
-                    <div className="font-mono text-2xl font-bold">{fmtEur(Number(acc.balance))}</div>
-                    <div className="text-xs text-muted-foreground">{t('ofTotal', { pct: pct.toFixed(1) })}</div>
-                  </div>
-
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground uppercase">IBAN</div>
-                      <div className="font-mono text-[11px] text-foreground">{acc.iban}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-muted-foreground uppercase">{t('labelCurrency')}</div>
-                      <div className="text-xs font-medium">{acc.currency}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <div className="text-xs text-muted-foreground">
-                      {t('movementsCount', { count: acc.movements?.length || 0 })}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {acc.syncedAt ? t('syncDate', { date: fmtDate(acc.syncedAt) }) : t('notSynced')}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      <BankAccountCards accounts={accounts} totalBalance={totalBalance} />
 
       {/* Distribución */}
-      <Card>
-        <CardHeader><CardTitle>{t('balanceDistribution')}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {accounts
-              .sort((a, b) => Number(b.balance) - Number(a.balance))
-              .map((acc: any) => {
-                const pct = totalBalance > 0 ? (Number(acc.balance) / totalBalance) * 100 : 0
-                const color = bankColors[acc.bankName] || 'hsl(var(--primary))'
-                return (
-                  <div key={acc.id}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium">{acc.alias}</span>
-                      <span className="text-muted-foreground">{fmtEur(Number(acc.balance))} ({pct.toFixed(1)}%)</span>
-                    </div>
-                    <div className="h-3 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
-          <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
-            <span className="text-sm font-semibold">{t('totalConsolidated')}</span>
-            <span className="font-mono text-lg font-bold">{fmtEur(totalBalance)}</span>
-          </div>
-        </CardContent>
-      </Card>
+      <BalanceDistribution accounts={accounts} totalBalance={totalBalance} />
 
       {/* Auto-matching suggestions */}
       <Card>
@@ -382,8 +298,8 @@ export default function ConciliacionPage() {
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder={t('searchPlaceholder')}
-                    value={searchCounterparty}
-                    onChange={e => { setSearchCounterparty(e.target.value);  }}
+                    value={filters.search}
+                    onChange={e => { setFilters({ search: e.target.value });  }}
                     className="pl-9 h-9 text-sm bg-muted border-border"
                   />
                 </div>
@@ -392,8 +308,8 @@ export default function ConciliacionPage() {
                 <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">{t('filterFrom')}</label>
                 <Input
                   type="date"
-                  value={dateFrom}
-                  onChange={e => { setDateFrom(e.target.value);  }}
+                  value={filters.dateFrom}
+                  onChange={e => { setFilters({ dateFrom: e.target.value });  }}
                   className="h-9 text-sm bg-muted border-border w-[150px]"
                 />
               </div>
@@ -401,8 +317,8 @@ export default function ConciliacionPage() {
                 <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 block">{t('filterTo')}</label>
                 <Input
                   type="date"
-                  value={dateTo}
-                  onChange={e => { setDateTo(e.target.value);  }}
+                  value={filters.dateTo}
+                  onChange={e => { setFilters({ dateTo: e.target.value });  }}
                   className="h-9 text-sm bg-muted border-border w-[150px]"
                 />
               </div>

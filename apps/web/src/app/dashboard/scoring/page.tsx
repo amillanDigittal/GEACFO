@@ -1,9 +1,10 @@
 'use client'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useUrlFilters } from '@/hooks/use-url-filters'
 import { useCustomers, useCustomer } from '@/hooks/use-api'
 import { fmtEur, scoreColor, riskLabel, riskVariant } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -23,7 +24,12 @@ export default function ScoringPage() {
   const { data: customers = [], mutate, isLoading: loading } = useCustomers()
   const [recalculating, setRecalculating] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
+  const { filters: urlFilters, setFilters: setUrlFilters } = useUrlFilters({ page: '0' })
+  const page = parseInt(urlFilters.page) || 0
+  const setPage = (v: number | ((p: number) => number)) => {
+    const next = typeof v === 'function' ? v(page) : v
+    setUrlFilters({ page: String(next) })
+  }
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const { data: historyData, isLoading: historyLoading } = useCustomer(expandedId)
@@ -52,6 +58,30 @@ export default function ScoringPage() {
     if (customers.length > 0 && !loading) setLastUpdated(new Date())
   }, [customers, loading])
 
+  const kpiData = useMemo(() => {
+    const totalExposure = customers.reduce((sum: number, c: any) => {
+      const pending = c.invoices?.reduce((s: number, i: any) =>
+        i.status !== 'PAID' ? s + Number(i.totalAmount) - Number(i.paidAmount) : s, 0) || 0
+      return sum + pending
+    }, 0)
+
+    const validScores = customers.filter((c: any) => c.creditScore != null)
+    const avgScore = validScores.length > 0
+      ? validScores.reduce((s: number, c: any) => s + c.creditScore, 0) / validScores.length
+      : 0
+
+    const highRisk = customers.filter((c: any) =>
+      c.riskLevel === 'HIGH' || c.riskLevel === 'CRITICAL'
+    ).length
+
+    const validDso = customers.filter((c: any) => c.dso != null && c.dso > 0)
+    const avgDso = validDso.length > 0
+      ? Math.round(validDso.reduce((s: number, c: any) => s + (c.dso || 0), 0) / validDso.length)
+      : 0
+
+    return { totalExposure, avgScore, highRisk, avgDso }
+  }, [customers])
+
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={8} rows={6} />
 
   return (
@@ -66,17 +96,19 @@ export default function ScoringPage() {
         }
       />
 
-      <div className="flex gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
-        <Siren size={18} className="mt-0.5 flex-shrink-0" />
-        <div><div className="font-semibold text-sm">{t('alertActive')}</div>
-        <div className="text-xs opacity-80 mt-0.5">{t('alertActiveDetail')}</div></div>
-      </div>
+      {kpiData.highRisk > 0 && (
+        <div className="flex gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-destructive">
+          <Siren size={18} className="mt-0.5 flex-shrink-0" />
+          <div><div className="font-semibold text-sm">{t('alertActive')}</div>
+          <div className="text-xs opacity-80 mt-0.5">{t('alertActiveDetail')}</div></div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiBox index={0} label={t('kpiTotalExposure')} value={fmtEur(964850)} />
-        <KpiBox index={1} label={t('kpiAverageScore')} value="75.0" color="text-success" />
-        <KpiBox index={2} label={t('kpiHighRisk')} value="1" color="text-destructive" />
-        <KpiBox index={3} label={t('kpiAverageDso')} value={t('kpiAverageDsoValue')} />
+        <KpiBox index={0} label={t('kpiTotalExposure')} value={fmtEur(kpiData.totalExposure)} />
+        <KpiBox index={1} label={t('kpiAverageScore')} value={kpiData.avgScore.toFixed(1)} color={kpiData.avgScore >= 70 ? 'text-success' : kpiData.avgScore >= 50 ? 'text-warning' : 'text-destructive'} />
+        <KpiBox index={2} label={t('kpiHighRisk')} value={`${kpiData.highRisk}`} color={kpiData.highRisk > 0 ? 'text-destructive' : 'text-success'} />
+        <KpiBox index={3} label={t('kpiAverageDso')} value={`${kpiData.avgDso}d`} color={kpiData.avgDso > 60 ? 'text-destructive' : kpiData.avgDso > 45 ? 'text-warning' : 'text-success'} />
       </div>
 
       <Card>

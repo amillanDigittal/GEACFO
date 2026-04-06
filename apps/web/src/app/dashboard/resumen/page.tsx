@@ -167,13 +167,32 @@ export default function ResumenPage() {
     [alerts]
   )
 
+  const cashTrend = useMemo(() => {
+    const sp = data?.caja?.sparkline
+    if (sp && sp.length >= 2) {
+      const prev = sp[sp.length - 2]
+      const curr = sp[sp.length - 1]
+      if (prev !== 0) {
+        const pct = ((curr - prev) / Math.abs(prev)) * 100
+        return { text: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`, up: pct > 0 }
+      }
+    }
+    return { text: '', up: true }
+  }, [data])
+
+  const deudaTrend = useMemo(() => {
+    const tv = data?.deudaNeta?.trend
+    if (typeof tv === 'number') return { text: `${tv > 0 ? '+' : ''}${tv.toFixed(1)}%`, up: tv < 0 }
+    return { text: '', up: true }
+  }, [data])
+
   const kpis = useMemo<KpiItem[]>(() => [
     {
       label: t('kpiCash'),
       value: fmtM(caja),
       icon: <Landmark size={18} />,
-      trend: '+3.2%',
-      up: true,
+      trend: cashTrend.text,
+      up: cashTrend.up,
       color: 'from-blue-500/20 to-blue-600/5',
       iconColor: 'text-blue-400',
       href: '/dashboard/conciliacion',
@@ -192,8 +211,8 @@ export default function ResumenPage() {
       label: t('kpiNetDebt'),
       value: fmtM(deuda),
       icon: <CreditCard size={18} />,
-      trend: '−1.2%',
-      up: true,
+      trend: deudaTrend.text,
+      up: deudaTrend.up,
       color: 'from-orange-500/20 to-orange-600/5',
       iconColor: 'text-orange-400',
       href: '/dashboard/deuda',
@@ -208,7 +227,7 @@ export default function ResumenPage() {
       iconColor: 'text-violet-400',
       href: '/dashboard/cobros',
     },
-  ], [t, caja, ebitda, ebitdaMargin, deuda, dso])
+  ], [t, caja, ebitda, ebitdaMargin, deuda, dso, cashTrend, deudaTrend])
 
   const accountsWithPct = useMemo(() => {
     const accounts = data?.caja?.accounts || []
