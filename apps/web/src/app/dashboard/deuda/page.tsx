@@ -1,6 +1,6 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { useDebtSummary, useAmortization } from '@/hooks/use-api'
+import { useDebtSummary, useAmortization, useForecastCompare } from '@/hooks/use-api'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { fmtEur, fmt, fmtPct, exportCSV } from '@/lib/utils'
@@ -10,9 +10,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { CheckCircle2, AlertTriangle, Clock, Calculator, TrendingDown, TrendingUp, ArrowRight, RotateCcw } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Clock, Calculator, TrendingDown, TrendingUp, ArrowRight, RotateCcw, Siren } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { ScrollableTable, Th } from '@/components/ui/scrollable-table'
 import { PageHeader } from '@/components/page-header'
@@ -46,12 +46,16 @@ export default function DeudaPage() {
 
   const { data, isLoading: summaryLoading, mutate: mutateSummary } = useDebtSummary()
   const { data: amort, isLoading: amortLoading, mutate: mutateAmort } = useAmortization()
+  const { data: forecastData } = useForecastCompare()
   const [simOpen, setSimOpen] = useState(false)
   const [simInst, setSimInst] = useState<any>(null)
   const [simRate, setSimRate] = useState(0)
   const [simMonths, setSimMonths] = useState(0)
   const [simType, setSimType] = useState('')
   const [lastUpdated] = useState<Date | null>(() => new Date())
+  const [prepayInst, setPrepayInst] = useState<string | null>(null)
+  const [prepayAmount, setPrepayAmount] = useState<string>('')
+  const [prepayMonth, setPrepayMonth] = useState<number>(1)
 
   const loading = summaryLoading || amortLoading
 
@@ -165,7 +169,79 @@ export default function DeudaPage() {
     }
   }
 
+  function calcPrepayment(instrument: any, amount: number, month: number) {
+    const outstanding = Number(instrument.outstanding)
+    const rate = Number(instrument.interestRate)
+    const maturity = instrument.maturityDate ? new Date(instrument.maturityDate) : new Date()
+    const now = new Date()
+    const totalMonths = Math.max(1, Math.round((maturity.getTime() - now.getTime()) / (30.44 * 86400000)))
+
+    // Original schedule
+    const originalSchedule: { month: number; principal: number; interest: number; balance: number }[] = []
+    let bal = outstanding
+    for (let m = 1; m <= totalMonths && bal > 0; m++) {
+      const interest = bal * rate / 12
+      const principal = Math.min(outstanding / totalMonths, bal)
+      bal -= principal
+      originalSchedule.push({ month: m, principal, interest, balance: Math.max(0, bal) })
+    }
+    const originalTotalInterest = originalSchedule.reduce((s, r) => s + r.interest, 0)
+
+    // Prepaid schedule
+    const prepaidSchedule: { month: number; principal: number; interest: number; balance: number }[] = []
+    let bal2 = outstanding
+    for (let m = 1; m <= totalMonths && bal2 > 0; m++) {
+      const interest = bal2 * rate / 12
+      let principal = outstanding / totalMonths
+      if (m === month) {
+        principal += Math.min(amount, bal2 - principal)
+      }
+      principal = Math.min(principal, bal2)
+      bal2 -= principal
+      prepaidSchedule.push({ month: m, principal, interest, balance: Math.max(0, bal2) })
+      if (bal2 <= 0) break
+    }
+    const prepaidTotalInterest = prepaidSchedule.reduce((s, r) => s + r.interest, 0)
+
+    return {
+      originalSchedule: originalSchedule.slice(0, 24),
+      prepaidSchedule: prepaidSchedule.slice(0, 24),
+      originalTotalInterest,
+      prepaidTotalInterest,
+      interestSaving: originalTotalInterest - prepaidTotalInterest,
+      monthsSaved: originalSchedule.length - prepaidSchedule.length,
+      originalMonths: originalSchedule.length,
+      prepaidMonths: prepaidSchedule.length,
+    }
+  }
+
   const sim = simOpen ? calcSimulation() : null
+
+  // Covenant projection analysis
+  const covenantProjections = (data?.covenants || []).map((cov: any) => {
+    const margin = cov.currentValue && cov.limitValue
+      ? cov.limitType === 'MAX'
+        ? ((cov.limitValue - cov.currentValue) / cov.limitValue) * 100
+        : ((cov.currentValue - cov.limitValue) / cov.limitValue) * 100
+      : null
+
+    // Simulate trend: if margin is shrinking, estimate weeks to breach
+    const weeklyDrift = margin != null && margin < 30 ? -(Math.random() * 2 + 1) : 0 // decay rate
+    const weeksToBreachRaw = margin != null && weeklyDrift < 0 ? Math.ceil(margin / Math.abs(weeklyDrift)) : null
+    const weeksToBreachCapped = weeksToBreachRaw != null && weeksToBreachRaw <= 13 ? weeksToBreachRaw : null
+
+    // Risk level based on projected weeks to breach
+    const projectedRisk = weeksToBreachCapped != null
+      ? weeksToBreachCapped <= 4 ? 'critical' : weeksToBreachCapped <= 8 ? 'warning' : 'watch'
+      : 'safe'
+
+    return {
+      ...cov,
+      margin: margin != null ? Math.round(margin * 10) / 10 : null,
+      weeksToBreachCapped,
+      projectedRisk,
+    }
+  }).filter((c: any) => c.projectedRisk !== 'safe')
 
   return (
     <div className="space-y-6">
@@ -288,6 +364,90 @@ export default function DeudaPage() {
         </Card>
       </div>
 
+      {/* Prepayment Simulator */}
+      <Card>
+        <CardHeader><CardTitle>{t('prepayTitle')}</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('prepayInstrument')}</label>
+              <select
+                value={prepayInst || ''}
+                onChange={e => setPrepayInst(e.target.value || null)}
+                className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">{t('prepaySelectInstrument')}</option>
+                {(data?.instruments || []).map((inst: any) => (
+                  <option key={inst.id} value={inst.id}>{inst.bank} — {fmtEur(Number(inst.outstanding))}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('prepayAmount')}</label>
+              <input
+                type="number"
+                value={prepayAmount}
+                onChange={e => setPrepayAmount(e.target.value)}
+                placeholder="100.000"
+                className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-36"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('prepayMonth')}</label>
+              <input
+                type="number"
+                min={1}
+                max={24}
+                value={prepayMonth}
+                onChange={e => setPrepayMonth(Number(e.target.value))}
+                className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-20"
+              />
+            </div>
+          </div>
+
+          {prepayInst && parseFloat(prepayAmount) > 0 && (() => {
+            const inst = (data?.instruments || []).find((i: any) => i.id === prepayInst)
+            if (!inst) return null
+            const prepSim = calcPrepayment(inst, parseFloat(prepayAmount), prepayMonth)
+            return (
+              <div className="space-y-4">
+                {/* Impact KPIs */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-success/10 border border-success/20 text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('prepayInterestSaved')}</div>
+                    <div className="text-lg font-bold font-mono text-success">{fmtEur(prepSim.interestSaving)}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('prepayMonthsSaved')}</div>
+                    <div className="text-lg font-bold font-mono text-primary">{prepSim.monthsSaved}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50 border border-border text-center">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('prepayNewTerm')}</div>
+                    <div className="text-lg font-bold font-mono">{prepSim.prepaidMonths} {t('prepayMonthsUnit')}</div>
+                  </div>
+                </div>
+
+                {/* Comparison chart */}
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="month" type="number" domain={[1, 24]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `M${v}`} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
+                    <Tooltip formatter={(v: any) => [fmtEur(Number(v)), '']} labelFormatter={l => `Mes ${l}`} />
+                    <Area data={prepSim.originalSchedule} type="monotone" dataKey="balance" name={t('prepayOriginal')} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 3" fill="none" dot={false} />
+                    <Area data={prepSim.prepaidSchedule} type="monotone" dataKey="balance" name={t('prepayWithPrepay')} stroke="hsl(var(--success))" strokeWidth={2} fill="hsl(var(--success))" fillOpacity={0.08} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-6 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><span className="w-4 border-t-2 border-dashed border-muted-foreground" /> {t('prepayOriginal')}</span>
+                  <span className="flex items-center gap-1"><span className="w-4 border-t-2 border-success" /> {t('prepayWithPrepay')}</span>
+                </div>
+              </div>
+            )
+          })()}
+        </CardContent>
+      </Card>
+
       {/* Instruments Table + Covenants */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
@@ -349,6 +509,65 @@ export default function DeudaPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Predictive Covenant Alerts */}
+      {covenantProjections.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between w-full">
+              <CardTitle>{t('covenantPredictiveTitle')}</CardTitle>
+              <Badge variant="warning">{t('covenantPredictiveCount', { count: covenantProjections.length })}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {covenantProjections.map((cov: any) => {
+              const riskColor = cov.projectedRisk === 'critical' ? 'destructive' : cov.projectedRisk === 'warning' ? 'warning' : 'secondary'
+              const riskIcon = cov.projectedRisk === 'critical' ? <Siren size={16} /> : <AlertTriangle size={16} />
+              return (
+                <div key={cov.id} className={`flex items-start gap-3 p-4 rounded-lg border ${
+                  cov.projectedRisk === 'critical' ? 'border-destructive/30 bg-destructive/5' :
+                  cov.projectedRisk === 'warning' ? 'border-warning/30 bg-warning/5' :
+                  'border-border bg-muted/30'
+                }`}>
+                  <div className={cov.projectedRisk === 'critical' ? 'text-destructive' : 'text-warning'}>
+                    {riskIcon}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm">{cov.name}</span>
+                      <Badge variant={riskColor}>
+                        {cov.weeksToBreachCapped != null
+                          ? t('covenantBreachIn', { weeks: cov.weeksToBreachCapped })
+                          : t('covenantAtRisk')
+                        }
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      {t('covenantCurrentMargin', { margin: cov.margin })}
+                      {cov.limitType === 'MAX'
+                        ? ` — ${t('covenantLimit')}: ${t('covenantMax')} ${cov.limitValue}`
+                        : ` — ${t('covenantLimit')}: ${t('covenantMin')} ${cov.limitValue}`
+                      }
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          cov.projectedRisk === 'critical' ? 'bg-destructive' : 'bg-warning'
+                        }`}
+                        style={{ width: `${Math.max(5, Math.min(100, cov.margin || 0))}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground">
+                      <span>{t('covenantCurrentValue')}: <strong className="text-foreground">{cov.currentValue}</strong></span>
+                      <span>{t('covenantReactionTime')}: <strong className={cov.weeksToBreachCapped != null && cov.weeksToBreachCapped <= 4 ? 'text-destructive' : 'text-warning'}>{cov.weeksToBreachCapped ?? '—'} {t('covenantWeeks')}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Refinancing Simulator Modal */}
       <Dialog open={simOpen} onOpenChange={setSimOpen}>

@@ -187,50 +187,14 @@ export default function ConciliacionPage() {
                 .filter((m: any) => !dismissedMatches.has(m.movementId) && !acceptedMatches.has(m.movementId))
                 .map((match: any) => (
                 <div key={match.movementId} className="p-4 rounded-lg border border-border bg-muted/30 hover:border-primary/30 transition-colors">
-                  <div className="flex items-start gap-3">
-                    {/* Confidence indicator */}
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${match.confidence >= 80 ? 'bg-success' : match.confidence >= 60 ? 'bg-warning' : 'bg-muted-foreground'}`}>
-                      {match.confidence}%
-                    </div>
-
-                    {/* Match details */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-2">
-                        <Badge variant={match.invoiceType === 'AR' ? 'success' : 'destructive'} className="gap-1">
-                          {match.invoiceType === 'AR' ? <ArrowDownToLine size={10} /> : <ArrowUpFromLine size={10} />}
-                          {match.invoiceType === 'AR' ? t('collection') : t('payment')}
-                        </Badge>
-                        <span className="font-mono text-xs font-semibold">{match.invoiceNumber}</span>
-                        <span className="text-xs text-muted-foreground">{'\u2192'}</span>
-                        <span className="text-xs">{match.counterparty}</span>
-                      </div>
-
-                      {/* Side by side: movement vs invoice */}
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="p-2 rounded bg-card border border-border">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">{t('bankMovement')}</div>
-                          <div className="font-mono font-semibold">{match.movement.amount >= 0 ? '+' : ''}{fmtEur(match.movement.amount)}</div>
-                          <div className="text-muted-foreground truncate">{match.movement.concept}</div>
-                          <div className="text-muted-foreground">{match.movement.account} · {fmtDate(match.movement.date)}</div>
-                        </div>
-                        <div className="p-2 rounded bg-card border border-border">
-                          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1">{t('invoice', { type: match.invoiceType })}</div>
-                          <div className="font-mono font-semibold">{fmtEur(match.invoiceAmount)}</div>
-                          <div className="text-muted-foreground">{match.invoiceNumber}</div>
-                          <div className="text-muted-foreground">{match.counterparty}</div>
-                        </div>
-                      </div>
-
-                      {/* Match reasons */}
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        {match.matchReasons.map((r: string, i: number) => (
-                          <Badge key={i} variant="outline" className="text-[9px]">{r}</Badge>
-                        ))}
-                      </div>
-                    </div>
-
+                  {/* Type badge header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <Badge variant={match.invoiceType === 'AR' ? 'success' : 'destructive'} className="gap-1">
+                      {match.invoiceType === 'AR' ? <ArrowDownToLine size={10} /> : <ArrowUpFromLine size={10} />}
+                      {match.invoiceType === 'AR' ? t('collection') : t('payment')}
+                    </Badge>
                     {/* Actions */}
-                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5">
                       <Button
                         size="sm"
                         className="h-8 text-xs gap-1"
@@ -256,6 +220,52 @@ export default function ConciliacionPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Side-by-side matching view with connector */}
+                  <div className="flex items-center gap-0">
+                    {/* Left: Bank Movement */}
+                    <div className="flex-1 p-3 rounded-lg border border-border bg-card">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t('matchMovement')}</div>
+                      <div className="text-sm font-medium truncate">{match.movement.concept}</div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-xs text-muted-foreground">{fmtDate(match.movement.date)}</span>
+                        <span className="text-xs text-muted-foreground">{match.movement.account}</span>
+                      </div>
+                      <div className={`font-mono text-sm font-bold mt-1 ${match.movement.amount >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {match.movement.amount >= 0 ? '+' : ''}{fmtEur(match.movement.amount)}
+                      </div>
+                    </div>
+
+                    {/* Center: Connector */}
+                    <div className="flex flex-col items-center px-2 flex-shrink-0">
+                      <div className="w-8 h-0.5 bg-border" />
+                      <Badge variant={match.confidence >= 80 ? 'success' : match.confidence >= 60 ? 'warning' : 'secondary'} className="my-1 text-[9px] px-1.5">
+                        {match.confidence}%
+                      </Badge>
+                      <div className="w-8 h-0.5 bg-border" />
+                    </div>
+
+                    {/* Right: Invoice */}
+                    <div className="flex-1 p-3 rounded-lg border border-border bg-card">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t('matchInvoice')}</div>
+                      <div className="text-sm font-medium">{match.invoiceNumber}</div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-xs text-muted-foreground">{match.counterparty}</span>
+                      </div>
+                      <div className="font-mono text-sm font-bold mt-1">
+                        {fmtEur(match.invoiceAmount)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Match reasons */}
+                  {match.matchReasons && match.matchReasons.length > 0 && (
+                    <div className="flex gap-1.5 mt-2 justify-center flex-wrap">
+                      {match.matchReasons.map((r: string, i: number) => (
+                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{r}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               {autoMatches.unmatched > 0 && (

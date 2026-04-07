@@ -1,6 +1,6 @@
 'use client'
 import { useHydrated } from '@/hooks/use-hydrated'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { api } from '@/lib/api'
 import { PageHeader } from '@/components/page-header'
@@ -14,7 +14,10 @@ import { useToast } from '@/components/ui/use-toast'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { KpiBox } from '@/components/kpi-box'
 import { exportBoardPackPDF } from '@/lib/export-pdf'
-import { Plus, Send, Pencil, Trash2, Clock, CheckCircle2, Pause, Play, FileDown, Calendar, Mail } from 'lucide-react'
+import { Plus, Send, Pencil, Trash2, Clock, CheckCircle2, Pause, Play, FileDown, Calendar, Mail, Landmark, TrendingUp, TrendingDown, Shield, Users, Target, AlertTriangle, Bell } from 'lucide-react'
+import { PillTabs } from '@/components/ui/pill-tabs'
+import { useCockpit, useForecastCompare, useSuppliers, useDebtSummary, useAlertCounts } from '@/hooks/use-api'
+import { fmtEur, fmtPct } from '@/lib/utils'
 
 interface Schedule {
   id: string; name: string; reportType: string; frequency: string; recipients: string
@@ -30,6 +33,15 @@ export default function ReportingPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<Schedule | null>(null)
   const [sending, setSending] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'schedules' | 'dashboard'>('schedules')
+  const [selectedKpis, setSelectedKpis] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return ['cash_balance', 'ar_total', 'ap_total', 'coverage_ratio']
+    try {
+      const saved = localStorage.getItem('geacfo-custom-dashboard')
+      return saved ? JSON.parse(saved) : ['cash_balance', 'ar_total', 'ap_total', 'coverage_ratio']
+    } catch { return ['cash_balance', 'ar_total', 'ap_total', 'coverage_ratio'] }
+  })
+  const [dashPeriod, setDashPeriod] = useState('30d')
 
   // Form
   const [formName, setFormName] = useState('')
@@ -62,6 +74,64 @@ export default function ReportingPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('geacfo-custom-dashboard', JSON.stringify(selectedKpis))
+    }
+  }, [selectedKpis])
+
+  // Data hooks for custom dashboard (only fetch when dashboard tab is active)
+  const { data: cockpit } = useCockpit()
+  const { data: forecastCompare } = useForecastCompare()
+  const { data: suppliersList } = useSuppliers()
+  const { data: debtData } = useDebtSummary()
+  const { data: alertCounts } = useAlertCounts()
+
+  // Compute KPI values from API data
+  const kpiValues: Record<string, string> = {}
+  if (cockpit) {
+    kpiValues.cash_balance = fmtEur(cockpit.caja?.value ?? 0)
+    kpiValues.ar_total = fmtEur(cockpit.workingCapital?.ar ?? 0)
+    kpiValues.ap_total = fmtEur(cockpit.workingCapital?.ap ?? 0)
+    kpiValues.coverage_ratio = cockpit.liquidez?.value != null ? `${cockpit.liquidez.value}x` : '—'
+  }
+  if (suppliersList && suppliersList.length > 0) {
+    const scored = suppliersList.filter((s: any) => s.overallScore != null)
+    kpiValues.supplier_score = scored.length > 0
+      ? String(Math.round(scored.reduce((sum: number, s: any) => sum + s.overallScore, 0) / scored.length))
+      : '—'
+  }
+  if (forecastCompare) {
+    const baseWeeks = forecastCompare.weeks?.filter((w: any) => w.base) || []
+    if (baseWeeks.length > 0) {
+      const avg = Math.round(baseWeeks.reduce((s: number, w: any) => s + w.base.confidence, 0) / baseWeeks.length)
+      kpiValues.forecast_confidence = `${avg}%`
+    }
+  }
+  if (debtData) {
+    const atRisk = debtData.covenants?.filter((c: any) => c.status === 'WARNING' || c.status === 'BREACH')?.length ?? 0
+    kpiValues.covenants_risk = String(atRisk)
+  }
+  if (alertCounts) {
+    const total = Object.values(alertCounts).reduce((s: number, v: any) => s + (typeof v === 'number' ? v : 0), 0)
+    kpiValues.active_alerts = String(total)
+  }
+
+  const AVAILABLE_KPIS: { key: string; label: string; icon: React.ReactNode; color: string }[] = [
+    { key: 'cash_balance', label: t('kpiCashBalance'), icon: <Landmark size={16} />, color: 'text-primary' },
+    { key: 'ar_total', label: t('kpiArTotal'), icon: <TrendingUp size={16} />, color: 'text-success' },
+    { key: 'ap_total', label: t('kpiApTotal'), icon: <TrendingDown size={16} />, color: 'text-destructive' },
+    { key: 'coverage_ratio', label: t('kpiCoverageRatio'), icon: <Shield size={16} />, color: 'text-primary' },
+    { key: 'supplier_score', label: t('kpiSupplierScore'), icon: <Users size={16} />, color: 'text-warning' },
+    { key: 'forecast_confidence', label: t('kpiForecastConf'), icon: <Target size={16} />, color: 'text-success' },
+    { key: 'covenants_risk', label: t('kpiCovenantsRisk'), icon: <AlertTriangle size={16} />, color: 'text-destructive' },
+    { key: 'active_alerts', label: t('kpiActiveAlerts'), icon: <Bell size={16} />, color: 'text-warning' },
+  ]
+
+  function toggleKpi(key: string) {
+    setSelectedKpis(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  }
 
   const hydrated = useHydrated()
 
@@ -196,6 +266,17 @@ export default function ReportingPage() {
         ))}
       </div>
 
+      {/* Tab toggle */}
+      <PillTabs
+        tabs={[
+          { key: 'schedules', label: t('tabSchedules') },
+          { key: 'dashboard', label: t('tabDashboard') },
+        ]}
+        active={tab}
+        onChange={(key) => setTab(key as 'schedules' | 'dashboard')}
+      />
+
+      {tab === 'schedules' && (<>
       {/* SMTP notice */}
       <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
         <Mail size={16} className="text-primary mt-0.5 flex-shrink-0" />
@@ -291,6 +372,103 @@ export default function ReportingPage() {
               </Card>
             )
           })}
+        </div>
+      )}
+      </>)}
+
+      {tab === 'dashboard' && (
+        <div className="space-y-4">
+          {/* Period selector */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">{t('dashPeriod')}:</span>
+            <div className="flex gap-1">
+              {[
+                { key: '7d', label: '7 dias' },
+                { key: '30d', label: '30 dias' },
+                { key: '90d', label: '90 dias' },
+                { key: '12m', label: '12 meses' },
+              ].map(p => (
+                <button
+                  key={p.key}
+                  onClick={() => setDashPeriod(p.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    dashPeriod === p.key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* KPI selector */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">{t('dashSelectKpis')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {AVAILABLE_KPIS.map(kpi => {
+                  const selected = selectedKpis.includes(kpi.key)
+                  return (
+                    <button
+                      key={kpi.key}
+                      onClick={() => toggleKpi(kpi.key)}
+                      className={`flex items-center gap-2 p-3 rounded-lg border text-left transition-all ${
+                        selected
+                          ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
+                          : 'border-border bg-muted/30 hover:bg-muted/50 opacity-60'
+                      }`}
+                    >
+                      <div className={`${selected ? kpi.color : 'text-muted-foreground'}`}>{kpi.icon}</div>
+                      <span className="text-xs font-medium">{kpi.label}</span>
+                      {selected && <CheckCircle2 size={12} className="ml-auto text-primary" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Selected KPIs dashboard */}
+          {selectedKpis.length > 0 ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {selectedKpis.map(key => {
+                const kpi = AVAILABLE_KPIS.find(k => k.key === key)
+                if (!kpi) return null
+                return (
+                  <Card key={key} className="relative overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className={kpi.color}>{kpi.icon}</div>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">{kpi.label}</span>
+                      </div>
+                      <div className="text-2xl font-bold font-mono text-foreground">{kpiValues[key] || '—'}</div>
+                      <div className="text-[10px] text-muted-foreground mt-1">{t('dashPeriodLabel', { period: dashPeriod })}</div>
+                      <div className="absolute top-0 right-0 w-16 h-16 opacity-[0.03]">
+                        {kpi.icon}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center">
+                <div className="text-sm text-muted-foreground">{t('dashNoKpis')}</div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <Target size={16} className="text-primary mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-muted-foreground">
+              <strong className="text-foreground">{t('dashHintTitle')}</strong> {t('dashHintDesc')}
+            </div>
+          </div>
         </div>
       )}
 

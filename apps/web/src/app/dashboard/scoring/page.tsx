@@ -24,8 +24,10 @@ export default function ScoringPage() {
   const { data: customers = [], mutate, isLoading: loading } = useCustomers()
   const [recalculating, setRecalculating] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const { filters: urlFilters, setFilters: setUrlFilters } = useUrlFilters({ page: '0' })
+  const { filters: urlFilters, setFilters: setUrlFilters } = useUrlFilters({ page: '0', search: '', risk: 'ALL' })
   const page = parseInt(urlFilters.page) || 0
+  const searchFilter = urlFilters.search
+  const riskFilter = urlFilters.risk
   const setPage = (v: number | ((p: number) => number)) => {
     const next = typeof v === 'function' ? v(page) : v
     setUrlFilters({ page: String(next) })
@@ -58,29 +60,41 @@ export default function ScoringPage() {
     if (customers.length > 0 && !loading) setLastUpdated(new Date())
   }, [customers, loading])
 
+  const filteredCustomers = useMemo(() => {
+    let list = customers || []
+    if (searchFilter) {
+      const q = searchFilter.toLowerCase()
+      list = list.filter((c: any) => c.name?.toLowerCase().includes(q) || c.code?.toLowerCase().includes(q))
+    }
+    if (riskFilter !== 'ALL') {
+      list = list.filter((c: any) => c.riskLevel === riskFilter)
+    }
+    return list
+  }, [customers, searchFilter, riskFilter])
+
   const kpiData = useMemo(() => {
-    const totalExposure = customers.reduce((sum: number, c: any) => {
+    const totalExposure = filteredCustomers.reduce((sum: number, c: any) => {
       const pending = c.invoices?.reduce((s: number, i: any) =>
         i.status !== 'PAID' ? s + Number(i.totalAmount) - Number(i.paidAmount) : s, 0) || 0
       return sum + pending
     }, 0)
 
-    const validScores = customers.filter((c: any) => c.creditScore != null)
+    const validScores = filteredCustomers.filter((c: any) => c.creditScore != null)
     const avgScore = validScores.length > 0
       ? validScores.reduce((s: number, c: any) => s + c.creditScore, 0) / validScores.length
       : 0
 
-    const highRisk = customers.filter((c: any) =>
+    const highRisk = filteredCustomers.filter((c: any) =>
       c.riskLevel === 'HIGH' || c.riskLevel === 'CRITICAL'
     ).length
 
-    const validDso = customers.filter((c: any) => c.dso != null && c.dso > 0)
+    const validDso = filteredCustomers.filter((c: any) => c.dso != null && c.dso > 0)
     const avgDso = validDso.length > 0
       ? Math.round(validDso.reduce((s: number, c: any) => s + (c.dso || 0), 0) / validDso.length)
       : 0
 
     return { totalExposure, avgScore, highRisk, avgDso }
-  }, [customers])
+  }, [filteredCustomers])
 
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={8} rows={6} />
 
@@ -112,12 +126,37 @@ export default function ScoringPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>{t('customerPortfolio')}</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+            <CardTitle>{t('customerPortfolio')}</CardTitle>
+            <div className="flex gap-2 items-center">
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={e => { setUrlFilters({ search: e.target.value, page: '0' }) }}
+                placeholder={t('searchPlaceholder')}
+                className="bg-background border border-border rounded-md px-3 py-2 text-sm w-48"
+              />
+              <select
+                value={riskFilter}
+                onChange={e => { setUrlFilters({ risk: e.target.value, page: '0' }) }}
+                className="bg-background border border-border rounded-md px-3 py-2 text-sm"
+              >
+                <option value="ALL">{t('allRisks')}</option>
+                <option value="VERY_LOW">{t('riskVeryLow')}</option>
+                <option value="LOW">{t('riskLow')}</option>
+                <option value="MEDIUM">{t('riskMedium')}</option>
+                <option value="HIGH">{t('riskHigh')}</option>
+                <option value="CRITICAL">{t('riskCritical')}</option>
+              </select>
+            </div>
+          </div>
+        </CardHeader>
         <ScrollableTable>
           <table className="w-full text-sm">
             <thead><tr className="border-b border-border">{[t('thClient'), t('thScoreAi'), t('thRisk'), t('thExposure'), t('thDso'), t('thLimit'), t('thStatus'), t('thAction')].map(h => <th key={h} className="text-left p-3 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>
-              {customers.slice(page * 10, (page + 1) * 10).map(c => {
+              {filteredCustomers.slice(page * 10, (page + 1) * 10).map((c: any) => {
                 const isExpanded = expandedId === c.id
                 const scoreColorVal = c.creditScore >= 80 ? 'hsl(var(--success))' : c.creditScore >= 60 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'
                 return (
@@ -249,14 +288,14 @@ export default function ScoringPage() {
             </tbody>
           </table>
 </ScrollableTable>
-        {customers.length > 10 && (
+        {filteredCustomers.length > 10 && (
           <div className="flex items-center justify-center gap-2 p-3 border-t border-border">
             <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 0} onClick={() => setPage(p => p - 1)}>{'\u2190'}</Button>
-            {Array.from({ length: Math.ceil(customers.length / 10) }, (_, i) => (
+            {Array.from({ length: Math.ceil(filteredCustomers.length / 10) }, (_, i) => (
               <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 rounded-md text-xs font-medium transition-colors ${page === i ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:text-foreground'}`}>{i + 1}</button>
             ))}
-            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(customers.length / 10) - 1} onClick={() => setPage(p => p + 1)}>{'\u2192'}</Button>
-            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}{'\u2013'}{Math.min((page + 1) * 10, customers.length)} {t('of')} {customers.length}</span>
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page >= Math.ceil(filteredCustomers.length / 10) - 1} onClick={() => setPage(p => p + 1)}>{'\u2192'}</Button>
+            <span className="text-xs text-muted-foreground ml-2">{page * 10 + 1}{'\u2013'}{Math.min((page + 1) * 10, filteredCustomers.length)} {t('of')} {filteredCustomers.length}</span>
           </div>
         )}
       </Card>

@@ -46,7 +46,7 @@ docker compose up -d
 
 There are no unit tests. `@nestjs/testing` is a devDependency but no unit test files or configs exist. There is no CI/CD pipeline (no `.github/workflows/`).
 
-**E2E tests** exist using Playwright (`apps/web/e2e/`). Tests cover login, cockpit, pagos, usuarios, shortcuts, and hydration. Auth setup runs first, then Chromium tests reuse the stored auth state.
+**E2E tests** exist using Playwright (`apps/web/e2e/`). Tests cover login, cockpit, pagos, usuarios, shortcuts, and hydration. Auth setup (`e2e/auth.setup.ts`) runs first, saves auth state to `e2e/.auth/state.json`, then Chromium tests reuse that stored state.
 
 ```bash
 # E2E tests (requires dev server running on localhost:3000)
@@ -76,7 +76,7 @@ pnpm --filter @geacfo/web test:e2e:ui     # Playwright UI mode
 7. All service methods scope DB queries by `tenantId` from the JWT
 
 ### Web → API Communication
-Browser-side calls go through a **Next.js API proxy route** at `apps/web/src/app/api/v1/[...path]/route.ts`. The client in `apps/web/src/lib/api.ts` calls `/api/v1/...` on the same origin (relative path), which the proxy forwards to NestJS, injecting the Bearer token from the NextAuth JWT. The proxy uses `API_INTERNAL_URL` (Docker: `http://api:3001`) or falls back to `NEXT_PUBLIC_API_URL`. The `fetchAPI` helper auto-redirects to `/auth/login` on 401 responses. The proxy route uses `force-dynamic` (no caching).
+Browser-side calls go through a **Next.js API proxy route** at `apps/web/src/app/api/v1/[...path]/route.ts`. The client in `apps/web/src/lib/api.ts` calls `/api/v1/...` on the same origin (relative path), which the proxy forwards to NestJS, injecting the Bearer token from the NextAuth JWT. The proxy uses `API_INTERNAL_URL` (Docker: `http://api:3001`) or falls back to `NEXT_PUBLIC_API_URL`. The `fetchAPI` helper auto-redirects to `/auth/login` on 401 responses. The proxy route uses `force-dynamic` (no caching). API requests have a 30-second timeout via AbortController.
 
 API client namespaces: `api.auth` (login, me), `api.treasury` (cockpit, forecast, forecastCompare, cashflow, ratios, ar, ap, approveAP, accounts, reconciliation, autoMatch), `api.customers` (list, get, recalculate), `api.debt` (summary, instruments, covenants), `api.inventory` (list), `api.scenarios` (compare, simulate, variance), `api.bot` (chat, history, sessions), `api.alerts` (counts, notifications, resolutions, updateResolution), `api.board` (pack), `api.governance` (sources, audit), `api.import` (templates, movements, invoicesAR, invoicesAP, suppliers, debt, inventory), `api.users`, `api.settings`, `api.reporting`.
 
@@ -90,7 +90,7 @@ Additional module notes:
 - `import` — Excel/CSV bulk import for bank movements, invoices AR/AP, suppliers, debt instruments, inventory. Has a stricter rate limit (10 req/min).
 - `notifications` — WebSocket gateway (Socket.IO) on `/notifications` namespace. Uses `@nestjs/event-emitter` to broadcast real-time events (payment approved/rejected, invoice created, covenant risk, alert resolved) to connected clients scoped by tenant room.
 
-Middleware stack: Helmet (security headers) and compression are enabled globally in `main.ts`. Global interceptors: `RequestLoggerInterceptor` (structured request logging) and `AuditInterceptor` (writes to `AuditLog` table). Auth uses two Passport guards: `LocalAuthGuard` (credentials login) and `JwtAuthGuard` (token validation on protected routes). Common infrastructure lives in `src/common/` — guards (`user-throttler.guard.ts`), interceptors, logger (`StructuredLogger`), and filters.
+Middleware stack: Helmet (security headers) and compression are enabled globally in `main.ts`. Global interceptors: `RequestLoggerInterceptor` (structured request logging) and `AuditInterceptor` (writes to `AuditLog` table). Auth uses two Passport guards: `LocalAuthGuard` (credentials login) and `JwtAuthGuard` (token validation on protected routes). Common infrastructure lives in `src/common/` — guards (`user-throttler.guard.ts`), interceptors, logger (`StructuredLogger`), and filters. The custom `UserThrottlerGuard` keys rate limits by `userId` from JWT (not IP) for authenticated requests, falling back to IP for unauthenticated routes. Token refresh is available at `POST /api/v1/auth/refresh`.
 
 ### Database
 PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `tenantId` FK to `Tenant`. All IDs use `cuid()`. Key enums: `Role` (ADMIN/CFO/CONTROLLER/ANALYST/VIEWER), `RiskLevel`, `InvoiceStatus`, `DebtType`, `SyncStatus`. Key models: `Tenant`, `User`, `Session`, `BankAccount`, `BankMovement`, `Reconciliation`, `Customer`, `ScoreHistory`, `InvoiceAR`, `Supplier`, `InvoiceAP`, `DebtInstrument`, `Covenant`, `InventoryItem`, `ForecastWeek`, `DataSource`, `AuditLog`, `BotMessage`, `AlertResolution`, `ReportSchedule`. `ForecastWeek` has a composite unique on `(tenantId, scenario, weekNumber)`.
@@ -114,7 +114,8 @@ PostgreSQL 16 with Prisma. Multi-tenant design — almost every model has a `ten
 - **Web tsconfig**: `strict: true`, path alias `@/*` → `./src/*`
 - **next.config.js**: `output: 'standalone'`, `typescript.ignoreBuildErrors: true`, `eslint.ignoreDuringBuilds: true`
 - **Tailwind**: dark mode via `class`, custom colors (success/warning/gold), fonts: IBM Plex Sans, IBM Plex Mono, Syne
-- **Docker**: node:20-alpine base images, both Dockerfiles run `prisma generate` during build. Web Dockerfile manually copies Prisma query engine binary into standalone output. No Redis service despite some code references to it.
+- **Prisma**: `binaryTargets` includes `["native", "linux-musl", "linux-musl-openssl-3.0.x"]` for Docker Alpine compatibility
+- **Docker**: node:20-alpine base images, both Dockerfiles run `prisma generate` during build. Web Dockerfile manually copies Prisma query engine binary into standalone output (hardcoded to a specific Prisma version path — update if upgrading Prisma). No Redis service despite some code references to it.
 - **NestJS logger**: Only `['error', 'warn', 'log']` levels enabled (no debug/verbose)
 - **NestJS build output**: `dist/apps/api/src/main` (non-standard nested path due to monorepo tsconfig)
 - **Turbo**: `.env` is a `globalDependency` in `turbo.json` — changes to `.env` invalidate all cached builds

@@ -13,6 +13,7 @@ import { ScrollElevation } from '@/components/scroll-elevation'
 import { MobileNav } from '@/components/layout/mobile-nav'
 import { DynamicFavicon } from '@/components/dynamic-favicon'
 import { FooterBar } from '@/components/layout/footer-bar'
+import { NotificationPrompt } from '@/components/notification-prompt'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
@@ -38,6 +39,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Topbar session={session} />
           <ScrollProgress />
           <ScrollElevation />
+          <NotificationPrompt />
           <div className="relative z-[1] p-4 sm:p-6 pb-20 sm:pb-6">
             <PageTransition>{children}</PageTransition>
           </div>

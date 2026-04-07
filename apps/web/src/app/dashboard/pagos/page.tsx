@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Download, Zap, CheckCircle2, TrendingUp, TrendingDown, FileDown } from 'lucide-react'
 import { exportPagosPDF } from '@/lib/export-pdf-modules'
 import { DateRangeSelector, type DateRange, compareValues } from '@/components/date-range-selector'
+import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import dynamic from 'next/dynamic'
 
 const DiscountCalculator = dynamic(() => import('./_components/discount-calculator').then(m => ({ default: m.DiscountCalculator })), { ssr: false })
@@ -27,13 +28,29 @@ import { useToast } from '@/components/ui/use-toast'
 import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { MobileCardView } from '@/components/ui/mobile-card-view'
 import { useTranslations } from 'next-intl'
+import { MiniSparkline } from '@/components/ui/mini-sparkline'
 
 function daysUntil(dateStr: string) {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
 }
 
+function daysOverdue(dueDate: string): number {
+  return Math.floor((Date.now() - new Date(dueDate).getTime()) / 86400000)
+}
+
 export default function PagosPage() {
   const t = useTranslations('pagos')
+
+  function agingBucket(dueDate: string): string {
+    const days = daysOverdue(dueDate)
+    if (days < 0) return t('bucketCurrent')
+    if (days <= 30) return '1-30d'
+    if (days <= 60) return '31-60d'
+    if (days <= 90) return '61-90d'
+    return '>90d'
+  }
+
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
 
   const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'secondary' | 'default' }> = {
     IN_REVIEW: { label: t('statusInReview'), variant: 'warning' },
@@ -55,12 +72,12 @@ export default function PagosPage() {
     supplier: 'ALL',
     dueFrom: '',
     dueTo: '',
+    sortBy: 'dueDate',
+    sortDir: 'asc',
   })
 
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [sortBy, setSortBy] = useState<'dueDate' | 'totalAmount'>('dueDate')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [approving, setApproving] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -117,6 +134,24 @@ export default function PagosPage() {
 
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={7} rows={6} />
 
+  const approvalLevels = typeof window !== 'undefined'
+    ? (() => { try { return JSON.parse(localStorage.getItem('geacfo-approval-levels') || '[]') } catch { return [] } })()
+    : []
+  const enabledLevels = approvalLevels.filter((l: any) => l.enabled)
+
+  function getRequiredLevel(amount: number): { role: string; label: string; level: number } | null {
+    if (enabledLevels.length === 0) return null
+    let requiredLevel = enabledLevels[0]
+    let levelIdx = 0
+    for (let i = 0; i < enabledLevels.length; i++) {
+      if (amount >= enabledLevels[i].minAmount) {
+        requiredLevel = enabledLevels[i]
+        levelIdx = i
+      }
+    }
+    return { role: requiredLevel.role, label: requiredLevel.label, level: levelIdx + 1 }
+  }
+
   const filtered = invoices
     .filter((i: any) => {
       if (filters.status !== 'ALL' && i.status !== filters.status) return false
@@ -131,11 +166,11 @@ export default function PagosPage() {
       return true
     })
     .sort((a: any, b: any) => {
-      if (sortBy === 'dueDate') {
+      if (filters.sortBy === 'dueDate') {
         const da = new Date(a.dueDate).getTime(), db = new Date(b.dueDate).getTime()
-        return sortDir === 'asc' ? da - db : db - da
+        return filters.sortDir === 'asc' ? da - db : db - da
       }
-      return sortDir === 'desc' ? Number(b.totalAmount) - Number(a.totalAmount) : Number(a.totalAmount) - Number(b.totalAmount)
+      return filters.sortDir === 'desc' ? Number(b.totalAmount) - Number(a.totalAmount) : Number(a.totalAmount) - Number(b.totalAmount)
     })
 
   const supplierOptions = Array.from(new Map(invoices.map((i: any) => [i.supplier?.id, { key: i.supplier?.id, label: i.supplier?.name }])).values()).filter(o => o.key)
@@ -157,6 +192,53 @@ export default function PagosPage() {
     bySupplier[s.id].count++
   })
 
+  // Aging bucket analysis
+  const buckets: Record<string, { count: number; amount: number }> = {}
+  filtered.filter((inv: any) => inv.status !== 'PAID').forEach((inv: any) => {
+    const b = agingBucket(inv.dueDate)
+    if (!buckets[b]) buckets[b] = { count: 0, amount: 0 }
+    buckets[b].count++
+    buckets[b].amount += Number(inv.totalAmount) - Number(inv.paidAmount || 0)
+  })
+
+  const BUCKET_ORDER = [t('bucketCurrent'), '1-30d', '31-60d', '61-90d', '>90d']
+  const BUCKET_COLORS: Record<string, string> = {
+    [t('bucketCurrent')]: 'hsl(var(--success))',
+    '1-30d': 'hsl(var(--primary))',
+    '31-60d': 'hsl(var(--warning))',
+    '61-90d': 'hsl(var(--chart-blue, var(--primary)))',
+    '>90d': 'hsl(var(--destructive))',
+  }
+
+  const bucketChartData = BUCKET_ORDER.map(b => ({
+    bucket: b,
+    amount: buckets[b]?.amount || 0,
+    count: buckets[b]?.count || 0,
+    color: BUCKET_COLORS[b] || 'hsl(var(--muted))',
+  }))
+
+  // Pie data for aging distribution
+  const agingPieData = BUCKET_ORDER.filter(b => buckets[b]?.amount > 0).map(b => ({
+    name: b,
+    value: Math.round(buckets[b]?.amount || 0),
+    fill: BUCKET_COLORS[b] || 'hsl(var(--muted))',
+  }))
+
+  // Supplier exposure for aging panel
+  const supplierExposure = Object.values(bySupplier)
+    .sort((a: any, b: any) => b.total - a.total)
+    .slice(0, 8)
+
+  // Sparkline data: last 8 invoices amounts per supplier for trend visualization
+  const supplierSparklines: Record<string, number[]> = {}
+  Object.entries(bySupplier).forEach(([id, s]: [string, any]) => {
+    const suppInvoices = filtered.filter((inv: any) => inv.supplier?.id === id)
+    supplierSparklines[id] = suppInvoices
+      .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(-8)
+      .map((inv: any) => Number(inv.totalAmount))
+  })
+
   // Payment calendar (next 4 weeks)
   const calendar: { week: string; amount: number; count: number; invoices: any[] }[] = []
   for (let w = 0; w < 4; w++) {
@@ -175,10 +257,10 @@ export default function PagosPage() {
   }
 
   function handleSort(col: 'dueDate' | 'totalAmount') {
-    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortBy(col); setSortDir(col === 'dueDate' ? 'asc' : 'desc') }
+    if (filters.sortBy === col) setFilters({ sortDir: filters.sortDir === 'asc' ? 'desc' : 'asc' })
+    else { setFilters({ sortBy: col, sortDir: col === 'dueDate' ? 'asc' : 'desc' }) }
   }
-  const sortIcon = (col: string) => sortBy === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''
+  const sortIcon = (col: string) => filters.sortBy === col ? (filters.sortDir === 'desc' ? ' ↓' : ' ↑') : ''
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const reviewInvoices = filtered.filter((i: any) => i.status === 'IN_REVIEW')
@@ -206,6 +288,21 @@ export default function PagosPage() {
       await api.treasury.approveAP(id)
       toast({ title: t('toastApprovedTitle'), description: t('toastApprovedDesc', { count: 1 }), variant: 'success' })
       setFlashId(id); setTimeout(() => setFlashId(null), 1000)
+      setSelected(prev => { const next = new Set(prev); next.delete(id); return next })
+      const updated = await api.treasury.ap()
+      setInvoices(updated)
+    } catch (err: any) {
+      toast({ title: t('toastErrorTitle'), description: err.message, variant: 'destructive' })
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  async function handleReject(id: string) {
+    setApproving(true)
+    try {
+      await api.treasury.rejectAP(id)
+      toast({ title: t('toastRejectedTitle'), description: t('toastRejectedDesc'), variant: 'destructive' })
       setSelected(prev => { const next = new Set(prev); next.delete(id); return next })
       const updated = await api.treasury.ap()
       setInvoices(updated)
@@ -280,6 +377,150 @@ export default function PagosPage() {
         <KpiBox index={2} label={t('kpiApproved')} value={`${approvedCount}`} color="text-success" tooltip={t('kpiApprovedTooltip')} source={t('kpiApprovedSource')} />
         <KpiBox index={3} label={t('kpiInReview')} value={`${reviewCount}`} color={reviewCount > 0 ? 'text-warning' : 'text-foreground'} tooltip={t('kpiInReviewTooltip')} source={t('kpiInReviewSource')} />
       </div>
+
+      {/* Aging Analysis */}
+      {bucketChartData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between w-full">
+              <CardTitle>{t('agingTitle')}</CardTitle>
+              {selectedBucket && (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSelectedBucket(null)}>
+                  {t('agingClearFilter')}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Bar chart */}
+              <div className="lg:col-span-2">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={bucketChartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+                    <Tooltip formatter={(v: any) => [fmtEur(Number(v)), t('agingAmount')]} />
+                    <Bar dataKey="amount" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d: any) => setSelectedBucket(prev => prev === d.bucket ? null : d.bucket)}>
+                      {bucketChartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.color} opacity={selectedBucket && selectedBucket !== entry.bucket ? 0.3 : 1} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                {/* Bucket summary pills */}
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  {bucketChartData.map(b => (
+                    <button
+                      key={b.bucket}
+                      onClick={() => setSelectedBucket(prev => prev === b.bucket ? null : b.bucket)}
+                      className={`px-3 py-1.5 rounded-full text-[10px] font-semibold border transition-all ${
+                        selectedBucket === b.bucket ? 'ring-2 ring-primary' : 'opacity-80 hover:opacity-100'
+                      }`}
+                      style={{ borderColor: b.color, color: b.color, backgroundColor: `${b.color}10` }}
+                    >
+                      {b.bucket}: {b.count} ({fmtEur(b.amount)})
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Pie chart + Supplier exposure */}
+              <div>
+                {agingPieData.length > 0 && (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <PieChart>
+                      <Pie
+                        data={agingPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={35}
+                        outerRadius={65}
+                        paddingAngle={2}
+                        dataKey="value"
+                        onClick={(d: any) => setSelectedBucket(d.name === selectedBucket ? null : d.name)}
+                        cursor="pointer"
+                      >
+                        {agingPieData.map((entry, idx) => (
+                          <Cell key={idx} fill={entry.fill} opacity={selectedBucket && selectedBucket !== entry.name ? 0.3 : 1} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: any) => [fmtEur(Number(v)), t('agingAmount')]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+                {/* By supplier */}
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-3 mb-2">{t('agingBySupplier')}</div>
+                <div className="space-y-1.5">
+                  {supplierExposure.map((s: any) => {
+                    const pct = totalPending > 0 ? (s.total / totalPending) * 100 : 0
+                    return (
+                      <div key={s.code} className="flex items-center gap-2 text-xs">
+                        <span className="flex-1 truncate">{s.name}</span>
+                        <span className="font-mono font-semibold">{fmtEur(s.total)}</span>
+                        <span className="text-muted-foreground w-10 text-right">{pct.toFixed(0)}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bucket drill-down table */}
+      {selectedBucket && (() => {
+        const bucketInvs = filtered
+          .filter((inv: any) => inv.status !== 'PAID' && agingBucket(inv.dueDate) === selectedBucket)
+          .sort((a: any, b: any) => daysOverdue(b.dueDate) - daysOverdue(a.dueDate))
+        const bucketTotal = bucketInvs.reduce((s: number, inv: any) => s + Number(inv.totalAmount) - Number(inv.paidAmount || 0), 0)
+        return (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ background: BUCKET_COLORS[selectedBucket] }} />
+                <CardTitle className="text-sm">{t('agingDrilldown', { bucket: selectedBucket })}</CardTitle>
+                <Badge variant="secondary">{bucketInvs.length} facturas</Badge>
+              </div>
+              <span className="font-mono text-sm font-bold">{fmtEur(bucketTotal)}</span>
+            </div>
+          </CardHeader>
+          <ScrollableTable>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThInvoice')}</th>
+                  <th className="text-left p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThSupplier')}</th>
+                  <th className="text-right p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThDueDate')}</th>
+                  <th className="text-right p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThDays')}</th>
+                  <th className="text-right p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThPending')}</th>
+                  <th className="text-center p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThStatus')}</th>
+                  <th className="text-center p-2.5 text-muted-foreground font-semibold text-[10px] uppercase">{t('agingThPriority')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bucketInvs.slice(0, 30).map((inv: any) => {
+                  const stCfg = statusConfig[inv.status] || statusConfig.IN_REVIEW
+                  const prCfg = priorityConfig[inv.priority] || priorityConfig.NORMAL
+                  return (
+                    <tr key={inv.id} className="border-b border-border hover:bg-muted/50">
+                      <td className="p-2.5 font-mono">{inv.number}</td>
+                      <td className="p-2.5">{inv.supplier?.name || '—'}</td>
+                      <td className="p-2.5 font-mono text-right">{new Date(inv.dueDate).toLocaleDateString('es-ES')}</td>
+                      <td className="p-2.5 font-mono text-right" style={{ color: daysOverdue(inv.dueDate) > 60 ? 'hsl(var(--destructive))' : undefined }}>{daysOverdue(inv.dueDate)}d</td>
+                      <td className="p-2.5 font-mono text-right">{fmtEur(Number(inv.totalAmount) - Number(inv.paidAmount || 0))}</td>
+                      <td className="p-2.5 text-center"><Badge variant={stCfg.variant}>{stCfg.label}</Badge></td>
+                      <td className="p-2.5 text-center"><Badge variant={prCfg.variant}>{prCfg.label}</Badge></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </ScrollableTable>
+        </Card>
+        )
+      })()}
 
       {/* Calendar + By Supplier */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -375,9 +616,9 @@ export default function PagosPage() {
                 </th>
                 <Th>{t('thInvoice')}</Th>
                 <Th>{t('thSupplier')}</Th>
-                <Th sorted={sortBy === 'dueDate' ? sortDir : false} onSort={() => handleSort('dueDate')}>{t('thDueDate')}</Th>
+                <Th sorted={filters.sortBy === 'dueDate' ? filters.sortDir as 'asc' | 'desc' : false} onSort={() => handleSort('dueDate')}>{t('thDueDate')}</Th>
                 <Th>{t('thBase')}</Th>
-                <Th sorted={sortBy === 'totalAmount' ? sortDir : false} onSort={() => handleSort('totalAmount')}>{t('thTotal')}</Th>
+                <Th sorted={filters.sortBy === 'totalAmount' ? filters.sortDir as 'asc' | 'desc' : false} onSort={() => handleSort('totalAmount')}>{t('thTotal')}</Th>
                 <Th>{t('thPriority')}</Th>
                 <Th>{t('thStatus')}</Th>
                 <Th>{t('thTerm')}</Th>
@@ -412,6 +653,9 @@ export default function PagosPage() {
                 <td className="p-3">
                   <div className="font-medium text-sm">{inv.supplier.name}</div>
                   <div className="text-xs text-muted-foreground">{inv.supplier.code}</div>
+                  {supplierSparklines[inv.supplier?.id] && supplierSparklines[inv.supplier?.id].length >= 2 && (
+                    <MiniSparkline data={supplierSparklines[inv.supplier?.id]} width={48} height={14} color="hsl(var(--primary))" className="mt-0.5" />
+                  )}
                 </td>
                 <td className="p-3">
                   <span className={`text-xs font-mono ${isOverdue ? 'text-destructive font-semibold' : isUrgent ? 'text-warning font-semibold' : 'text-muted-foreground'}`}>{fmtDate(inv.dueDate)}</span>
@@ -428,7 +672,16 @@ export default function PagosPage() {
                   )}
                 </td>
                 <td className="p-3">
-                  {inv.status === 'IN_REVIEW' && <Button variant="outline" size="sm" loading={approving} onClick={() => handleApprove(inv.id)}>{t('actionApprove')}</Button>}
+                  {inv.status === 'IN_REVIEW' && (
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" loading={approving} onClick={() => handleApprove(inv.id)}>{t('actionApprove')}</Button>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" loading={approving} onClick={() => handleReject(inv.id)}>{t('actionReject')}</Button>
+                      {(() => {
+                        const req = getRequiredLevel(Number(inv.totalAmount))
+                        return req ? <Badge variant="outline" className="text-[9px] ml-1">{req.label}</Badge> : null
+                      })()}
+                    </div>
+                  )}
                   {inv.status === 'APPROVED' && <span className="text-xs text-success font-medium">{t('readyForPayment')}</span>}
                 </td>
               </>

@@ -27,6 +27,7 @@ import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { MobileCardView } from '@/components/ui/mobile-card-view'
 import { useTranslations } from 'next-intl'
 import { ChartExportButton } from '@/components/ui/chart-export'
+import { MiniSparkline } from '@/components/ui/mini-sparkline'
 
 function daysDiff(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
@@ -57,13 +58,13 @@ export default function CobrosPage() {
     customer: 'ALL',
     dueFrom: '',
     dueTo: '',
+    sortBy: 'dueDate',
+    sortDir: 'asc',
   })
 
   const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [sortBy, setSortBy] = useState<'dueDate' | 'totalAmount'>('dueDate')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
   const [prevInvoices, setPrevInvoices] = useState<any[] | null>(null)
@@ -143,11 +144,11 @@ export default function CobrosPage() {
       return true
     })
     .sort((a: any, b: any) => {
-      if (sortBy === 'dueDate') {
+      if (filters.sortBy === 'dueDate') {
         const da = new Date(a.dueDate).getTime(), db = new Date(b.dueDate).getTime()
-        return sortDir === 'asc' ? da - db : db - da
+        return filters.sortDir === 'asc' ? da - db : db - da
       }
-      return sortDir === 'desc' ? Number(b.totalAmount) - Number(a.totalAmount) : Number(a.totalAmount) - Number(b.totalAmount)
+      return filters.sortDir === 'desc' ? Number(b.totalAmount) - Number(a.totalAmount) : Number(a.totalAmount) - Number(b.totalAmount)
     })
 
   const customerOptions = Array.from(new Map(invoices.map((i: any) => [i.customer?.id, { key: i.customer?.id, label: i.customer?.name }])).values()).filter(o => o.key)
@@ -200,11 +201,21 @@ export default function CobrosPage() {
     byCustomer[c.id].count++
   })
 
+  // Sparkline data: last 8 invoices amounts per customer for trend visualization
+  const customerSparklines: Record<string, number[]> = {}
+  Object.entries(byCustomer).forEach(([id, c]: [string, any]) => {
+    const custInvoices = filtered.filter((inv: any) => inv.customer?.id === id)
+    customerSparklines[id] = custInvoices
+      .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(-8)
+      .map((inv: any) => Number(inv.totalAmount))
+  })
+
   function handleSort(col: 'dueDate' | 'totalAmount') {
-    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortBy(col); setSortDir(col === 'dueDate' ? 'asc' : 'desc') }
+    if (filters.sortBy === col) setFilters({ sortDir: filters.sortDir === 'asc' ? 'desc' : 'asc' })
+    else { setFilters({ sortBy: col, sortDir: col === 'dueDate' ? 'asc' : 'desc' }) }
   }
-  const sortIcon = (col: string) => sortBy === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''
+  const sortIcon = (col: string) => filters.sortBy === col ? (filters.sortDir === 'desc' ? ' ↓' : ' ↑') : ''
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
@@ -604,9 +615,9 @@ export default function CobrosPage() {
                 <Th>{t('thInvoice')}</Th>
                 <Th>{t('thClient')}</Th>
                 <Th>{t('thIssueDate')}</Th>
-                <Th sorted={sortBy === 'dueDate' ? sortDir : false} onSort={() => handleSort('dueDate')}>{t('thDueDate')}</Th>
+                <Th sorted={filters.sortBy === 'dueDate' ? filters.sortDir as 'asc' | 'desc' : false} onSort={() => handleSort('dueDate')}>{t('thDueDate')}</Th>
                 <Th>{t('thBase')}</Th>
-                <Th sorted={sortBy === 'totalAmount' ? sortDir : false} onSort={() => handleSort('totalAmount')}>{t('thTotal')}</Th>
+                <Th sorted={filters.sortBy === 'totalAmount' ? filters.sortDir as 'asc' | 'desc' : false} onSort={() => handleSort('totalAmount')}>{t('thTotal')}</Th>
                 <Th>{t('thPaid')}</Th>
                 <Th>{t('thStatus')}</Th>
                 <Th tooltip="Days Sales Outstanding — número de días desde el vencimiento de la factura">{t('thAging')}</Th>
@@ -634,6 +645,9 @@ export default function CobrosPage() {
                 <td className="p-3">
                   <div className="font-medium text-sm">{inv.customer.name}</div>
                   <div className="text-xs text-muted-foreground">{inv.customer.code}</div>
+                  {customerSparklines[inv.customer?.id] && customerSparklines[inv.customer?.id].length >= 2 && (
+                    <MiniSparkline data={customerSparklines[inv.customer?.id]} width={48} height={14} color="hsl(var(--primary))" className="mt-0.5" />
+                  )}
                 </td>
                 <td className="p-3 text-xs text-muted-foreground">{fmtDate(inv.issueDate)}</td>
                 <td className="p-3">

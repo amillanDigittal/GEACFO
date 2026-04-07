@@ -19,39 +19,41 @@ const badgeVariants = cva(
   }
 )
 
-/* Micro-icons per variant */
+/* Micro-icons per variant — each uses a distinct shape for colorblind accessibility */
 function BadgeIcon({ variant }: { variant: string | null | undefined }) {
   switch (variant) {
     case 'success':
       return (
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0" aria-hidden="true" role="img">
           <circle cx="5" cy="5" r="4.5" stroke="currentColor" strokeWidth="1" opacity="0.4" />
           <path d="M3 5.2l1.4 1.3L7 3.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case 'warning':
       return (
-        <span className="relative flex shrink-0 h-[10px] w-[10px] items-center justify-center">
+        <span className="relative flex shrink-0 h-[10px] w-[10px] items-center justify-center" aria-hidden="true">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-20" />
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1" opacity="0.5" />
-            <circle cx="5" cy="5" r="1.5" fill="currentColor" opacity="0.7" />
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" role="img">
+            <polygon points="5,1 9,9 1,9" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5" />
+            <circle cx="5" cy="6.5" r="0.7" fill="currentColor" opacity="0.8" />
+            <line x1="5" y1="3.5" x2="5" y2="5.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.8" />
           </svg>
         </span>
       )
     case 'destructive':
       return (
-        <span className="relative flex shrink-0 h-[10px] w-[10px] items-center justify-center">
+        <span className="relative flex shrink-0 h-[10px] w-[10px] items-center justify-center" aria-hidden="true">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-25" />
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" role="img">
             <circle cx="5" cy="5" r="3.5" fill="currentColor" opacity="0.35" />
-            <circle cx="5" cy="5" r="1.5" fill="currentColor" />
+            <line x1="3.5" y1="3.5" x2="6.5" y2="6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            <line x1="6.5" y1="3.5" x2="3.5" y2="6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
         </span>
       )
     case 'default':
       return (
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0" aria-hidden="true" role="img">
           <circle cx="5" cy="5" r="3" stroke="currentColor" strokeWidth="1" opacity="0.4" />
         </svg>
       )

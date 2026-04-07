@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { useNotifications, useResolutions, usePredictive } from '@/hooks/use-api'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
@@ -19,7 +19,7 @@ import { SkeletonKPIsAndTable } from '@/components/ui/skeleton-page'
 import { KpiBox } from '@/components/kpi-box'
 import {
   Bell, BellOff, Search, Download, Filter, CheckCircle2, Clock, Eye,
-  AlertTriangle, XCircle, ExternalLink, MessageSquare, ChevronDown,
+  AlertTriangle, XCircle, ExternalLink, MessageSquare, ChevronDown, Trash2,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -107,6 +107,23 @@ export default function NotificacionesPage() {
 
   const hydrated = useHydrated()
 
+  const [showRuleEditor, setShowRuleEditor] = useState(false)
+  const [customRules, setCustomRules] = useState<Array<{ id: string; metric: string; operator: string; value: number; enabled: boolean }>>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      return JSON.parse(localStorage.getItem('geacfo-alert-rules') || '[]')
+    } catch { return [] }
+  })
+  const [ruleMetric, setRuleMetric] = useState('dso')
+  const [ruleOperator, setRuleOperator] = useState('>')
+  const [ruleValue, setRuleValue] = useState('')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('geacfo-alert-rules', JSON.stringify(customRules))
+    }
+  }, [customRules])
+
   if (!hydrated || loading) return <SkeletonKPIsAndTable cols={5} rows={8} />
 
   // Build resolution map
@@ -172,6 +189,31 @@ export default function NotificacionesPage() {
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
+  function addRule() {
+    const val = parseFloat(ruleValue)
+    if (isNaN(val)) return
+    setCustomRules(prev => [...prev, { id: `rule-${Date.now()}`, metric: ruleMetric, operator: ruleOperator, value: val, enabled: true }])
+    setRuleValue('')
+  }
+
+  function removeRule(id: string) {
+    setCustomRules(prev => prev.filter(r => r.id !== id))
+  }
+
+  function toggleRule(id: string) {
+    setCustomRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r))
+  }
+
+  const ALERT_METRICS = [
+    { key: 'dso', label: t('ruleMetricDso'), unit: t('ruleUnitDays') },
+    { key: 'dpo', label: t('ruleMetricDpo'), unit: t('ruleUnitDays') },
+    { key: 'liquidity', label: t('ruleMetricLiquidity'), unit: 'x' },
+    { key: 'cash', label: t('ruleMetricCash'), unit: '€' },
+    { key: 'supplier_risk', label: t('ruleMetricSupplierRisk'), unit: '' },
+    { key: 'forecast_gaps', label: t('ruleMetricForecastGaps'), unit: '' },
+    { key: 'covenant_margin', label: t('ruleMetricCovenantMargin'), unit: '%' },
+  ]
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -199,6 +241,72 @@ export default function NotificacionesPage() {
           <KpiBox key={m.label} index={i} label={m.label} value={m.value} icon={m.icon} color={m.color} />
         ))}
       </div>
+
+      {/* Custom Alert Rules */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between w-full">
+            <CardTitle>{t('rulesTitle')}</CardTitle>
+            <Button size="sm" variant={showRuleEditor ? 'secondary' : 'default'} onClick={() => setShowRuleEditor(!showRuleEditor)}>
+              {showRuleEditor ? t('rulesHideEditor') : t('rulesAddRule')}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Rule editor */}
+          {showRuleEditor && (
+            <div className="flex gap-2 items-end flex-wrap p-3 rounded-lg bg-muted/30 border border-border">
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('rulesMetric')}</label>
+                <select value={ruleMetric} onChange={e => setRuleMetric(e.target.value)} className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm">
+                  {ALERT_METRICS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('rulesCondition')}</label>
+                <select value={ruleOperator} onChange={e => setRuleOperator(e.target.value)} className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-20">
+                  <option value=">">&gt;</option>
+                  <option value="<">&lt;</option>
+                  <option value=">=">&ge;</option>
+                  <option value="<=">&le;</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('rulesValue')}</label>
+                <input type="number" value={ruleValue} onChange={e => setRuleValue(e.target.value)} placeholder="45" className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-28" onKeyDown={e => e.key === 'Enter' && addRule()} />
+              </div>
+              <Button size="sm" onClick={addRule} disabled={!ruleValue}>{t('rulesCreate')}</Button>
+            </div>
+          )}
+
+          {/* Active rules */}
+          {customRules.length > 0 ? (
+            <div className="space-y-2">
+              {customRules.map(rule => {
+                const metric = ALERT_METRICS.find(m => m.key === rule.metric)
+                return (
+                  <div key={rule.id} className={`flex items-center gap-3 p-3 rounded-lg border ${rule.enabled ? 'border-border bg-background' : 'border-border/50 bg-muted/20 opacity-60'}`}>
+                    <button onClick={() => toggleRule(rule.id)} className={`w-8 h-4 rounded-full transition-colors flex-shrink-0 ${rule.enabled ? 'bg-success' : 'bg-muted'}`}>
+                      <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${rule.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                    <div className="flex-1 text-sm">
+                      <span className="font-medium">{metric?.label || rule.metric}</span>
+                      <span className="text-muted-foreground mx-1">{rule.operator}</span>
+                      <span className="font-mono font-bold">{rule.value}</span>
+                      {metric?.unit && <span className="text-muted-foreground ml-1">{metric.unit}</span>}
+                    </div>
+                    <button onClick={() => removeRule(rule.id)} className="text-muted-foreground hover:text-destructive">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground text-center py-4">{t('rulesEmpty')}</div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Predictive Alerts */}
       {predictive.length > 0 && (

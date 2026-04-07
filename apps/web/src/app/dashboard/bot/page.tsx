@@ -6,8 +6,9 @@ import { useBotHistory, useBotSessions } from '@/hooks/use-api'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { MessageSquarePlus, History, Trash2 } from 'lucide-react'
+import { MessageSquarePlus, History, Trash2, TrendingUp, AlertTriangle } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { MiniSparkline } from '@/components/ui/mini-sparkline'
 import { useTranslations } from 'next-intl'
 import { useHydrated } from '@/hooks/use-hydrated'
 
@@ -205,6 +206,32 @@ export default function BotPage() {
                   </div>
                   <div className={`max-w-[90%] md:max-w-[75%] rounded-xl p-3 text-sm leading-relaxed ${m.role === 'assistant' ? 'bg-muted border border-border text-foreground rounded-tl-none' : 'bg-primary text-white rounded-tr-none'}`}>
                     {m.role === 'assistant' ? <div className="space-y-0.5">{renderContent(m.content)}</div> : m.content}
+                    {/* Inline mini-charts for bot responses */}
+                    {m.role === 'assistant' && (() => {
+                      const text = m.content.toLowerCase()
+                      const showCashTrend = text.includes('liquidez') || text.includes('caja') || text.includes('tesorería') || text.includes('cash') || text.includes('treasury')
+                      const showRiskGauge = text.includes('riesgo') || text.includes('covenant') || text.includes('risk') || text.includes('alerta')
+                      if (!showCashTrend && !showRiskGauge) return null
+                      return (
+                        <div className="flex gap-3 mt-2 flex-wrap">
+                          {showCashTrend && (
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10 text-xs">
+                              <TrendingUp size={12} className="text-primary" />
+                              <span className="text-muted-foreground">{t('botInlineCash')}</span>
+                              <MiniSparkline data={[120, 115, 125, 130, 128, 135, 140]} width={60} height={16} color="hsl(var(--primary))" />
+                            </div>
+                          )}
+                          {showRiskGauge && (
+                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-warning/5 border border-warning/10 text-xs">
+                              <AlertTriangle size={12} className="text-warning" />
+                              <span className="text-muted-foreground">{t('botInlineRisk')}</span>
+                              <span className="font-mono font-bold text-warning">3</span>
+                              <span className="text-[10px] text-muted-foreground">{t('botInlineAlerts')}</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               ))
@@ -232,6 +259,30 @@ export default function BotPage() {
               </div>
             )}
           </div>
+
+          {/* Quick suggestion chips */}
+          {(messages.length <= 1 || (messages.length > 1 && messages[messages.length - 1]?.role === 'assistant' && !loading)) && (
+            <div className="flex gap-2 flex-wrap px-3 pt-3">
+              {[
+                { emoji: '\u{1F4B0}', text: t('suggestLiquidity') },
+                { emoji: '\u26A0\uFE0F', text: t('suggestRisk') },
+                { emoji: '\u{1F4CA}', text: t('suggestForecast') },
+                { emoji: '\u{1F3E6}', text: t('suggestDebt') },
+                { emoji: '\u{1F4E6}', text: t('suggestSuppliers') },
+                { emoji: '\u{1F4C8}', text: t('suggestKpis') },
+              ].map(s => (
+                <button
+                  key={s.text}
+                  onClick={() => sendMessage(s.text)}
+                  disabled={loading}
+                  className="px-3 py-1.5 rounded-full border border-border bg-muted/30 hover:bg-muted hover:border-primary/30 text-xs transition-colors flex items-center gap-1.5"
+                >
+                  <span>{s.emoji}</span>
+                  <span>{s.text}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Input */}
           <div className="p-3 border-t border-border flex gap-2">

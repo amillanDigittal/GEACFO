@@ -1,6 +1,6 @@
 'use client'
 import { useHydrated } from '@/hooks/use-hydrated'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
 import { fmtEur, fmt, exportCSV } from '@/lib/utils'
 import { PageHeader } from '@/components/page-header'
@@ -100,6 +100,70 @@ export default function CashFlowPage() {
   }, [])
 
   const hydrated = useHydrated()
+
+  const heatmapData = useMemo(() => {
+    if (!data?.recentMovements?.length) return []
+    const dayNames = [t('hmSunday'), t('hmMonday'), t('hmTuesday'), t('hmWednesday'), t('hmThursday'), t('hmFriday'), t('hmSaturday')]
+    const hmGrid: Record<number, { inflows: number; outflows: number; count: number }> = {}
+    for (let d = 0; d < 7; d++) hmGrid[d] = { inflows: 0, outflows: 0, count: 0 }
+
+    data.recentMovements.forEach((m: any) => {
+      const day = new Date(m.date).getDay()
+      const amount = Math.abs(Number(m.amount))
+      hmGrid[day].count++
+      if (m.amount >= 0 || m.flowType?.includes('_in')) {
+        hmGrid[day].inflows += amount
+      } else {
+        hmGrid[day].outflows += amount
+      }
+    })
+
+    return dayNames.map((name, i) => ({
+      day: name,
+      inflows: hmGrid[i].inflows,
+      outflows: hmGrid[i].outflows,
+      net: hmGrid[i].inflows - hmGrid[i].outflows,
+      count: hmGrid[i].count,
+      intensity: hmGrid[i].count,
+    }))
+  }, [data, t])
+
+  const maxIntensity = Math.max(...heatmapData.map(d => d.count), 1)
+
+  const waterfallChartData = useMemo(() => {
+    if (!data?.totals) return []
+    const op = data.totals.operating || 0
+    const inv = data.totals.investing || 0
+    const fin = data.totals.financing || 0
+    const net = op + inv + fin
+
+    let running = 0
+    const entries = [
+      { label: t('wfOperating'), value: op },
+      { label: t('wfInvesting'), value: inv },
+      { label: t('wfFinancing'), value: fin },
+    ]
+
+    const result: any[] = []
+    for (const e of entries) {
+      const start = running
+      running += e.value
+      result.push({
+        name: e.label,
+        invisible: e.value >= 0 ? start : running,
+        positive: e.value >= 0 ? e.value : 0,
+        negative: e.value < 0 ? Math.abs(e.value) : 0,
+      })
+    }
+    result.push({
+      name: t('wfNetVariation'),
+      invisible: 0,
+      positive: net >= 0 ? net : 0,
+      negative: net < 0 ? Math.abs(net) : 0,
+      isTotal: true,
+    })
+    return result
+  }, [data, t])
 
   if (!hydrated || loading || !data) return <SkeletonKPIsAndTable cols={6} rows={8} />
 
@@ -223,6 +287,75 @@ export default function CashFlowPage() {
           </LazyChart>
         </CardContent>
       </Card>
+
+      {/* Waterfall Chart */}
+      {waterfallChartData.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t('waterfallChartTitle')}</CardTitle></CardHeader>
+          <CardContent>
+            <LazyChart height={300}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={waterfallChartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v: number) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${Math.round(v/1000)}k` : v <= -1000 ? `${Math.round(v/1000)}k` : String(v)} />
+                  <Tooltip
+                    formatter={(v: any, name: string) => {
+                      if (name === 'invisible') return [null, null]
+                      return [fmtEur(Number(v)), name === 'positive' ? t('wfInflows') : t('wfOutflows')]
+                    }}
+                    contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                  />
+                  <Bar dataKey="invisible" stackId="a" fill="transparent" />
+                  <Bar dataKey="positive" stackId="a" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="negative" stackId="a" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </LazyChart>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment Heatmap by Day of Week */}
+      {heatmapData.length > 0 && heatmapData.some(d => d.count > 0) && (
+        <Card>
+          <CardHeader><CardTitle>{t('heatmapTitle')}</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-7 gap-2">
+              {heatmapData.map(d => {
+                const intensity = d.count / maxIntensity
+                const bgOpacity = Math.max(0.05, intensity * 0.4)
+                return (
+                  <div
+                    key={d.day}
+                    className="rounded-lg border border-border p-3 text-center transition-all hover:ring-1 hover:ring-primary/30"
+                    style={{ backgroundColor: d.net >= 0 ? `hsla(var(--success), ${bgOpacity})` : `hsla(var(--destructive), ${bgOpacity})` }}
+                  >
+                    <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest mb-2">{d.day}</div>
+                    <div className="text-lg font-bold font-mono" style={{ color: d.net >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))' }}>
+                      {d.count}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-1">{t('heatmapMovements')}</div>
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-success">{t('heatmapIn')}</span>
+                        <span className="font-mono">{d.inflows >= 1000 ? `${Math.round(d.inflows / 1000)}k` : Math.round(d.inflows)}</span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-destructive">{t('heatmapOut')}</span>
+                        <span className="font-mono">{d.outflows >= 1000 ? `${Math.round(d.outflows / 1000)}k` : Math.round(d.outflows)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-3 text-[10px] text-muted-foreground text-center">
+              {t('heatmapHint')}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cash Flow Statement breakdown + Waterfall */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

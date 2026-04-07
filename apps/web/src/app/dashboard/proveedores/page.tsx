@@ -7,7 +7,7 @@ import { fmtEur, riskLabel, riskVariant } from '@/lib/utils'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Plus, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, Plus, X, Trash2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { VirtualTableBody } from '@/components/ui/virtual-table'
 import { PageHeader } from '@/components/page-header'
@@ -24,9 +24,9 @@ function ScoreBar({ value, label }: { value: number | null; label: string }) {
   const v = value ?? 0
   const color = v >= 75 ? 'hsl(var(--success))' : v >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" role="meter" aria-valuenow={v} aria-valuemin={0} aria-valuemax={100} aria-label={`${label}: ${v}`}>
       <span className="text-[10px] text-muted-foreground w-16 truncate">{label}</span>
-      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden" aria-hidden="true">
         <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: color }} />
       </div>
       <span className="font-mono text-[10px] font-bold w-6 text-right" style={{ color }}>{v}</span>
@@ -107,6 +107,32 @@ export default function ProveedoresPage() {
   // Chart: top 10 by volume
   const top10 = [...suppliers].sort((a, b) => b.totalVolume - a.totalVolume).slice(0, 10)
   const chartData = top10.map(s => ({ name: s.name.length > 18 ? s.name.slice(0, 18) + '…' : s.name, volumen: s.totalVolume }))
+
+  // Concentration analysis
+  const sortedByVolume = [...suppliers].sort((a: any, b: any) => (b.totalVolume || 0) - (a.totalVolume || 0))
+  const top5Volume = sortedByVolume.slice(0, 5).reduce((s: number, sup: any) => s + (sup.totalVolume || 0), 0)
+  const top1Volume = sortedByVolume.length > 0 ? (sortedByVolume[0].totalVolume || 0) : 0
+  const top5Pct = totalVolume > 0 ? (top5Volume / totalVolume) * 100 : 0
+  const top1Pct = totalVolume > 0 ? (top1Volume / totalVolume) * 100 : 0
+
+  // HHI = sum of (market_share_percentage)^2
+  const hhi = totalVolume > 0
+    ? Math.round(suppliers.reduce((sum: number, s: any) => {
+        const share = ((s.totalVolume || 0) / totalVolume) * 100
+        return sum + share * share
+      }, 0))
+    : 0
+  const hhiLevel = hhi < 1500 ? 'low' : hhi < 2500 ? 'moderate' : 'high'
+  const hhiColor = hhi < 1500 ? 'text-success' : hhi < 2500 ? 'text-warning' : 'text-destructive'
+
+  const categories = new Set(suppliers.map((s: any) => s.category).filter(Boolean))
+
+  // Top 10 concentration data for visual bar
+  const concentrationData = sortedByVolume.slice(0, 10).map((s: any, i: number) => ({
+    name: s.name,
+    pct: totalVolume > 0 ? ((s.totalVolume || 0) / totalVolume) * 100 : 0,
+    opacity: 1 - (i * 0.07),
+  }))
 
   return (
     <div className="space-y-6">
@@ -194,6 +220,68 @@ export default function ProveedoresPage() {
                 </BarChart>
               </ResponsiveContainer>
             </LazyChart>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Concentration Analysis */}
+      {suppliers.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>{t('concentrationTitle')}</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {/* KPIs */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('concentrationTop5')}</div>
+                <div className={`text-xl font-bold font-mono ${top5Pct > 80 ? 'text-destructive' : top5Pct > 60 ? 'text-warning' : 'text-success'}`}>{top5Pct.toFixed(1)}%</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('concentrationTop1')}</div>
+                <div className={`text-xl font-bold font-mono ${top1Pct > 40 ? 'text-destructive' : top1Pct > 25 ? 'text-warning' : 'text-success'}`}>{top1Pct.toFixed(1)}%</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('concentrationHHI')}</div>
+                <div className={`text-xl font-bold font-mono ${hhiColor}`}>{hhi.toLocaleString('es-ES')}</div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">{t(`concentrationHHI_${hhiLevel}`)}</div>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">{t('concentrationCategories')}</div>
+                <div className="text-xl font-bold font-mono text-foreground">{categories.size}</div>
+              </div>
+            </div>
+
+            {/* Concentration bar */}
+            {concentrationData.length > 0 && (
+              <div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">{t('concentrationDistribution')}</div>
+                <div className="flex h-6 rounded-full overflow-hidden bg-muted">
+                  {concentrationData.map((d, i) => (
+                    <div
+                      key={i}
+                      style={{ width: `${d.pct}%`, opacity: d.opacity }}
+                      className="h-full bg-primary first:rounded-l-full last:rounded-r-full border-r border-background/30"
+                      title={`${d.name}: ${d.pct.toFixed(1)}%`}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                  {concentrationData.slice(0, 5).map((d, i) => (
+                    <span key={i} className="text-[10px] text-muted-foreground">
+                      <span className="inline-block w-2 h-2 rounded-full bg-primary mr-1" style={{ opacity: d.opacity }} />
+                      {d.name.length > 20 ? d.name.slice(0, 20) + '\u2026' : d.name} ({d.pct.toFixed(1)}%)
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Risk alert */}
+            {top5Pct > 70 && (
+              <div className="flex gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20 text-warning text-xs">
+                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                <span>{t('concentrationAlert')}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

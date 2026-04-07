@@ -16,7 +16,7 @@ import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
-import { Landmark, AlertTriangle, TrendingDown, Target, Download, Siren } from 'lucide-react'
+import { Landmark, AlertTriangle, TrendingDown, Target, Download, Siren, X } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { ScrollableTable } from '@/components/ui/scrollable-table'
 import { SkeletonForecast } from '@/components/ui/skeleton-page'
@@ -29,6 +29,11 @@ export default function ForecastPage() {
   const [scenario, setScenario] = useState('BASE')
   const [tab, setTab] = useState<'single' | 'compare'>('compare')
   const [lastUpdated] = useState<Date | null>(() => new Date())
+  const [whatIfAdjustments, setWhatIfAdjustments] = useState<Record<number, { cobros: number; pagos: number }>>({})
+  const [whatIfWeek, setWhatIfWeek] = useState<number>(1)
+  const [whatIfType, setWhatIfType] = useState<'cobros' | 'pagos'>('cobros')
+  const [whatIfAmount, setWhatIfAmount] = useState<string>('')
+  const [whatIfDesc, setWhatIfDesc] = useState<string>('')
 
   const { data: single, isLoading: loadingSingle, mutate: mutateSingle } = useForecast(scenario)
   const { data: compare, isLoading: loadingCompare, mutate: mutateCompare } = useForecastCompare()
@@ -39,15 +44,57 @@ export default function ForecastPage() {
     await Promise.all([mutateSingle(), mutateCompare()])
   }
 
+  function addWhatIfAdjustment() {
+    const amount = parseFloat(whatIfAmount)
+    if (isNaN(amount) || amount === 0) return
+    setWhatIfAdjustments(prev => {
+      const existing = prev[whatIfWeek] || { cobros: 0, pagos: 0 }
+      return {
+        ...prev,
+        [whatIfWeek]: {
+          cobros: existing.cobros + (whatIfType === 'cobros' ? amount : 0),
+          pagos: existing.pagos + (whatIfType === 'pagos' ? amount : 0),
+        }
+      }
+    })
+    setWhatIfAmount('')
+    setWhatIfDesc('')
+  }
+
+  function clearWhatIf() {
+    setWhatIfAdjustments({})
+  }
+
   const singleData = single?.weeks?.map((w: any) => ({
     week: `S${w.weekNumber}`,
     cobros: Number(w.inflows),
     pagos: Number(w.outflows),
     neto: Number(w.inflows) - Number(w.outflows),
     saldo: Number(w.cumBalance),
+    saldoUpper: Number(w.cumBalance) * (1 + (100 - Number(w.confidence)) / 100),
+    saldoLower: Number(w.cumBalance) * (1 - (100 - Number(w.confidence)) / 100),
     isGap: w.isGap,
     confidence: Number(w.confidence),
   })) || []
+
+  const whatIfData = singleData.map((w: any, i: number) => {
+    const adj = whatIfAdjustments[i + 1]
+    if (!adj) return w
+    const cobros = w.cobros + adj.cobros
+    const pagos = w.pagos + adj.pagos
+    const neto = cobros - pagos
+    // Recompute cumulative balance from this point forward
+    return { ...w, cobros, pagos, neto, isAdjusted: true }
+  })
+  // Recompute cumulative balances after adjustments
+  if (Object.keys(whatIfAdjustments).length > 0) {
+    let prevBalance = single?.initialCash || 0
+    for (let i = 0; i < whatIfData.length; i++) {
+      prevBalance = prevBalance + whatIfData[i].neto
+      whatIfData[i] = { ...whatIfData[i], saldo: prevBalance, saldoUpper: prevBalance * (1 + (100 - whatIfData[i].confidence) / 100), saldoLower: prevBalance * (1 - (100 - whatIfData[i].confidence) / 100) }
+    }
+  }
+  const hasAdjustments = Object.keys(whatIfAdjustments).length > 0
 
   const compareData = compare?.weeks?.map((w: any) => ({
     week: `S${w.weekNumber}`,
@@ -63,6 +110,8 @@ export default function ForecastPage() {
     confBase: w.base?.confidence || null,
     confConservador: w.conservador?.confidence || null,
     confAgresivo: w.agresivo?.confidence || null,
+    saldoBaseUpper: w.base ? w.base.cumBalance * (1 + (100 - w.base.confidence) / 100) : null,
+    saldoBaseLower: w.base ? w.base.cumBalance * (1 - (100 - w.base.confidence) / 100) : null,
     isGap: w.base?.isGap || w.conservador?.isGap || w.agresivo?.isGap,
   })) || []
 
@@ -158,6 +207,7 @@ export default function ForecastPage() {
                   <Badge className="bg-primary/20 text-primary border-primary/30">{t('scenarioBase')}</Badge>
                   <Badge className="bg-warning/20 text-warning border-warning/30">{t('scenarioConservative')}</Badge>
                   <Badge className="bg-success/20 text-success border-success/30">{t('scenarioAggressive')}</Badge>
+                  <span className="text-[10px] text-muted-foreground italic">{t('confidenceBand')}</span>
                 </div>
               </div>
             </CardHeader>
@@ -186,6 +236,9 @@ export default function ForecastPage() {
                   />
                   <Legend />
                   <ReferenceLine y={0} stroke={cc.destructive} strokeDasharray="4 4" strokeOpacity={0.5} />
+                  {/* Confidence band for Base scenario */}
+                  <Area type="monotone" dataKey="saldoBaseUpper" stroke={cc.primary} strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.5} fill="none" dot={false} activeDot={false} legendType="none" name="" isAnimationActive={false} />
+                  <Area type="monotone" dataKey="saldoBaseLower" stroke={cc.primary} strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.5} fill="none" dot={false} activeDot={false} legendType="none" name="" isAnimationActive={false} />
                   <Area type="monotone" dataKey="saldoAgresivo" name={t('scenarioAggressive')} stroke={cc.success} strokeWidth={2} fill="url(#gradAgresivo)" strokeDasharray="5 3" />
                   <Area type="monotone" dataKey="saldoBase" name={t('scenarioBase')} stroke={cc.primary} strokeWidth={2.5} fill="url(#gradBase)" />
                   <Area type="monotone" dataKey="saldoConservador" name={t('scenarioConservative')} stroke={cc.warning} strokeWidth={2} fill="url(#gradConservador)" strokeDasharray="5 3" />
@@ -305,7 +358,7 @@ export default function ForecastPage() {
             <CardHeader><CardTitle>{t('chartSingleInflowsOutflows', { scenario })}</CardTitle></CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={singleData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <BarChart data={whatIfData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={cc.border} />
                   <XAxis dataKey="week" tick={{ fontSize: 11, fill: cc.mutedForeground }} />
                   <YAxis tick={{ fontSize: 10, fill: cc.mutedForeground }} tickFormatter={v => `${v / 1000}k`} />
@@ -325,7 +378,7 @@ export default function ForecastPage() {
             <CardContent>
               <LazyChart height={240}>
                 <ResponsiveContainer width="100%" height={240}>
-                  <AreaChart data={singleData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                  <AreaChart data={whatIfData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                     <defs>
                       <linearGradient id="singleGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={cc.primary} stopOpacity={0.3} />
@@ -339,6 +392,9 @@ export default function ForecastPage() {
                       formatter={(v: any) => [fmtEur(Number(v)), t('tooltipBalance')]}
                     />
                     <ReferenceLine y={0} stroke={cc.destructive} strokeDasharray="4 4" />
+                    {/* Confidence band for single scenario */}
+                    <Area type="monotone" dataKey="saldoUpper" stroke={cc.primary} strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.5} fill="none" dot={false} activeDot={false} legendType="none" name="" isAnimationActive={false} />
+                    <Area type="monotone" dataKey="saldoLower" stroke={cc.primary} strokeWidth={1.5} strokeDasharray="6 4" strokeOpacity={0.5} fill="none" dot={false} activeDot={false} legendType="none" name="" isAnimationActive={false} />
                     <Area type="monotone" dataKey="saldo" stroke={cc.primary} strokeWidth={2.5} fill="url(#singleGrad)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -372,8 +428,8 @@ export default function ForecastPage() {
                 <table className="w-full text-xs">
                   <thead><tr className="border-b border-border">{[t('thWeekShort'), t('thInflows'), t('thOutflows'), t('thNet'), t('thBalance'), t('thConf')].map(h => <th key={h} className="text-left p-2.5 text-muted-foreground font-semibold uppercase tracking-wider text-[10px]">{h}</th>)}</tr></thead>
                   <tbody>
-                    {singleData.map((w: any) => (
-                      <tr key={w.week} className={`border-b border-border hover:bg-muted/50 ${w.isGap ? 'bg-destructive/5' : ''}`}>
+                    {whatIfData.map((w: any) => (
+                      <tr key={w.week} className={`border-b border-border hover:bg-muted/50 ${w.isGap ? 'bg-destructive/5' : ''} ${w.isAdjusted ? 'bg-warning/5' : ''}`}>
                         <td className="p-2.5 font-mono font-bold" style={{ color: w.isGap ? cc.destructive : cc.foreground }}><span className="flex items-center gap-1">{w.week}{w.isGap && <AlertTriangle size={12} />}</span></td>
                         <td className="p-2.5 font-mono text-success">{fmt(w.cobros)}</td>
                         <td className="p-2.5 font-mono text-destructive">{fmt(w.pagos)}</td>
@@ -387,6 +443,97 @@ export default function ForecastPage() {
               </div>
             </Card>
           </div>
+
+          {/* What-If Simulator */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between w-full">
+                <CardTitle>{t('whatIfTitle')}</CardTitle>
+                {hasAdjustments && (
+                  <Button variant="ghost" size="sm" className="text-xs text-destructive" onClick={clearWhatIf}>
+                    {t('whatIfClear')}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2 items-end flex-wrap">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('whatIfWeek')}</label>
+                  <select
+                    value={whatIfWeek}
+                    onChange={e => setWhatIfWeek(Number(e.target.value))}
+                    className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-20"
+                  >
+                    {singleData.map((_: any, i: number) => (
+                      <option key={i + 1} value={i + 1}>S{i + 1}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('whatIfType')}</label>
+                  <select
+                    value={whatIfType}
+                    onChange={e => setWhatIfType(e.target.value as 'cobros' | 'pagos')}
+                    className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-28"
+                  >
+                    <option value="cobros">{t('whatIfInflow')}</option>
+                    <option value="pagos">{t('whatIfOutflow')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('whatIfAmount')}</label>
+                  <input
+                    type="number"
+                    value={whatIfAmount}
+                    onChange={e => setWhatIfAmount(e.target.value)}
+                    placeholder={t('whatIfAmountPlaceholder')}
+                    className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-36"
+                    onKeyDown={e => e.key === 'Enter' && addWhatIfAdjustment()}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('whatIfDescription')}</label>
+                  <input
+                    type="text"
+                    value={whatIfDesc}
+                    onChange={e => setWhatIfDesc(e.target.value)}
+                    placeholder={t('whatIfDescPlaceholder')}
+                    className="block mt-1 bg-background border border-border rounded-md px-3 py-2 text-sm w-48"
+                    onKeyDown={e => e.key === 'Enter' && addWhatIfAdjustment()}
+                  />
+                </div>
+                <Button size="sm" onClick={addWhatIfAdjustment} disabled={!whatIfAmount}>
+                  {t('whatIfAdd')}
+                </Button>
+              </div>
+
+              {hasAdjustments && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest">{t('whatIfApplied')}</div>
+                  {Object.entries(whatIfAdjustments).map(([week, adj]) => (
+                    <div key={week} className="flex items-center justify-between bg-muted/50 rounded-lg px-3 py-2 text-xs">
+                      <div>
+                        <span className="font-mono font-bold">S{week}</span>
+                        {adj.cobros !== 0 && <span className="ml-2 text-success">+{fmt(adj.cobros)} {t('whatIfInflow').toLowerCase()}</span>}
+                        {adj.pagos !== 0 && <span className="ml-2 text-destructive">+{fmt(adj.pagos)} {t('whatIfOutflow').toLowerCase()}</span>}
+                      </div>
+                      <button
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setWhatIfAdjustments(prev => { const n = { ...prev }; delete n[Number(week)]; return n })}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="text-[10px] text-muted-foreground">
+                {t('whatIfHint')}
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

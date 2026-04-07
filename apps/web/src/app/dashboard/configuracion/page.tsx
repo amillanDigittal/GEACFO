@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -16,15 +16,33 @@ import { SkeletonConfiguracion } from '@/components/ui/skeleton-page'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { FieldError } from '@/components/ui/field-error'
-import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles, Sun, Upload } from 'lucide-react'
+import { Building2, Target, Bell, TrendingUp, Shield, Save, RotateCcw, Sparkles, Sun, Upload, GitBranch, Plus, Trash2 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { PageHeader } from '@/components/page-header'
 import { useRole } from '@/hooks/use-role'
 import { AccessDenied } from '@/components/ui/access-denied'
+import { useSocket } from '@/providers/socket-provider'
 
 interface Tenant {
   id: string; name: string; nif: string; sector: string | null; slug: string; logo: string | null; currency: string; locale: string
 }
+
+const MOCK_BANKS = [
+  { id: 'bbva', name: 'BBVA', logo: '\u{1F3E6}', color: '#004481' },
+  { id: 'santander', name: 'Santander', logo: '\u{1F534}', color: '#EC0000' },
+  { id: 'caixabank', name: 'CaixaBank', logo: '\u2B50', color: '#007EAE' },
+  { id: 'sabadell', name: 'Banco Sabadell', logo: '\u{1F535}', color: '#0064A0' },
+  { id: 'bankinter', name: 'Bankinter', logo: '\u{1F7E0}', color: '#FF6600' },
+  { id: 'ing', name: 'ING', logo: '\u{1F7E7}', color: '#FF6200' },
+  { id: 'deutsche', name: 'Deutsche Bank', logo: '\u{1F537}', color: '#0018A8' },
+  { id: 'unicredit', name: 'UniCredit', logo: '\u{1F3DB}\uFE0F', color: '#E40521' },
+]
+
+const defaultApprovalLevels = [
+  { role: 'ANALYST', label: 'Analyst', minAmount: 0, enabled: true },
+  { role: 'CONTROLLER', label: 'Controller', minAmount: 10000, enabled: true },
+  { role: 'CFO', label: 'CFO', minAmount: 50000, enabled: true },
+]
 
 function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
@@ -48,6 +66,28 @@ export default function ConfiguracionPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const { theme, setTheme } = useTheme()
+  const { pushPermission, requestPushPermission } = useSocket()
+
+  const [approvalLevels, setApprovalLevels] = useState<Array<{ role: string; label: string; minAmount: number; enabled: boolean }>>(() => {
+    if (typeof window === 'undefined') return defaultApprovalLevels
+    try { return JSON.parse(localStorage.getItem('geacfo-approval-levels') || 'null') || defaultApprovalLevels } catch { return defaultApprovalLevels }
+  })
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('geacfo-approval-levels', JSON.stringify(approvalLevels))
+  }, [approvalLevels])
+
+  const [bankConnections, setBankConnections] = useState<Array<{ id: string; bank: string; iban: string; status: 'connected' | 'syncing' | 'error'; lastSync: string | null }>>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('geacfo-bank-connections') || '[]') } catch { return [] }
+  })
+  const [showBankConnect, setShowBankConnect] = useState(false)
+  const [bankSearch, setBankSearch] = useState('')
+  const [connectingBank, setConnectingBank] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('geacfo-bank-connections', JSON.stringify(bankConnections))
+  }, [bankConnections])
 
   const tenantForm = useForm<TenantForm>({
     resolver: zodResolver(tenantSchema),
@@ -74,6 +114,8 @@ export default function ConfiguracionPage() {
     { key: 'covenants', label: t('sectionCovenants'), icon: <Shield size={14} /> },
     { key: 'forecast', label: t('sectionForecast'), icon: <TrendingUp size={14} /> },
     { key: 'notificaciones', label: t('sectionNotifications'), icon: <Bell size={14} /> },
+    { key: 'bancos', label: t('tabBancos'), icon: <Building2 size={14} /> },
+    { key: 'aprobaciones', label: t('approvalTitle'), icon: <GitBranch size={14} /> },
     { key: 'apariencia', label: t('sectionAppearance'), icon: <Sun size={14} /> },
     { key: 'tour', label: t('sectionGuidedTour'), icon: <Sparkles size={14} /> },
   ]
@@ -167,6 +209,37 @@ export default function ConfiguracionPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function connectBank(bankId: string) {
+    setConnectingBank(bankId)
+    const bank = MOCK_BANKS.find(b => b.id === bankId)
+    if (!bank) return
+
+    // Simulate OAuth redirect delay
+    await new Promise(r => setTimeout(r, 2000))
+
+    const newConn = {
+      id: `conn-${Date.now()}`,
+      bank: bank.name,
+      iban: `ES${Math.floor(10 + Math.random() * 90)}\u2022\u2022\u2022\u2022\u2022${Math.floor(1000 + Math.random() * 9000)}`,
+      status: 'syncing' as const,
+      lastSync: null,
+    }
+    setBankConnections(prev => [...prev, newConn])
+    setShowBankConnect(false)
+    setConnectingBank(null)
+    setBankSearch('')
+
+    // Simulate sync completing after delay
+    setTimeout(() => {
+      setBankConnections(prev => prev.map(c => c.id === newConn.id ? { ...c, status: 'connected', lastSync: new Date().toISOString() } : c))
+      toast({ title: t('bankSyncComplete'), description: `${bank.name} sincronizado correctamente` })
+    }, 4000)
+  }
+
+  function disconnectBank(id: string) {
+    setBankConnections(prev => prev.filter(c => c.id !== id))
   }
 
   const configErrors = configForm.formState.errors
@@ -499,6 +572,186 @@ export default function ConfiguracionPage() {
                 <FieldError message={configErrors.notifications?.apDueSoonDays?.message} />
               </div>
             </Field>
+            {/* Browser push notifications */}
+            <Field label="Notificaciones del navegador" desc="Recibe alertas push en el escritorio cuando no tengas la pestaña activa.">
+              <div className="flex items-center gap-2">
+                {pushPermission === 'granted' ? (
+                  <Badge variant="default" className="text-xs">Activadas</Badge>
+                ) : pushPermission === 'denied' ? (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">Bloqueadas por el navegador</Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={async () => {
+                      const result = await requestPushPermission()
+                      if (result === 'granted') {
+                        toast({ title: 'Notificaciones activadas', description: 'Recibirás alertas push en el escritorio.' })
+                      } else if (result === 'denied') {
+                        toast({ title: 'Permiso denegado', description: 'Puedes cambiarlo en la configuración del navegador.', variant: 'destructive' })
+                      }
+                    }}
+                  >
+                    Activar
+                  </Button>
+                )}
+              </div>
+            </Field>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bancos */}
+      {activeSection === 'bancos' && (
+        <>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between w-full">
+                <CardTitle>{t('bankConnectionsTitle')}</CardTitle>
+                <Button size="sm" onClick={() => setShowBankConnect(true)}>
+                  <Plus size={14} className="mr-1" />{t('bankConnect')}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Connected banks */}
+              {bankConnections.length > 0 ? (
+                <div className="space-y-3">
+                  {bankConnections.map(conn => (
+                    <div key={conn.id} className="flex items-center gap-4 p-4 rounded-lg border border-border">
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg">{'\u{1F3E6}'}</div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-sm">{conn.bank}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{conn.iban}</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {conn.status === 'syncing' ? (
+                          <Badge variant="warning">{t('bankSyncing')}</Badge>
+                        ) : conn.status === 'connected' ? (
+                          <Badge variant="success">{t('bankConnected')}</Badge>
+                        ) : (
+                          <Badge variant="destructive">{t('bankError')}</Badge>
+                        )}
+                        {conn.lastSync && (
+                          <span className="text-[10px] text-muted-foreground">{t('bankLastSync')}: {new Date(conn.lastSync).toLocaleTimeString('es-ES')}</span>
+                        )}
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => disconnectBank(conn.id)}>
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-sm text-muted-foreground">{t('bankNoConnections')}</div>
+              )}
+
+              {/* Open Banking info */}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <Shield size={16} className="text-primary mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-muted-foreground">
+                  <strong className="text-foreground">{t('bankSecurityTitle')}</strong> {t('bankSecurityDesc')}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Bank search dialog */}
+          {showBankConnect && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between w-full">
+                  <CardTitle>{t('bankSearchTitle')}</CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowBankConnect(false); setBankSearch('') }}>{'\u2715'}</Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <input
+                  type="text"
+                  value={bankSearch}
+                  onChange={e => setBankSearch(e.target.value)}
+                  placeholder={t('bankSearchPlaceholder')}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm"
+                  autoFocus
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  {MOCK_BANKS.filter(b => !bankSearch || b.name.toLowerCase().includes(bankSearch.toLowerCase())).map(bank => {
+                    const isConnected = bankConnections.some(c => c.bank === bank.name)
+                    return (
+                      <button
+                        key={bank.id}
+                        onClick={() => !isConnected && connectBank(bank.id)}
+                        disabled={isConnected || connectingBank === bank.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${isConnected ? 'opacity-50 border-border' : 'border-border hover:border-primary/30 hover:bg-muted/30'}`}
+                      >
+                        <span className="text-xl">{bank.logo}</span>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">{bank.name}</div>
+                          {isConnected && <div className="text-[10px] text-success">{t('bankAlreadyConnected')}</div>}
+                        </div>
+                        {connectingBank === bank.id && <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Aprobaciones */}
+      {activeSection === 'aprobaciones' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <GitBranch size={18} />
+              <CardTitle>{t('approvalTitle')}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">{t('approvalDesc')}</p>
+            <div className="space-y-3">
+              {approvalLevels.map((level, idx) => (
+                <div key={level.role} className="flex items-center gap-4 p-3 rounded-lg border border-border">
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={() => setApprovalLevels(prev => prev.map((l, i) => i === idx ? { ...l, enabled: !l.enabled } : l))}
+                      className={`w-8 h-4 rounded-full transition-colors ${level.enabled ? 'bg-success' : 'bg-muted'}`}>
+                      <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${level.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{t(`approvalLevel_${level.role}`)}</span>
+                      <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded">Nivel {idx + 1}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">{t('approvalMinAmount')}:</span>
+                    <input
+                      type="number"
+                      value={level.minAmount}
+                      onChange={e => setApprovalLevels(prev => prev.map((l, i) => i === idx ? { ...l, minAmount: Number(e.target.value) } : l))}
+                      className="bg-background border border-border rounded-md px-2 py-1 text-sm font-mono w-28"
+                    />
+                    <span className="text-xs text-muted-foreground">&euro;</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Visual flow */}
+            <div className="flex items-center justify-center gap-2 py-3">
+              {approvalLevels.filter(l => l.enabled).map((level, idx, arr) => (
+                <React.Fragment key={level.role}>
+                  <div className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs font-semibold text-primary">
+                    {t(`approvalLevel_${level.role}`)}
+                    <div className="text-[9px] text-muted-foreground font-normal mt-0.5">&ge; {level.minAmount.toLocaleString()} &euro;</div>
+                  </div>
+                  {idx < arr.length - 1 && <span className="text-muted-foreground">&rarr;</span>}
+                </React.Fragment>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}

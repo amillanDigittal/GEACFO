@@ -1,8 +1,10 @@
 'use client'
 import { useState, useRef, useMemo, useCallback, lazy, Suspense } from 'react'
-import { useCockpit, useRecommendations } from '@/hooks/use-api'
+import { useCockpit, useRecommendations, useForecastCompare, useDebtSummary, useSuppliers } from '@/hooks/use-api'
 import { fmtEur, fmtM, exportCSV } from '@/lib/utils'
+import { exportCFOPack } from '@/lib/export-xlsx'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { KpiCard, KpiCardSkeleton } from '@/components/kpi-card'
 import { PageHeader } from '@/components/page-header'
 import { useRouter } from 'next/navigation'
@@ -24,8 +26,12 @@ export default function CockpitPage() {
   const t = useTranslations('cockpit')
   const { data, error, isLoading, mutate } = useCockpit()
   const { data: recsData, isLoading: recsLoading } = useRecommendations()
+  const { data: forecastCompare } = useForecastCompare()
+  const { data: debtData } = useDebtSummary()
+  const { data: suppliers } = useSuppliers()
   const recommendations = recsData?.recommendations || []
   const [drilldown, setDrilldown] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [lastUpdated] = useState(() => new Date())
   const [presenting, setPresenting] = useState(false)
   const [slideIdx, setSlideIdx] = useState(0)
@@ -49,6 +55,19 @@ export default function CockpitPage() {
     setPresenting(false)
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
   }, [])
+
+  const handleExportCFOPack = useCallback(async () => {
+    setExporting(true)
+    try {
+      await exportCFOPack({
+        cockpit: data,
+        forecast: forecastCompare,
+        debt: debtData,
+        suppliers,
+      })
+    } catch (e) { console.error(e) }
+    finally { setExporting(false) }
+  }, [data, forecastCompare, debtData, suppliers])
 
   const kpis = useMemo(() => {
     if (!data) return []
@@ -80,6 +99,47 @@ export default function CockpitPage() {
     }))
   }, [data])
 
+  const healthScore = useMemo(() => {
+    if (!data) return null
+
+    const factors: { name: string; score: number; weight: number; detail: string }[] = []
+
+    // 1. Liquidity (20% weight) — score based on ratio: 1.5x = 80, 2.0x = 100, <1.0x = 30
+    const liq = data.liquidez?.value ?? 0
+    const liqScore = Math.min(100, Math.max(0, liq >= 2 ? 100 : liq >= 1.5 ? 80 : liq >= 1.0 ? 60 : liq * 30))
+    factors.push({ name: t('hsFactor_liquidity'), score: Math.round(liqScore), weight: 0.2, detail: `${liq}x` })
+
+    // 2. DSO efficiency (20% weight) — lower is better: <30d = 100, 45d = 70, 60d = 50, >90d = 20
+    const dso = data.dso?.value ?? 45
+    const dsoScore = Math.min(100, Math.max(0, dso <= 30 ? 100 : dso <= 45 ? 85 : dso <= 60 ? 65 : dso <= 90 ? 40 : 20))
+    factors.push({ name: t('hsFactor_dso'), score: Math.round(dsoScore), weight: 0.2, detail: `${dso}d` })
+
+    // 3. Covenant compliance (20% weight)
+    const covs = debtData?.covenants || []
+    const covCompliant = covs.filter((c: any) => c.status === 'COMPLIANT').length
+    const covTotal = covs.length || 1
+    const covScore = Math.round((covCompliant / covTotal) * 100)
+    factors.push({ name: t('hsFactor_covenants'), score: covScore, weight: 0.2, detail: `${covCompliant}/${covTotal}` })
+
+    // 4. Forecast confidence (20% weight)
+    const baseWeeks = forecastCompare?.weeks?.filter((w: any) => w.base) || []
+    const avgConf = baseWeeks.length > 0 ? Math.round(baseWeeks.reduce((s: number, w: any) => s + w.base.confidence, 0) / baseWeeks.length) : 50
+    factors.push({ name: t('hsFactor_forecast'), score: avgConf, weight: 0.2, detail: `${avgConf}%` })
+
+    // 5. Supplier diversification (20% weight) — based on HHI: <1500 = 100, 1500-2500 = 60, >2500 = 30
+    const supps = suppliers || []
+    const totalVol = supps.reduce((s: number, sp: any) => s + (sp.totalVolume || 0), 0)
+    const hhi = totalVol > 0
+      ? supps.reduce((sum: number, sp: any) => { const share = ((sp.totalVolume || 0) / totalVol) * 100; return sum + share * share }, 0)
+      : 0
+    const suppScore = Math.round(hhi < 1000 ? 100 : hhi < 1500 ? 85 : hhi < 2500 ? 60 : 30)
+    factors.push({ name: t('hsFactor_suppliers'), score: suppScore, weight: 0.2, detail: `HHI ${Math.round(hhi)}` })
+
+    const total = Math.round(factors.reduce((s, f) => s + f.score * f.weight, 0))
+
+    return { total, factors }
+  }, [data, debtData, forecastCompare, suppliers, t])
+
   // Show error state only when loading is done and no data
   if (!loading && !data) return <ErrorState title={t('errorLoading')} description={error?.message} onRetry={() => mutate()} />
 
@@ -104,6 +164,7 @@ export default function CockpitPage() {
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => exportCSV('cockpit_kpis', ['KPI', t('thValue'), t('thTrend')], kpis.map(k => [k.label, k.value, k.trend]))}><Download size={14} className="mr-1" />{t('exportBtn')}</Button>
+            <Button variant="outline" size="sm" onClick={handleExportCFOPack} disabled={exporting}><Download size={14} className={`mr-1 ${exporting ? 'animate-spin' : ''}`} />{exporting ? t('exporting') : t('exportCfoPack')}</Button>
             <Button variant="outline" size="sm" onClick={startPresentation}><Presentation size={14} className="mr-1" />Presentación</Button>
           </>
         }
@@ -117,6 +178,61 @@ export default function CockpitPage() {
           <div className="text-xs opacity-80 mt-0.5">{t('alertGapDesc')} <span className="underline cursor-pointer" onClick={() => router.push('/dashboard/forecast')}>{t('alertGapLink')}</span></div>
         </div>
       </div>
+
+      {/* Financial Health Score */}
+      {healthScore && (
+        <Card className="border-primary/20">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-6">
+              {/* Score circle */}
+              <div className="relative flex-shrink-0">
+                <svg width="80" height="80" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="hsl(var(--border))" strokeWidth="6" />
+                  <circle
+                    cx="40" cy="40" r="34" fill="none"
+                    stroke={healthScore.total >= 75 ? 'hsl(var(--success))' : healthScore.total >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'}
+                    strokeWidth="6"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(healthScore.total / 100) * 213.6} 213.6`}
+                    transform="rotate(-90 40 40)"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xl font-bold font-mono">{healthScore.total}</span>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="flex-1">
+                <div className="text-sm font-semibold mb-0.5">{t('hsTitle')}</div>
+                <div className="text-xs text-muted-foreground mb-3">
+                  {healthScore.total >= 75 ? t('hsGood') : healthScore.total >= 50 ? t('hsModerate') : t('hsPoor')}
+                </div>
+
+                {/* Factor bars */}
+                <div className="space-y-1.5">
+                  {healthScore.factors.map(f => (
+                    <div key={f.name} className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground w-28 truncate">{f.name}</span>
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${f.score}%`,
+                            backgroundColor: f.score >= 75 ? 'hsl(var(--success))' : f.score >= 50 ? 'hsl(var(--warning))' : 'hsl(var(--destructive))'
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono font-bold w-8 text-right">{f.score}</span>
+                      <span className="text-[9px] text-muted-foreground w-14 text-right">{f.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Grid - Progressive loading */}
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">

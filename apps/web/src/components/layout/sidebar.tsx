@@ -41,6 +41,7 @@ import {
   Pin,
   ClipboardList,
   ChevronDown,
+  Coins,
 } from 'lucide-react'
 
 const badgeKeyMap: Record<string, string> = {
@@ -76,6 +77,7 @@ const nav = [
   { href: '/dashboard/fraude', i18n: 'fraude', icon: <Search size={18} /> },
   { section: 'debt' },
   { href: '/dashboard/deuda', i18n: 'deuda', icon: <CreditCard size={18} /> },
+  { href: '/dashboard/fx', i18n: 'fx', icon: <Coins size={18} /> },
   { section: 'inventory' },
   { href: '/dashboard/inventario', i18n: 'inventario', icon: <Package size={18} /> },
   { href: '/dashboard/inventario-abc', i18n: 'inventarioAbc', icon: <BarChartAbc size={18} /> },

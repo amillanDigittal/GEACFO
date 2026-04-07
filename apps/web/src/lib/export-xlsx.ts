@@ -152,3 +152,139 @@ export async function exportXLSX(
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   saveAs(blob, `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
+
+/**
+ * Export a multi-sheet CFO Pack Excel file with data from multiple modules.
+ */
+export async function exportCFOPack(data: {
+  cockpit?: any
+  forecast?: any
+  debt?: any
+  suppliers?: any
+}) {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'GEACFO'
+  wb.created = new Date()
+
+  const headerStyle = {
+    font: { bold: true, size: 10, color: { argb: 'FFFFFFFF' } },
+    fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF1E3A5F' } },
+    alignment: { horizontal: 'center' as const, vertical: 'middle' as const },
+    border: { bottom: { style: 'thin' as const, color: { argb: 'FF3B82F6' } } },
+  }
+
+  function applyHeaderRow(ws: ExcelJS.Worksheet) {
+    const row = ws.getRow(1)
+    row.eachCell(cell => {
+      cell.font = headerStyle.font as any
+      cell.fill = headerStyle.fill as any
+      cell.alignment = headerStyle.alignment as any
+      cell.border = headerStyle.border as any
+    })
+    row.height = 28
+  }
+
+  // Sheet 1: Treasury Summary
+  if (data.cockpit) {
+    const c = data.cockpit
+    const ws = wb.addWorksheet('Tesorería')
+    const rows = [
+      ['KPI', 'Valor', 'Tendencia'],
+      ['Posición de caja', c.caja?.value ?? '', ''],
+      ['DSO (días de cobro)', c.dso?.value ?? '', c.dso?.trend ?? ''],
+      ['DPO (días de pago)', c.dpo?.value ?? '', c.dpo?.trend ?? ''],
+      ['CCC (ciclo conversión)', c.ccc?.value ?? '', c.ccc?.trend ?? ''],
+      ['Revenue YTD', c.revenue?.value ?? '', c.revenue?.trend ?? ''],
+      ['EBITDA', c.ebitda?.value ?? '', c.ebitda?.margin ? `Margen: ${c.ebitda.margin}%` : ''],
+      ['Deuda neta', c.deudaNeta?.value ?? '', c.deudaNeta?.trend ?? ''],
+      ['Ratio liquidez', c.liquidez?.value ?? '', c.liquidez?.trend ?? ''],
+      ['', '', ''],
+      ['Cuentas por cobrar (AR)', c.workingCapital?.ar ?? '', ''],
+      ['Cuentas por pagar (AP)', c.workingCapital?.ap ?? '', ''],
+      ['Forecast 13 sem.', c.workingCapital?.forecast ?? '', ''],
+    ]
+    rows.forEach(r => ws.addRow(r))
+    ws.columns = [{ width: 28 }, { width: 18 }, { width: 18 }]
+    applyHeaderRow(ws)
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
+  }
+
+  // Sheet 2: Forecast 13 Weeks
+  if (data.forecast?.weeks) {
+    const ws = wb.addWorksheet('Forecast 13 Sem.')
+    const headerRow = ['Semana', 'Cobros Base', 'Pagos Base', 'Saldo Base', 'Confianza %', 'Cobros Conservador', 'Saldo Conservador', 'Cobros Agresivo', 'Saldo Agresivo']
+    ws.addRow(headerRow)
+    data.forecast.weeks.forEach((w: any) => {
+      ws.addRow([
+        `S${w.weekNumber}`,
+        w.base?.inflows ?? '',
+        w.base?.outflows ?? '',
+        w.base?.cumBalance ?? '',
+        w.base?.confidence ?? '',
+        w.conservador?.inflows ?? '',
+        w.conservador?.cumBalance ?? '',
+        w.agresivo?.inflows ?? '',
+        w.agresivo?.cumBalance ?? '',
+      ])
+    })
+    ws.columns = Array(9).fill(null).map(() => ({ width: 18 }))
+    applyHeaderRow(ws)
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
+  }
+
+  // Sheet 3: Debt Instruments
+  if (data.debt) {
+    const ws1 = wb.addWorksheet('Deuda')
+    ws1.addRow(['Instrumento', 'Banco', 'Tipo', 'Total', 'Pendiente', 'Tasa %', 'Vencimiento', 'Estado'])
+    ;(data.debt.instruments || []).forEach((d: any) => {
+      ws1.addRow([
+        d.type, d.bank, d.type,
+        Number(d.totalAmount), Number(d.outstanding),
+        (Number(d.interestRate) * 100).toFixed(2) + '%',
+        d.maturityDate ? new Date(d.maturityDate).toLocaleDateString('es-ES') : '',
+        d.status,
+      ])
+    })
+    ws1.columns = [{ width: 20 }, { width: 22 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 14 }, { width: 10 }]
+    applyHeaderRow(ws1)
+    ws1.views = [{ state: 'frozen', ySplit: 1 }]
+
+    // Sheet 4: Covenants
+    if (data.debt.covenants?.length > 0) {
+      const ws2 = wb.addWorksheet('Covenants')
+      ws2.addRow(['Covenant', 'Valor Actual', 'Límite', 'Tipo Límite', 'Margen %', 'Estado'])
+      data.debt.covenants.forEach((c: any) => {
+        ws2.addRow([
+          c.name, c.currentValue, c.limitValue, c.limitType,
+          c.margin != null ? c.margin + '%' : '',
+          c.status,
+        ])
+      })
+      ws2.columns = [{ width: 24 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 10 }, { width: 12 }]
+      applyHeaderRow(ws2)
+      ws2.views = [{ state: 'frozen', ySplit: 1 }]
+    }
+  }
+
+  // Sheet 5: Suppliers
+  if (data.suppliers?.length > 0) {
+    const ws = wb.addWorksheet('Proveedores')
+    ws.addRow(['Proveedor', 'Código', 'Categoría', 'Score', 'Riesgo', 'Volumen', 'Pendiente', 'Estado'])
+    data.suppliers.forEach((s: any) => {
+      ws.addRow([
+        s.name, s.code, s.category || '',
+        s.overallScore ?? '', s.riskLevel,
+        s.totalVolume || 0, s.pendingAmount || 0,
+        s.status,
+      ])
+    })
+    ws.columns = [{ width: 24 }, { width: 12 }, { width: 16 }, { width: 8 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 12 }]
+    applyHeaderRow(ws)
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
+  }
+
+  // Write file
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  saveAs(blob, `cfo_pack_${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
